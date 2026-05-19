@@ -1,27 +1,66 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
+set -e
 
-# Example commit-msg hook using commitlint
-# 1) Ensure commitlint is installed (npm i -D @commitlint/config-conventional @commitlint/cli).
-# 2) Make sure this file is executable (chmod +x .githooks/commit-msg).
-# 3) Configure Git to use .githooks as the hook path (see next step).
+# Read commit message from file
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
 
-# "$1" is the path to the file containing the commit message.
-npx commitlint --edit "$1"
-exit_code=$?
+# Enhanced commit message validation
+echo "🔍 Validating commit message..."
 
-if [ $exit_code -ne 0 ]; then
-  echo "❌ Error: Commit message does not follow Conventional Commits. Please see CONTRIBUTING for more details."
-  echo "Please use one of the following patterns:"
-  echo "  - feat: ..."
-  echo "  - fix: ..."
-  echo "  - docs: ..."
-  echo "  - styles: ..."
-  echo "  - refactor: ..."
-  echo "  - test: ..."
-  echo "  - chore: ..."
-  echo "  - chore(release): vX.Y.Z"
-  exit 1
+# Check if commitlint is available and use it if present
+if command -v commitlint &> /dev/null; then
+    if ! commitlint --edit "$1"; then
+        echo "❌ Error: Commit message does not follow Conventional Commits format."
+        echo ""
+        echo "Please use one of the following patterns:"
+        echo "  - feat: add new feature"
+        echo "  - fix: fix a bug"
+        echo "  - docs: update documentation"
+        echo "  - style: format code (no functional changes)"
+        echo "  - refactor: refactor code"
+        echo "  - test: add or update tests"
+        echo "  - chore: update dependencies or tooling"
+        echo "  - perf: improve performance"
+        echo "  - ci: update CI/CD configuration"
+        echo "  - build: update build configuration"
+        echo ""
+        echo "Examples:"
+        echo "  - feat: add user authentication"
+        echo "  - fix: resolve login validation issue"
+        echo "  - docs: update API documentation"
+        exit 1
+    fi
+else
+    # Fallback validation without commitlint
+    CONVENTIONAL_COMMIT_REGEX="^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\(.+\))?: .{1,50}"
+
+    if [[ ! $COMMIT_MSG =~ $CONVENTIONAL_COMMIT_REGEX ]]; then
+        echo "❌ Error: Commit message does not follow Conventional Commits format."
+        echo ""
+        echo "Format: <type>[optional scope]: <description>"
+        echo ""
+        echo "Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build"
+        echo ""
+        echo "Examples:"
+        echo "  - feat: add user authentication"
+        echo "  - fix: resolve login validation issue"
+        echo "  - docs: update API documentation"
+        echo ""
+        echo "Your message: $COMMIT_MSG"
+        exit 1
+    fi
 fi
 
-echo "✅ Commit message follows Conventional Commits."
-exit 0
+# Check commit message length
+if [ ${#COMMIT_MSG} -gt 72 ]; then
+    echo "⚠️  Warning: Commit message is longer than 72 characters. Consider making it more concise."
+fi
+
+# Check for common issues
+if [[ $COMMIT_MSG =~ ^(wip|WIP|temp|TEMP|TODO|FIXME) ]]; then
+    echo "❌ Error: Commit message indicates work in progress. Please complete the work before committing."
+    exit 1
+fi
+
+echo "✅ Commit message is valid!"

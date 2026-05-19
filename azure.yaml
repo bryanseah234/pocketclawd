@@ -2,4 +2,4 @@
 
 name: azure-conversational-assistant-agentic
 metadata:
-    template: azd-init@1.15.0
+  template: azd-init@1.15.0

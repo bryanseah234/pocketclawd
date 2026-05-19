@@ -18,7 +18,7 @@ jobs:
       should_skip: ${{ steps.detect.outputs.should_skip }}
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # Ensure we have the actual PR commit
           ref: ${{ github.event.pull_request.head.sha }}
@@ -45,7 +45,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.should_skip == 'false' }}
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Check broken Paths
@@ -64,7 +64,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.should_skip == 'false' }}
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Run Check URLs Country Locale
@@ -83,7 +83,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.should_skip == 'false' }}
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Link Checker
