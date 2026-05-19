@@ -1,24 +1,76 @@
 #!/usr/bin/env bash
+set -e
 
-# Retrieve the current branch name
+# Get current branch name
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
 
-# Define the regex pattern for valid branch names
-VALID_BRANCH_REGEX="^(main|staging|release\/[0-9]{4}-[0-9]{2}-[0-9]{2}|feature\/.+|fix\/.+|bugfix\/.+|hotfix\/.+)$"
+echo "🔍 Validating branch name and running pre-push checks..."
 
-# Check if the branch name matches the valid pattern
+# Updated branch naming convention with develop/development
+VALID_BRANCH_REGEX="^(main|master|develop|development|staging|chore/.+|release\/[0-9]{4}-[0-9]{2}-[0-9]{2}|feature\/.+|fix\/.+|bugfix\/.+|hotfix\/.+)$"
+
+# Check if branch name follows convention
 if [[ ! $BRANCH_NAME =~ $VALID_BRANCH_REGEX ]]; then
-    echo "❌ Error: Branch name '$BRANCH_NAME' does not follow the naming convention. Please see CONTRIBUTING for more details."
+    echo "❌ Error: Branch name '$BRANCH_NAME' does not follow the naming convention."
+    echo ""
     echo "Please use one of the following patterns:"
-    echo "  - main"
-    echo "  - staging"
-    echo "  - release/yyyy-mm-dd"
-    echo "  - feature/xxx"
-    echo "  - fix/xxx"
-    echo "  - bugfix/xxx"
-    echo "  - hotfix/xxx"
+    echo "  - main/master (production branch)"
+    echo "  - develop/development (integration branch)"
+    echo "  - staging (staging environment)"
+    echo "  - release/yyyy-mm-dd (release branches)"
+    echo "  - feature/description (new features)"
+    echo "  - chore/description (new chores)"
+    echo "  - fix/description (bug fixes)"
+    echo "  - bugfix/description (bug fixes)"
+    echo "  - hotfix/description (urgent fixes)"
+    echo ""
+    echo "Examples:"
+    echo "  - feature/user-authentication"
+    echo "  - fix/login-validation"
+    echo "  - hotfix/security-patch"
     exit 1
 fi
 
-echo "✅ Branch name is valid. Proceeding with push."
-exit 0
+# Prevent direct push to protected branches
+PROTECTED_BRANCHES="^(main|master|develop|development|staging)$"
+if [[ $BRANCH_NAME =~ $PROTECTED_BRANCHES ]]; then
+    echo "⚠️  Warning: You are pushing to a protected branch '$BRANCH_NAME'."
+    echo "   This is typically done through pull requests."
+    echo ""
+    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "❌ Push cancelled."
+        exit 1
+    fi
+fi
+
+# Run tests if test directory exists
+if [ -d "tests" ] || [ -f "pytest.ini" ] || [ -f "pyproject.toml" ]; then
+    echo "🧪 Running tests..."
+    if command -v pytest &> /dev/null; then
+        if ! pytest --tb=short; then
+            echo "❌ Error: Tests failed. Please fix failing tests before pushing."
+            exit 1
+        fi
+    elif command -v python -m pytest &> /dev/null; then
+        if ! python -m pytest --tb=short; then
+            echo "❌ Error: Tests failed. Please fix failing tests before pushing."
+            exit 1
+        fi
+    else
+        echo "⚠️  Warning: No test runner found. Skipping tests."
+    fi
+fi
+
+# Check for secrets/sensitive data
+echo "🔍 Checking for potential secrets..."
+SECRETS_PATTERN="(password|secret|key|token|api_key|private_key|auth)"
+if git diff --cached | grep -iE "$SECRETS_PATTERN.*=.*['\"][^'\"]{8,}['\"]" > /dev/null; then
+    echo "❌ Error: Potential secrets detected in staged files!"
+    echo "   Please review and remove any sensitive information."
+    git diff --cached | grep -iE "$SECRETS_PATTERN.*=.*['\"][^'\"]{8,}['\"]"
+    exit 1
+fi
+
+echo "✅ All pre-push checks passed! Branch name is valid."
