@@ -176,3 +176,9 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# pnpm/build temp files
+gyp.tmp.txt
+x.tmp.txt
+*.tmp.txt
+
