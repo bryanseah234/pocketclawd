@@ -81,7 +81,6 @@ export async function resizePhoto(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let sharp: any = null;
   try {
-    // @ts-expect-error optional dep loaded lazily
     sharp = (await import('sharp')).default;
   } catch {
     // Sharp not installed yet — return original path (validation already passed).

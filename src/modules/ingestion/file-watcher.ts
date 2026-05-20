@@ -101,7 +101,6 @@ export async function extractText(file: string): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mammoth: any;
     try {
-      // @ts-expect-error optional dep
       mammoth = await import('mammoth');
     } catch {
       throw new Error('mammoth not installed. Run `pnpm install mammoth`.');
@@ -114,7 +113,7 @@ export async function extractText(file: string): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let pdfParse: any;
     try {
-      // @ts-expect-error optional dep
+      // @ts-ignore — pdf-parse has no types shipped
       pdfParse = (await import('pdf-parse')).default;
     } catch {
       throw new Error('pdf-parse not installed. Run `pnpm install pdf-parse`.');
@@ -128,7 +127,7 @@ export async function extractText(file: string): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let extract: any;
     try {
-      // @ts-expect-error optional dep
+      // @ts-ignore — pptx-text-parser is optional and has no types
       extract = (await import('pptx-text-parser')).default;
     } catch {
       // Fall back to nothing — pptx is rare; log + skip gracefully.
@@ -141,7 +140,7 @@ export async function extractText(file: string): Promise<string> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mailparser: any;
     try {
-      // @ts-expect-error optional dep
+      // @ts-ignore — mailparser has runtime types via separate package
       mailparser = await import('mailparser');
     } catch {
       // fall back: read raw, strip headers crudely
@@ -219,7 +218,6 @@ export async function watchDir(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chokidar: any;
   try {
-    // @ts-expect-error optional dep
     chokidar = await import('chokidar');
   } catch {
     throw new Error('chokidar not installed. Run `pnpm install chokidar`.');

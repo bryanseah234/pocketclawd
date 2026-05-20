@@ -40,7 +40,6 @@ export class GoogleAuthManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let google: any;
     try {
-      // @ts-expect-error optional dep
       google = (await import('googleapis')).google;
     } catch {
       throw new Error(

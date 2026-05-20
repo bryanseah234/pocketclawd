@@ -45,6 +45,9 @@ import { registerChannelAdapter } from './channel-registry.js';
 const PLATFORM_ID = 'local';
 
 function socketPath(): string {
+  // Windows: named pipe (kernel-managed, no filesystem path needed).
+  // POSIX: data/cli.sock filesystem socket.
+  if (process.platform === 'win32') return '\\\\.\\pipe\\nanoclaw-cli';
   return path.join(DATA_DIR, 'cli.sock');
 }
 

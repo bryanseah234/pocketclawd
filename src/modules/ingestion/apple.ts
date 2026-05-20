@@ -44,7 +44,6 @@ export class AppleMailIngester implements CloudIngester {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let ImapFlow: any;
       try {
-        // @ts-expect-error optional dep
         ({ ImapFlow } = await import('imapflow'));
       } catch {
         throw new Error('imapflow not installed. Run `pnpm install imapflow`.');
@@ -108,7 +107,6 @@ export class AppleCalendarIngester implements CloudIngester {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let tsdav: any;
       try {
-        // @ts-expect-error optional dep
         tsdav = await import('tsdav');
       } catch {
         throw new Error('tsdav not installed. Run `pnpm install tsdav`.');
@@ -168,7 +166,6 @@ export class AppleContactsIngester implements CloudIngester {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let tsdav: any;
       try {
-        // @ts-expect-error optional dep
         tsdav = await import('tsdav');
       } catch {
         throw new Error('tsdav not installed. Run `pnpm install tsdav`.');

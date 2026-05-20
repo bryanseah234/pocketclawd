@@ -4,6 +4,9 @@
  *
  * Wire format: line-delimited JSON. One request per connection; the server
  * writes one response and closes.
+ *
+ * Windows note: server uses a named pipe (`\\.\pipe\nanoclaw-ncl`) instead
+ * of a Unix socket. Client must connect to the same path.
  */
 import net from 'net';
 import path from 'path';
@@ -12,7 +15,11 @@ import { DATA_DIR } from '../config.js';
 import type { RequestFrame, ResponseFrame } from './frame.js';
 import type { Transport } from './transport.js';
 
-export const DEFAULT_SOCKET_PATH = path.join(DATA_DIR, 'ncl.sock');
+const IS_WIN32 = process.platform === 'win32';
+
+export const DEFAULT_SOCKET_PATH = IS_WIN32
+  ? '\\\\.\\pipe\\nanoclaw-ncl'
+  : path.join(DATA_DIR, 'ncl.sock');
 
 export class SocketTransport implements Transport {
   constructor(private readonly socketPath: string = DEFAULT_SOCKET_PATH) {}

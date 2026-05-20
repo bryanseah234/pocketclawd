@@ -6,6 +6,11 @@
  * Lives at data/ncl.sock (separate from data/cli.sock, which the existing
  * chat-style CLI channel adapter owns). Socket file is chmod 0600 — only
  * the user that started the host can connect.
+ *
+ * Windows note: Unix domain sockets bound to filesystem paths fail on
+ * exFAT/NTFS roots (EACCES). On win32 we transparently switch to a Windows
+ * named pipe (`\\.\pipe\nanoclaw-ncl`) which gives the same single-process
+ * single-listener semantics without touching the filesystem.
  */
 import fs from 'fs';
 import net from 'net';
@@ -15,17 +20,30 @@ import { dispatch } from './dispatch.js';
 import type { CallerContext, RequestFrame, ResponseFrame } from './frame.js';
 import { DEFAULT_SOCKET_PATH } from './socket-client.js';
 
+const IS_WIN32 = process.platform === 'win32';
+
+/** Map a POSIX socket file path to a Windows named-pipe path on win32. */
+function resolveListenPath(socketPath: string): string {
+  if (!IS_WIN32) return socketPath;
+  return '\\\\.\\pipe\\nanoclaw-ncl';
+}
+
 let server: net.Server | null = null;
 
 export async function startCliServer(socketPath: string = DEFAULT_SOCKET_PATH): Promise<void> {
+  const listenPath = resolveListenPath(socketPath);
+
   // Stale-socket cleanup — a previous run that crashed may have left the
   // file behind, and net.createServer refuses to bind to an existing path.
-  try {
-    fs.unlinkSync(socketPath);
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code !== 'ENOENT') {
-      log.warn('Failed to unlink stale ncl socket (will try to bind anyway)', { socketPath, err });
+  // Named pipes don't need cleanup (kernel-managed), only POSIX sockets do.
+  if (!IS_WIN32) {
+    try {
+      fs.unlinkSync(listenPath);
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code !== 'ENOENT') {
+        log.warn('Failed to unlink stale ncl socket (will try to bind anyway)', { socketPath: listenPath, err });
+      }
     }
   }
 
@@ -33,13 +51,17 @@ export async function startCliServer(socketPath: string = DEFAULT_SOCKET_PATH): 
   server = s;
   await new Promise<void>((resolve, reject) => {
     s.once('error', reject);
-    s.listen(socketPath, () => {
-      try {
-        fs.chmodSync(socketPath, 0o600);
-      } catch (err) {
-        log.warn('Failed to chmod ncl socket (continuing)', { socketPath, err });
+    s.listen(listenPath, () => {
+      // chmod is a no-op on win32 named pipes — Windows handles ACL via
+      // pipe security descriptors, not POSIX modes.
+      if (!IS_WIN32) {
+        try {
+          fs.chmodSync(listenPath, 0o600);
+        } catch (err) {
+          log.warn('Failed to chmod ncl socket (continuing)', { socketPath: listenPath, err });
+        }
       }
-      log.info('ncl CLI server listening', { socketPath });
+      log.info('ncl CLI server listening', { socketPath: listenPath });
       resolve();
     });
   });

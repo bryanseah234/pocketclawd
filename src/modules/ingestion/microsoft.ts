@@ -31,7 +31,6 @@ export class MicrosoftAuthManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let msal: any;
     try {
-      // @ts-expect-error optional dep
       msal = await import('@azure/msal-node');
     } catch {
       throw new Error(
