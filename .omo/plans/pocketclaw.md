@@ -687,7 +687,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 7. MessageDebouncer — unified 5s batch queue
+- [x] 7. MessageDebouncer — unified 5s batch queue
 
   **What to do**:
   - Create `src/modules/debouncer.ts` — TypeScript implementation of PRD §7.5 logic:
