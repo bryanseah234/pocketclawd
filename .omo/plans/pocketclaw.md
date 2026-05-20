@@ -259,7 +259,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [~] 1. Complete NanoClaw merge into repo root
+- [x] 1. Complete NanoClaw merge into repo root
 
   **What to do**:
   - `nanoclaw-v2/` already exists in the repo (partial copy from commit `3bb9913`) but is
@@ -1290,7 +1290,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [~] 17. Vitest tests — debouncer + photo
+- [x] 17. Vitest tests — debouncer + photo
 
   **What to do**:
   - All tests should already exist from T7 (`debouncer.test.ts`) and T8 (`photo-processor.test.ts`)
@@ -1336,7 +1336,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [~] 18. Vitest tests — ingestion modules
+- [x] 18. Vitest tests — ingestion modules
 
   **What to do**:
   - Create `src/modules/ingestion/file-watcher.test.ts`:
