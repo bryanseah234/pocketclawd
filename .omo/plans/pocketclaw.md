@@ -1085,7 +1085,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 14. LLM Wiki generator
+- [x] 14. LLM Wiki generator
 
   **What to do**:
   - Create `src/modules/wiki-generator.ts`:
@@ -1151,7 +1151,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 15. PocketClaw slash commands (groups/pocketclaw/skills/)
+- [x] 15. PocketClaw slash commands (groups/pocketclaw/skills/)
 
   **What to do**:
   - Create skill files in `groups/pocketclaw/skills/` — one `.md` file per command,
