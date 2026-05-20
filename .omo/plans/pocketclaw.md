@@ -24,7 +24,7 @@
 >
 > **Estimated Effort**: XL (20 tasks across 5 waves)
 > **Parallel Execution**: YES — 5 waves
-> **Critical Path**: T1 → T2 → T5,T6,T7 → T9,T10,T11,T12,T13 → T18 → F1-F4
+> **Critical Path**: T0 → T1 → T2,T5,T6,T7 → T9,T10,T11,T12,T13 → T18 → F1-F4
 
 ---
 
@@ -132,11 +132,14 @@ ingestion, wiki) as TypeScript modules following NanoClaw's `src/modules/` patte
 ### Parallel Execution Waves
 
 ```
-Wave 1 (Start Immediately — foundations, parallel):
-├── T1:  Merge NanoClaw into repo + pnpm install + build [unspecified-high]
-├── T2:  PocketClaw agent group scaffold (groups/pocketclaw/)  [quick]
-├── T3:  .env + docker-compose PocketClaw extensions          [quick]
-└── T4:  Read NanoClaw CLAUDE.md + extend for PocketClaw      [quick]
+Wave 0 (FIRST — must complete before anything else):
+└── T0:  Install git hooks + verify branch name                             [quick]
+
+Wave 1 (After T0 — foundations, parallel):
+├── T1:  Complete NanoClaw merge (nanoclaw-v2 partial + fetch missing files) [unspecified-high]
+├── T2:  PocketClaw agent group scaffold (groups/pocketclaw/)               [quick]
+├── T3:  .env + docker-compose PocketClaw extensions                        [quick]
+└── T4:  Read NanoClaw CLAUDE.md + extend for PocketClaw                   [quick]
 
 Wave 2 (After T1 complete — skills + core modules, parallel):
 ├── T5:  Install /add-telegram skill                           [unspecified-high]
@@ -190,29 +193,104 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 1. Merge NanoClaw into pocketclaw repo
+- [ ] 0. Install git hooks + verify conventions
 
   **What to do**:
-  - Add NanoClaw as a git remote and fetch it:
+  - Install git hooks by running the repo's setup script:
+    ```powershell
+    # Windows (PowerShell)
+    ./scripts/setup_hooks.ps1
+    ```
+    ```bash
+    # macOS/Linux
+    ./scripts/setup_hooks.sh
+    ```
+  - Verify hooks installed: confirm `.git/hooks/commit-msg` and `.git/hooks/pre-push` exist
+  - Verify current branch name is valid: `git rev-parse --abbrev-ref HEAD` → must match
+    `^(feature|fix|bugfix|hotfix|chore)/.+$` — current branch is `feature/pocketclaw-build` ✅
+  - Confirm commit message convention is understood by running a dry-run:
+    `echo "feat: test" | npx commitlint` → should pass
+  - Check `nanoclaw-v2/` directory exists (partial NanoClaw already in repo from previous commits)
+    and document what's missing: `src/`, `groups/`, `package.json`, `pnpm-lock.yaml`,
+    `tsconfig.json`, `vitest.config.ts`, `nanoclaw.sh`, `setup.sh`
+
+  **Must NOT do**:
+  - Do not skip this task — hooks MUST be installed before T1 commits or they won't be enforced
+  - Do not rename the branch — `feature/pocketclaw-build` is correct
+
+  **Recommended Agent Profile**:
+  - **Category**: `quick`
+  - **Skills**: []
+
+  **Parallelization**:
+  - **Can Run In Parallel**: NO — must complete before T1 (hooks must be active before commits)
+  - **Blocked By**: None
+  - **Blocks**: ALL tasks (hooks must be active)
+
+  **References**:
+  - `.githooks/commit-msg` — commit format regex: `^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\(.+\))?: .{1,50}`
+  - `.githooks/pre-push` — branch naming regex: `^(main|master|develop|development|staging|chore/.+|release\/...|feature\/.+|fix\/.+|bugfix\/.+|hotfix\/.+)$`
+  - `CONTRIBUTING.md` — full commit and branching conventions
+  - `scripts/setup_hooks.ps1` — Windows hook installer
+  - `scripts/setup_hooks.sh` — macOS/Linux hook installer
+
+  **Acceptance Criteria**:
+  - [ ] `.git/hooks/commit-msg` exists and is executable
+  - [ ] `.git/hooks/pre-push` exists and is executable
+  - [ ] `git rev-parse --abbrev-ref HEAD` → `feature/pocketclaw-build`
+  - [ ] `echo "feat: test message" | npx commitlint` → exits 0
+  - [ ] `echo "WIP: bad message" | npx commitlint` → exits non-zero
+
+  **QA Scenarios**:
+  ```
+  Scenario: Hooks installed and enforcing conventions
+    Tool: Bash
+    Steps:
+      1. Run: ls .git/hooks/commit-msg .git/hooks/pre-push && echo "hooks present"
+      2. Run: echo "feat: valid commit" | npx commitlint && echo "valid"
+      3. Run: echo "bad commit message" | npx commitlint 2>&1 | head -5
+    Expected Result: Step 1 → "hooks present"; Step 2 → "valid"; Step 3 → error output
+    Evidence: .omo/evidence/task-0-hooks.txt
+  ```
+
+  **Commit**: YES
+  - Message: `chore: install git hooks and verify branch conventions`
+  - Files: none (hooks are in .git/, not tracked)
+
+---
+
+- [ ] 1. Complete NanoClaw merge into repo root
+
+  **What to do**:
+  - `nanoclaw-v2/` already exists in the repo (partial copy from commit `3bb9913`) but is
+    incomplete — it has docs/assets only, missing `src/`, `groups/`, `package.json` etc.
+  - Add NanoClaw as a remote and fetch, then copy MISSING files only:
     ```bash
     git remote add nanoclaw https://github.com/nanocoai/nanoclaw.git
     git fetch nanoclaw
-    ```
-  - Copy NanoClaw files into pocketclaw working tree (do NOT merge git history — copy files):
-    ```bash
-    git checkout nanoclaw/main -- src/ container/ groups/ CLAUDE.md package.json \
+    # Copy everything NanoClaw has that isn't already at root:
+    git checkout nanoclaw/main -- src/ container/ groups/ package.json \
       pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json vitest.config.ts \
       vitest.skills.config.ts eslint.config.js .npmrc .nvmrc .prettierrc \
-      nanoclaw.sh setup.sh
+      nanoclaw.sh setup.sh CLAUDE.md
     ```
-    **DO NOT copy `scripts/` from NanoClaw** — pocketclaw already has `scripts/*.py` files.
-    Instead, selectively copy only NanoClaw scripts that don't clash:
+  - **scripts/ collision**: DO NOT copy NanoClaw's `scripts/` over pocketclaw's `scripts/*.py`.
+    Instead inspect first, then copy only non-conflicting NanoClaw scripts to `scripts/nanoclaw/`:
     ```bash
-    git show nanoclaw/main:scripts/ | head -50   # inspect what's there first
-    # Then copy only non-conflicting NanoClaw scripts into scripts/nanoclaw/
+    git show nanoclaw/main:scripts/ | head -30   # inspect what NanoClaw has
     mkdir -p scripts/nanoclaw
     # copy each non-conflicting file individually
+    git remote remove nanoclaw
     ```
+  - Also move `nanoclaw-v2/` contents to root where missing, then delete `nanoclaw-v2/`:
+    ```bash
+    # copy any unique files from nanoclaw-v2/ that aren't already at root
+    # then: git rm -r nanoclaw-v2/
+    ```
+  - Merge `.gitignore`: append NanoClaw's gitignore rules to existing pocketclaw `.gitignore`
+    (keep both — do not replace)
+  - Run `pnpm install` then `pnpm build` — confirm exits 0
+  - Run `pnpm test` — confirm baseline NanoClaw tests pass
   - Merge `.gitignore`: append NanoClaw's ignore rules to existing pocketclaw `.gitignore`
     (keep both sets — do not replace). Run `git checkout nanoclaw/main -- .gitignore` then
     re-append any pocketclaw-specific ignores that got removed.
@@ -1393,13 +1471,60 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-## Commit Strategy
+## Commit & Branch Conventions (MANDATORY — enforced by .githooks)
 
-- Wave 1 (T1-T4): `feat(nanoclaw): merge nanoclaw base` then group T2+T3+T4
-- Wave 2 (T5-T7): one commit per task
-- Wave 3 (T8-T11): group T9+T10+T11 as one commit; T8 separate
-- Wave 4 (T12-T15): T12+T13 grouped; T14 separate; T15 separate
-- Wave 5 (T16-T19): T16 separate; T17+T18 grouped; T19 separate
+### Branch Naming (pre-push hook rejects non-compliant names)
+- Pattern: `feature/xxx`, `fix/xxx`, `bugfix/xxx`, `hotfix/xxx`, `chore/xxx`, `release/yyyy-mm-dd`
+- Current working branch: **`feature/pocketclaw-build`** ✅
+- NEVER push directly to `main` or `staging` — hooks will warn; use PRs
+
+### Commit Message Format (commit-msg hook enforces this)
+- Format: `<type>[optional scope]: <short description>`
+- Types allowed: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`
+- Rules: lowercase, imperative mood ("add" not "added"), ≤72 chars total, no trailing period
+- Scopes optional but allowed: `feat(queue): add debouncer`
+- NO: `WIP:`, `TEMP:`, `TODO:`, `FIXME:` prefixes — hook rejects these
+- Reference: `CONTRIBUTING.md §Issue Tracking & Commit Message Conventions`, `.githooks/commit-msg`
+
+### Examples (valid)
+```
+feat: merge nanoclaw base into repo
+feat(group): create pocketclaw agent group
+feat(telegram): install telegram channel adapter
+feat(whatsapp): install whatsapp baileys adapter
+feat(queue): add message debouncer with 5s batch window
+feat(photo): add photo processing pipeline
+feat(ingestion): add Google cloud ingestion
+feat(ingestion): add Microsoft cloud ingestion
+feat(ingestion): add Apple cloud ingestion
+feat(ingestion): add file auto-discovery with SHA256 idempotency
+feat(wiki): add LLM wiki generator with Obsidian output
+feat(skills): add all PocketClaw slash command skills
+feat(harness): wire modules and add cron jobs
+test: add debouncer and photo processor tests
+test: add ingestion idempotency and fault isolation tests
+docs: add setup, architecture and Obsidian guides
+chore: install git hooks and verify conventions
+```
+
+### Commit Strategy per Wave
+- T0: `chore: install git hooks and verify branch conventions`
+- T1: `feat: complete nanoclaw merge — src groups container package.json`
+- T2: `feat(group): create pocketclaw agent group with CLAUDE.md`
+- T3: `feat(config): extend env template and docker-compose for PocketClaw`
+- T4: `docs: extend root CLAUDE.md with PocketClaw section`
+- T5: `feat(telegram): install telegram channel adapter`
+- T6: `feat(whatsapp): install whatsapp baileys adapter`
+- T7: `feat(queue): add message debouncer with 5s batch window`
+- T8: `feat(photo): add photo processing pipeline`
+- T9-T11 grouped: `feat(ingestion): add Google, Microsoft and Apple cloud ingesters`
+- T12: `feat(ingestion): add file auto-discovery with SHA256 idempotency`
+- T13: `feat(ingestion): add cloud ingestion scheduler`
+- T14: `feat(wiki): add LLM wiki generator with Obsidian output`
+- T15: `feat(skills): add all PocketClaw slash command skills`
+- T16: `feat(harness): wire PocketClaw modules and add cron jobs`
+- T17+T18 grouped: `test: add debouncer, photo and ingestion test suites`
+- T19: `docs: add setup, architecture and Obsidian guides`
 
 ---
 
