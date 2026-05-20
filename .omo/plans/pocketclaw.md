@@ -1209,7 +1209,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 16. Harness wiring + morning digest cron
+- [x] 16. Harness wiring + morning digest cron
 
   **What to do**:
   - Wire all PocketClaw modules into the pocketclaw agent group config:
