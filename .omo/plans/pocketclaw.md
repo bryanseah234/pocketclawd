@@ -821,7 +821,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 9. Google cloud ingestion (Gmail, Calendar, Contacts)
+- [x] 9. Google cloud ingestion (Gmail, Calendar, Contacts)
 
   **What to do**:
   - Install: `pnpm add googleapis @google-cloud/local-auth`
@@ -879,7 +879,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 10. Microsoft cloud ingestion (Outlook Mail, Calendar, Contacts)
+- [x] 10. Microsoft cloud ingestion (Outlook Mail, Calendar, Contacts)
 
   **What to do**:
   - Install: `pnpm add @azure/msal-node @microsoft/microsoft-graph-client`
@@ -929,7 +929,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 11. Apple cloud ingestion (IMAP, CalDAV, CardDAV)
+- [x] 11. Apple cloud ingestion (IMAP, CalDAV, CardDAV)
 
   **What to do**:
   - Install: `pnpm add imap-simple tsdav`

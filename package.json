@@ -39,7 +39,11 @@
     "qrcode": "1.5.4",
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "pino": "9.6.0",
-    "sharp": "0.34.4"
+    "sharp": "0.34.4",
+    "tsdav": "2.2.5",
+    "@azure/msal-node": "3.5.0",
+    "imapflow": "1.0.190",
+    "googleapis": "146.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
