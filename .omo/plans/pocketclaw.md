@@ -417,7 +417,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 3. .env extension + docker-compose PocketClaw volumes
+- [x] 3. .env extension + docker-compose PocketClaw volumes
 
   **What to do**:
   - Extend NanoClaw's `.env.example` (copied in T1) with all PocketClaw-specific vars from
@@ -504,7 +504,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 4. Read and extend NanoClaw's root CLAUDE.md
+- [x] 4. Read and extend NanoClaw's root CLAUDE.md
 
   **What to do**:
   - Read the NanoClaw `CLAUDE.md` that was copied in T1 (it's at repo root, 24KB)
@@ -552,7 +552,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 5. Install Telegram channel adapter via /add-telegram skill
+- [x] 5. Install Telegram channel adapter via /add-telegram skill
 
   **What to do**:
   - Fetch the skill files from the `channels` branch of nanoclaw OR from the dedicated repo:
@@ -628,7 +628,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 6. Install WhatsApp channel adapter via /add-whatsapp skill
+- [x] 6. Install WhatsApp channel adapter via /add-whatsapp skill
 
   **What to do**:
   - Fetch WhatsApp/Baileys adapter from `nanocoai/nanoclaw-whatsapp`:
