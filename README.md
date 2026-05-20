@@ -1,4 +1,39 @@
-# [PROJECT TITLE]
+# PocketClaw — Personal AI Assistant
+
+Local-first personal assistant built on top of [NanoClaw v2](https://github.com/nanocoai/nanoclaw). Talks to you via Telegram + WhatsApp with shared memory across both, ingests email / calendar / contacts from Google / Microsoft / Apple, processes photos via local vision, and generates an Obsidian wiki you can sync peer-to-peer with Syncthing.
+
+**Why local-first?** Only the final assembled prompt to Anthropic's API ever leaves your machine. Emails, photos, contacts, and files stay in `~/.pocketclaw/`.
+
+## Quick Links
+
+- [SETUP.md](docs/SETUP.md) — clone-to-first-message walkthrough
+- [POCKETCLAW.md](docs/POCKETCLAW.md) — PocketClaw-specific architecture
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — underlying NanoClaw architecture
+- [PRD.md](PRD.md) — full product spec v3.0
+- [CONTRIBUTING.md](CONTRIBUTING.md) — branch naming, commit format, PR flow
+
+## Slash Commands (in Telegram / WhatsApp)
+
+| Command | What it does |
+|---------|--------------|
+| `/memory <fact>` | Save a fact to mnemon |
+| `/recall <query>` | Search mnemon graph |
+| `/wiki <topic>` | Regenerate Obsidian wiki entry |
+| `/ingest` | Trigger immediate cloud ingestion |
+| `/status` | Show entity count, last ingest time, watcher health |
+| `/digest` | Send morning digest now (auto-fires at 07:00) |
+| `/audit [date]` | Show audit log entries for a date |
+| `/auth google\|microsoft\|apple` | Start OAuth / device-code flow |
+| `/photo <description>` | Manually save a photo description |
+
+## Project Structure
+
+This repo is two things stacked:
+
+1. **NanoClaw v2** harness — `src/`, `container/`, `groups/global/`, `groups/main/`, etc.
+2. **PocketClaw** layer on top — `groups/pocketclaw/`, `src/modules/debouncer.ts`, `src/modules/photo-processor.ts`, `src/modules/ingestion/*`, `src/modules/wiki-generator.ts`, `src/modules/pocketclaw.ts`.
+
+For the NanoClaw layout see [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md). For the PocketClaw layer see [docs/POCKETCLAW.md](docs/POCKETCLAW.md).
 
 ## Table of Contents
 
