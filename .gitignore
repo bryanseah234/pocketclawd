@@ -182,3 +182,13 @@ gyp.tmp.txt
 x.tmp.txt
 *.tmp.txt
 
+
+# --- PocketClaw additions ---
+.env
+.env.local
+secrets/
+wa-session/
+*.wa-session
+vault/
+logs/
+.photo-cache/

@@ -354,7 +354,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 2. PocketClaw agent group scaffold
+- [x] 2. PocketClaw agent group scaffold
 
   **What to do**:
   - Create `groups/pocketclaw/` directory (alongside existing `groups/global/` and `groups/main/`)
@@ -1290,7 +1290,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 17. Vitest tests — debouncer + photo
+- [~] 17. Vitest tests — debouncer + photo
 
   **What to do**:
   - All tests should already exist from T7 (`debouncer.test.ts`) and T8 (`photo-processor.test.ts`)
@@ -1336,7 +1336,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 18. Vitest tests — ingestion modules
+- [~] 18. Vitest tests — ingestion modules
 
   **What to do**:
   - Create `src/modules/ingestion/file-watcher.test.ts`:

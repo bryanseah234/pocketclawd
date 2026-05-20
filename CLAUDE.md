@@ -322,3 +322,54 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw   # macOS
 ```
 
 `container/build.sh` reads `INSTALL_CJK_FONTS` from `.env` and passes it through as a Docker build-arg. Without CJK fonts, Chromium-rendered screenshots and PDFs containing CJK text show tofu (empty rectangles) instead of characters.
+
+
+---
+
+# PocketClaw
+
+This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/pocketclaw/`. PocketClaw is a personal AI assistant: Telegram + WhatsApp interfaces, shared mnemon memory, cloud ingestion (Gmail / Outlook / iCloud), photo processing, and an Obsidian wiki output layer.
+
+## PocketClaw Quick Reference
+
+- **Agent identity**: `groups/pocketclaw/CLAUDE.md` (PocketClaw directives)
+- **Active branch convention**: `feature/pocketclaw-build` (per `CONTRIBUTING.md`)
+- **Plan**: `.omo/plans/pocketclaw.md` (T0-T19 + F1-F4 final review)
+- **Notepad**: `.omo/notepads/pocketclaw/` (learnings, blockers)
+
+### Skills installed for PocketClaw
+
+- `/add-telegram` — Telegram Chat SDK channel adapter
+- `/add-whatsapp` — WhatsApp Baileys channel adapter
+- `/add-mnemon` — local cross-session memory engine (Mnemon)
+- `/add-karpathy-llm-wiki` — Obsidian wiki generator
+- `/add-gmail-tool`, `/add-gcal-tool` — Google ingestion
+- `/add-ollama-provider` — local Ollama for embeddings + vision (llava)
+
+### PocketClaw-specific modules (under `src/modules/`)
+
+- `debouncer.ts` — 5s unified message batch queue (Telegram + WhatsApp)
+- `photo-processor.ts` — vision pipeline (validate → resize → describe → mnemon → cleanup)
+- `ingestion/google.ts`, `microsoft.ts`, `apple.ts` — cloud source adapters
+- `ingestion/file-watcher.ts` — watchdog with SHA256 idempotency
+- `ingestion/scheduler.ts` — fault-isolated cron orchestrator
+- `wiki-generator.ts` — Obsidian-compatible Markdown with WikiLinks
+
+### Cron jobs
+
+- 02:00 local — cloud ingestion (Google / Microsoft / Apple)
+- 03:00 local — wiki regeneration from mnemon
+- 07:00 local — morning digest delivered to Telegram
+
+### Repo conventions (must follow)
+
+- Commit format: `<type>(scope): <desc>` ≤72 chars (see `CONTRIBUTING.md`)
+- Branch pattern: `feature/xxx` `fix/xxx` `bugfix/xxx` `hotfix/xxx` `chore/xxx`
+- Pre-commit hooks installed via `scripts/setup_hooks.ps1` / `.sh`
+- Python deps managed by **uv** (`pyproject.toml` + `uv.lock`)
+- Node deps managed by **pnpm** (`package.json` + `pnpm-lock.yaml`)
+
+### Known environment notes
+
+- exFAT drive (`X:`) needs `node-linker=hoisted` in `.npmrc` (no symlinks)
+- `.nvmrc` = Node 22; `better-sqlite3@11` won't compile against Node 26
