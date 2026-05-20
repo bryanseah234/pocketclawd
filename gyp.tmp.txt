@@ -1,0 +1,125 @@
+gyp info it worked if it ends with ok
+gyp info using node-gyp@12.3.0
+gyp info using node@26.1.0 | win32 | x64
+gyp info find Python using Python version 3.12.10 found at "C:\Program Files\Python312\python.exe"
+
+gyp info find VS using VS2022 (17.14.37301.10) found at:
+gyp info find VS "C:\Program Files\Microsoft Visual Studio\2022\Community"
+gyp info find VS run with --verbose for detailed information
+gyp info spawn C:\Program Files\Python312\python.exe
+gyp info spawn args [
+gyp info spawn args 'C:\\Users\\bryan\\AppData\\Local\\npm-cache\\_npx\\c463d28440264a05\\node_modules\\node-gyp\\gyp\\gyp_main.py',
+gyp info spawn args 'binding.gyp',
+gyp info spawn args '-f',
+gyp info spawn args 'msvs',
+gyp info spawn args '-I',
+gyp info spawn args 'X:\\01 REPOSITORIES\\pocketclaw\\node_modules\\better-sqlite3\\build\\config.gypi',
+gyp info spawn args '-I',
+gyp info spawn args 'C:\\Users\\bryan\\AppData\\Local\\npm-cache\\_npx\\c463d28440264a05\\node_modules\\node-gyp\\addon.gypi',
+gyp info spawn args '-I',
+gyp info spawn args 'C:\\Users\\bryan\\AppData\\Local\\node-gyp\\Cache\\26.1.0\\include\\node\\common.gypi',
+gyp info spawn args '-Dlibrary=shared_library',
+gyp info spawn args '-Dvisibility=default',
+gyp info spawn args '-Dnode_root_dir=C:\\Users\\bryan\\AppData\\Local\\node-gyp\\Cache\\26.1.0',
+gyp info spawn args '-Dnode_gyp_dir=C:\\Users\\bryan\\AppData\\Local\\npm-cache\\_npx\\c463d28440264a05\\node_modules\\node-gyp',
+gyp info spawn args '-Dnode_lib_file=C:\\\\Users\\\\bryan\\\\AppData\\\\Local\\\\node-gyp\\\\Cache\\\\26.1.0\\\\<(target_arch)\\\\node.lib',
+gyp info spawn args '-Dmodule_root_dir=X:\\01 REPOSITORIES\\pocketclaw\\node_modules\\better-sqlite3',
+gyp info spawn args '-Dnode_engine=v8',
+gyp info spawn args '--depth=.',
+gyp info spawn args '--no-parallel',
+gyp info spawn args '--generator-output',
+gyp info spawn args 'X:\\01 REPOSITORIES\\pocketclaw\\node_modules\\better-sqlite3\\build',
+gyp info spawn args '-Goutput_dir=.'
+gyp info spawn args ]
+gyp info spawn C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe
+gyp info spawn args [
+gyp info spawn args 'build/binding.sln',
+gyp info spawn args '/clp:Verbosity=minimal',
+gyp info spawn args '/nologo',
+gyp info spawn args '/nodeReuse:false',
+gyp info spawn args '/p:Configuration=Release;Platform=x64'
+gyp info spawn args ]
+
+  copy_builtin_sqlite3
+  sqlite3.c
+  win_delay_load_hook.cc
+  sqlite3.vcxproj -> X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\Release\\sqlite3.lib
+  better_sqlite3.cpp
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\util\binder.lzz(40,37): error C2039: 'GetPrototype': is not a member of 'v8::Object' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-object.h(262,17):
+      see declaration of 'v8::Object'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\util\binder.lzz(49,62): error C2039: 'GetPrototype': is not a member of 'v8::Object' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-object.h(262,17):
+      see declaration of 'v8::Object'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\better_sqlite3.lzz(68,34): error C2039: 'GetIsolate': is not a member of 'v8::Context' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-context.h(48,17):
+      see declaration of 'v8::Context'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\better_sqlite3.lzz(73,47): warning C4996: 'v8::External::New': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\database.lzz(160,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\database.lzz(208,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\database.lzz(266,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\database.lzz(416,89): error C2039: 'This': is not a member of 'v8::PropertyCallbackInfo<v8::Value>' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-function-callback.h(224,7):
+      see declaration of 'v8::PropertyCallbackInfo<v8::Value>'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\database.lzz(420,77): error C2039: 'This': is not a member of 'v8::PropertyCallbackInfo<v8::Value>' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-function-callback.h(224,7):
+      see declaration of 'v8::PropertyCallbackInfo<v8::Value>'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\statement.lzz(86,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\statement.lzz(216,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\statement.lzz(322,81): error C2039: 'This': is not a member of 'v8::PropertyCallbackInfo<v8::Value>' [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+      C:\Users\bryan\AppData\Local\node-gyp\Cache\26.1.0\include\node\v8-function-callback.h(224,7):
+      see declaration of 'v8::PropertyCallbackInfo<v8::Value>'
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\statement-iterator.lzz(39,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\objects\backup.lzz(56,106): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\src\better_sqlite3.lzz(37,90): warning C4996: 'v8::External::Value': Use the version with the type tag. [X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\better_sqlite3.vcxproj]
+  (compiling source file '../src/better_sqlite3.cpp')
+  
+  test_extension.c
+  win_delay_load_hook.cc
+     Creating library X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\Release\test_extension.lib and object X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\Release\test_extension.exp
+  Generating code
+  Previous IPDB not found, fall back to full compilation.
+  All 3 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  test_extension.vcxproj -> X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3\build\Release\\test_extension.node
+gyp ERR! build error 
+gyp ERR! stack Error: `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe` failed with exit code: 1
+gyp ERR! stack at ChildProcess.<anonymous> (C:\Users\bryan\AppData\Local\npm-cache\_npx\c463d28440264a05\node_modules\node-gyp\lib\build.js:219:23)
+gyp ERR! stack at ChildProcess.emit (node:events:509:20)
+gyp ERR! stack at ChildProcess._handle.onexit (node:internal/child_process:294:12)
+gyp ERR! System Windows_NT 10.0.26220
+gyp ERR! command "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\bryan\\AppData\\Local\\npm-cache\\_npx\\c463d28440264a05\\node_modules\\node-gyp\\bin\\node-gyp.js" "rebuild"
+gyp ERR! cwd X:\01 REPOSITORIES\pocketclaw\node_modules\better-sqlite3
+gyp ERR! node -v v26.1.0
+gyp ERR! node-gyp -v v12.3.0
+gyp ERR! $npm_package_name better-sqlite3
+gyp ERR! $npm_package_version 11.10.0
+gyp ERR! not ok 

@@ -259,7 +259,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 1. Complete NanoClaw merge into repo root
+- [~] 1. Complete NanoClaw merge into repo root
 
   **What to do**:
   - `nanoclaw-v2/` already exists in the repo (partial copy from commit `3bb9913`) but is
