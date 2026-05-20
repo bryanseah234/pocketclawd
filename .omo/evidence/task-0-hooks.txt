@@ -1,0 +1,13 @@
+=== T0 Evidence ===
+Hooks installed:
+
+Name       Length
+----       ------
+commit-msg   2441
+pre-push     2971
+
+
+Branch:
+feature/pocketclaw-build
+Commitlint test (good): PASSED
+Commitlint test (bad WIP): REJECTED with type-case + type-enum errors

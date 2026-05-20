@@ -193,7 +193,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 0. Install git hooks + verify conventions
+- [x] 0. Install git hooks + verify conventions
 
   **What to do**:
   - Install git hooks by running the repo's setup script:
