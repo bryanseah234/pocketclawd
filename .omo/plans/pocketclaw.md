@@ -754,7 +754,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 8. Photo processing pipeline
+- [x] 8. Photo processing pipeline
 
   **What to do**:
   - Create `src/modules/photo-processor.ts`:
