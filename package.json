@@ -43,7 +43,11 @@
     "tsdav": "2.2.5",
     "@azure/msal-node": "3.5.0",
     "imapflow": "1.0.190",
-    "googleapis": "146.0.0"
+    "googleapis": "146.0.0",
+    "chokidar": "4.0.3",
+    "pdf-parse": "1.1.1",
+    "mailparser": "3.7.4",
+    "mammoth": "1.11.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

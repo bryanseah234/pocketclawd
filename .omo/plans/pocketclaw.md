@@ -981,7 +981,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 12. File auto-discovery (watchdog + SHA256 idempotency)
+- [x] 12. File auto-discovery (watchdog + SHA256 idempotency)
 
   **What to do**:
   - Install: `pnpm add chokidar mammoth pptx-text-extract pdf-parse ical.js vcard-js`
@@ -1036,7 +1036,7 @@ Wave FINAL (after ALL — 4 parallel reviews then user okay):
 
 ---
 
-- [ ] 13. Cloud ingestion scheduler
+- [x] 13. Cloud ingestion scheduler
 
   **What to do**:
   - Create `src/modules/ingestion/scheduler.ts`:
