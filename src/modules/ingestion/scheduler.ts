@@ -88,6 +88,8 @@ async function runOne(
   try {
     const { facts, errors: ingestErrs } = await ing.fetch(since);
     errors.push(...ingestErrs);
+    // Serialize per-fact handler. Mnemon (and most fact stores) writes to a
+    // single SQLite file; concurrent CLI invocations cause SQLITE_BUSY.
     for (const f of facts) {
       try {
         await onFact(f);
@@ -112,11 +114,40 @@ async function runOne(
 /**
  * Default fact handler: pipe to `mnemon remember`. Mnemon must be on PATH
  * (installed via `/add-mnemon`).
+ *
+ * Mnemon's `--source` only accepts `user|agent|external`, so we tag the
+ * specific ingester source (e.g. `gmail`, `outlook-mail`) so it can still
+ * be queried later via `mnemon recall --tag gmail`.
+ *
+ * Mnemon writes to a single SQLite file, so concurrent CLI invocations
+ * (one per parallel ingester) hit SQLITE_BUSY. We serialize all writes
+ * through a process-wide promise chain.
  */
+let mnemonWriteChain: Promise<void> = Promise.resolve();
+
 async function defaultOnFact(fact: Fact): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const args = ['remember', fact.text, '--source', fact.source];
-    if (fact.sourceId) args.push('--source-id', fact.sourceId);
+  const next = mnemonWriteChain.then(
+    () => runMnemonRemember(fact),
+    () => runMnemonRemember(fact),
+  );
+  // Swallow rejections on the chain so one failure doesn't poison the rest;
+  // the caller still sees the rejection through `next`.
+  mnemonWriteChain = next.catch(() => {});
+  return next;
+}
+
+function runMnemonRemember(fact: Fact): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const tags = [`pocketclaw`, `src:${fact.source}`];
+    if (fact.sourceId) tags.push(`id:${truncateForTag(fact.sourceId)}`);
+    const args = [
+      'remember',
+      fact.text,
+      '--source',
+      'external',
+      '--tags',
+      tags.join(','),
+    ];
     const proc = spawn('mnemon', args, { stdio: 'pipe' });
     let stderr = '';
     proc.stderr?.on('data', (chunk) => (stderr += String(chunk)));
@@ -126,6 +157,11 @@ async function defaultOnFact(fact: Fact): Promise<void> {
       else reject(new Error(`mnemon remember failed (${code}): ${stderr}`));
     });
   });
+}
+
+/** Tags can't contain spaces or commas — keep id readable but safe. */
+function truncateForTag(value: string): string {
+  return value.replace(/[\s,]/g, '_').slice(0, 60);
 }
 
 export const ALL_CLOUD_INGESTERS = ALL_INGESTERS;
