@@ -195,3 +195,12 @@ logs/
 
 data/
 
+
+# --- Added: sensitive/runtime ---
+store/
+*.credentials.json
+**/creds.json
+**/auth_info*/
+host.pid
+host-job.id
+
