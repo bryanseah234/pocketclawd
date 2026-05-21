@@ -162,10 +162,21 @@ PocketClaw runs as a Windows service (via [NSSM](https://nssm.cc/)) so the cron 
 ### Install (one-time, needs admin)
 
 ```powershell
+# From your normal (non-admin) PowerShell at the repo root:
+pnpm svc:install:elevated
+```
+
+A UAC prompt pops up — click **Yes**. A new admin window opens, runs the install, and stays open with output visible. Press Enter when done to close it.
+
+If you'd rather elevate manually:
+
+```powershell
 # Right-click PowerShell -> "Run as administrator", then:
 cd "X:\01 REPOSITORIES\pocketclaw"
 pnpm svc:install
 ```
+
+> **Why elevation matters**: NSSM service registration calls `sc.exe create` which requires admin. The elevated wrapper handles `cd` to the repo for you so you don't get `ERR_PNPM_NO_PKG_MANIFEST` from `C:\WINDOWS\system32`.
 
 This auto-installs NSSM (via Chocolatey or winget if missing), registers the `pocketclaw` service to start on boot, sets up log rotation at 10 MB, and starts the service.
 
@@ -236,13 +247,42 @@ Each cloud source needs its own credential. PocketClaw never holds raw passwords
 
 ### Microsoft (Outlook Mail + Calendar + Contacts)
 
-1. [entra.microsoft.com](https://entra.microsoft.com) → **Applications → App registrations → New registration**
-2. Name: `PocketClaw`. Account types: `Personal Microsoft accounts only` (use a personal `outlook.com` / `hotmail.com` account if your work tenant blocks app creation).
-3. Redirect URI: leave blank. Click **Register**.
-4. Copy the **Application (client) ID** → paste into `.env` as `MS_CLIENT_ID=...`
-5. **Authentication → Allow public client flows → Yes → Save**
-6. **API permissions → Add → Microsoft Graph → Delegated** → tick `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `User.Read`
-7. From Telegram: `/auth microsoft` — device-code flow, short URL + 9-char code, sign in once.
+Two paths depending on which Microsoft account you're using.
+
+#### Path A — Personal account (`outlook.com` / `hotmail.com` / `live.com`) — RECOMMENDED if your work tenant blocks app creation
+
+1. Sign in at [entra.microsoft.com](https://entra.microsoft.com) **with your personal Microsoft account** (not a work account).
+   - If your work account auto-signs-in, sign out first, or use an InPrivate browser window.
+   - Personal accounts get a self-managed "consumer" tenant with no admin gates.
+2. Left sidebar → **Applications → App registrations → New registration**
+3. Fill in:
+   - **Name**: `PocketClaw`
+   - **Supported account types**: pick the **first option** — *"Personal Microsoft accounts only"*
+   - **Redirect URI**: leave blank
+   - Click **Register**
+4. On the app overview page, copy the **Application (client) ID** (a GUID like `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`)
+5. Left sidebar → **Authentication** → scroll to **Advanced settings** → **Allow public client flows** → **Yes** → **Save**
+6. Left sidebar → **API permissions** → **+ Add a permission** → **Microsoft Graph** → **Delegated permissions** → tick:
+   - `Mail.Read`
+   - `Calendars.Read`
+   - `Contacts.Read`
+   - `User.Read` (usually pre-selected)
+   - Click **Add permissions**. No "grant admin consent" needed for personal accounts — you consent at sign-in.
+
+Then locally:
+
+```env
+# .env
+MS_CLIENT_ID=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
+```
+
+Restart service. From Telegram: `/auth microsoft` — device-code flow prints a short URL + 9-char code, you sign in once with your personal account at [microsoft.com/devicelogin](https://microsoft.com/devicelogin), click **Allow**. Token caches at `X:\PocketClawData\secrets\ms_token.json`.
+
+#### Path B — Work or school account
+
+Same flow as Path A but pick **"Accounts in any organizational directory and personal Microsoft accounts"** in step 3. **Some company tenants block users from registering apps** — if step 3 errors with "you don't have permission", you'd need IT to grant you the `Application Developer` role, or use Path A with a personal account instead.
+
+You can ingest **both** a personal AND a work mailbox by registering one app per account and switching `MS_CLIENT_ID` (less convenient) — most people just pick one.
 
 ### Apple (iCloud Mail + Calendar + Contacts)
 
@@ -316,8 +356,10 @@ Run `pnpm svc` for live status of each source.
 | `pnpm svc` | Service status snapshot |
 | `pnpm svc:tail` | Tail service logs in real time |
 | `pnpm svc:install` | Register Windows service (admin) |
+| `pnpm svc:install:elevated` | Register service with auto-UAC prompt (no need to start admin shell yourself) |
 | `pnpm svc:install:dry` | Show install plan without applying |
 | `pnpm svc:uninstall` | Remove service, keep data (admin) |
+| `pnpm svc:uninstall:elevated` | Remove service with auto-UAC prompt |
 | `pnpm svc:uninstall:purge` | Remove service and wipe data (admin) |
 | `pnpm svc:export` | Bundle creds + memory + vault for migration |
 
