@@ -24,6 +24,69 @@ import { registerWebhookAdapter } from '../webhook-server.js';
 import { getAskQuestionRender } from '../db/sessions.js';
 import { normalizeOptions, type NormalizedOption } from './ask-question.js';
 import type { ChannelAdapter, ChannelSetup, InboundMessage } from './adapter.js';
+import { archiveChatMessage, type ChatPlatform } from '../modules/chat-archive.js';
+
+/**
+ * Pipe a Chat SDK message into the chat-archive sink. Fire-and-forget;
+ * never throws, never awaits, never blocks the inbound pipeline.
+ *
+ * `adapterName` becomes the platform tag (`telegram`, `discord`, `slack`,
+ * etc.). The chat-archive module no-ops when INGEST_CHAT_MODE is off.
+ */
+function archiveSdkMessage(
+  adapterName: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  thread: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  message: any,
+  isGroup: boolean,
+): void {
+  try {
+    const author = message.author as { userId?: string; fullName?: string; displayName?: string } | undefined;
+    const senderId = author?.userId ?? 'unknown';
+    const senderName = author?.fullName ?? author?.displayName ?? undefined;
+
+    // Heuristic for "is this from me?" — the bridge has no direct flag
+    // since outbound messages are dispatched separately, so any inbound
+    // message reaching this code path is by definition NOT from-self.
+    const fromSelf = false;
+
+    const text = String(message.text ?? '');
+    const ts = message.timestamp ? new Date(message.timestamp) : new Date();
+    const messageId = String(message.id ?? `${thread.id}-${ts.getTime()}`);
+
+    const attachmentCounts: { image?: number; video?: number; audio?: number; document?: number; sticker?: number; voice?: number } = {};
+    if (Array.isArray(message.attachments)) {
+      for (const a of message.attachments) {
+        const t = (a?.type ?? '').toLowerCase();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const counts = attachmentCounts as any;
+        if (t === 'image') counts.image = (counts.image ?? 0) + 1;
+        else if (t === 'video') counts.video = (counts.video ?? 0) + 1;
+        else if (t === 'audio' || t === 'voice') counts.audio = (counts.audio ?? 0) + 1;
+        else if (t === 'sticker') counts.sticker = (counts.sticker ?? 0) + 1;
+        else counts.document = (counts.document ?? 0) + 1;
+      }
+    }
+
+    archiveChatMessage({
+      platform: adapterName as ChatPlatform,
+      chatId: String(thread.id ?? ''),
+      chatName: thread.name ?? thread.title ?? undefined,
+      isGroup,
+      senderId,
+      senderName,
+      text,
+      fromSelf,
+      occurredAt: ts,
+      messageId,
+      attachments: Object.keys(attachmentCounts).length > 0 ? attachmentCounts : undefined,
+    });
+  } catch (err) {
+    // Archive must never break inbound dispatch.
+    log.warn('chat-archive hook failed (non-fatal)', { adapter: adapterName, err: (err as Error).message });
+  }
+}
 
 /** Adapter with optional gateway support (e.g., Discord). */
 interface GatewayAdapter extends Adapter {
@@ -222,6 +285,7 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       // wirings still fire on in-thread mentions.
       chat.onSubscribedMessage(async (thread, message) => {
         const channelId = adapter.channelIdFromThreadId(thread.id);
+        archiveSdkMessage(adapter.name, thread, message, true);
         await setupConfig.onInbound(
           channelId,
           thread.id,
@@ -232,6 +296,7 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       // @mention in an unsubscribed thread — SDK-confirmed bot mention.
       chat.onNewMention(async (thread, message) => {
         const channelId = adapter.channelIdFromThreadId(thread.id);
+        archiveSdkMessage(adapter.name, thread, message, true);
         await setupConfig.onInbound(channelId, thread.id, await messageToInbound(message, true, true));
       });
 
@@ -247,6 +312,7 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
           sender: (message.author as any)?.fullName ?? (message.author as any)?.userId ?? 'unknown',
           threadId: thread.id,
         });
+        archiveSdkMessage(adapter.name, thread, message, false);
         await setupConfig.onInbound(channelId, thread.id, await messageToInbound(message, true, false));
       });
 
@@ -262,6 +328,7 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       // flood gate.
       chat.onNewMessage(/[\s\S]*/, async (thread, message) => {
         const channelId = adapter.channelIdFromThreadId(thread.id);
+        archiveSdkMessage(adapter.name, thread, message, true);
         await setupConfig.onInbound(channelId, thread.id, await messageToInbound(message, false, true));
       });
 
