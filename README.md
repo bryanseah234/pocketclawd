@@ -53,6 +53,8 @@ Send these in Telegram or WhatsApp:
 | `/slides <topic> [--style minimal\|corporate\|creative]` | Generate `.pptx` deck from mnemon (§17.5) |
 | `/speech <topic> [--duration 5m] [--tone formal\|casual\|persuasive]` | Draft a speech as Markdown (§17.6) |
 
+Beyond commands, PocketClaw also passively archives chat messages to mnemon when `INGEST_CHAT_MODE` is set in `.env`. See the [Chat archive](#chat-archive-telegram--whatsapp-passive-ingestion) section.
+
 ---
 
 ## Where data lives
@@ -312,9 +314,63 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
 | GitHub Commits | ✅ live | last 24h push events | 02:00 daily |
 | GitHub Issues | ✅ live | open + assigned to you | 02:00 daily |
 | Slack | ⏸ needs `SLACK_USER_TOKEN` | recent messages from joined channels | 02:00 daily |
+| Telegram chat archive | controlled by `INGEST_CHAT_MODE` | every inbound message (text + media metadata) | continuous (realtime hook) |
+| WhatsApp chat archive | controlled by `INGEST_CHAT_MODE` | every inbound message (text + media metadata) | continuous (realtime hook) |
 | File watcher | ✅ live | drop files into `X:\PocketClawData\watch\` | continuous |
 
 Run `pnpm svc` for live status of each source.
+
+---
+
+## Chat archive (Telegram + WhatsApp passive ingestion)
+
+Beyond the cron-based cloud sources above, PocketClaw can also archive **every chat message** in real time as it flows through Telegram or WhatsApp. This is **opt-in** via `INGEST_CHAT_MODE` in `.env`.
+
+### Modes
+
+| `INGEST_CHAT_MODE` | What gets archived to mnemon | Privacy |
+|---|---|---|
+| `off` (default) | Nothing — chat-archive is a no-op | Most private |
+| `self` | Only messages YOU send | Privacy-respecting journal |
+| `dms` | Self messages + 1-on-1 DMs from anyone | Group chats stay private |
+| `all` | Every message in every chat you're in | **Privacy bombshell** (see below) |
+
+### What gets stored
+
+- Mnemon insight per message, tagged: `pocketclaw, src:whatsapp-chat` (or `telegram-chat`), `chat:<chatId>`, `kind:group|dm`, `from:self|other`, `sender:<id>`
+- Format: `WhatsApp group "Family" — Bryan: just landed at SIN`
+- Attachments are **noted but not downloaded** (just `[image]`, `[voice note]`, `[2 documents]` markers)
+- Stickers and protocol messages are skipped
+- Long bodies (>600 chars) get truncated
+- Stored locally only — `X:\PocketClawData\mnemon\data\default\mnemon.db`
+
+### Privacy implications of `all` mode
+
+If you set `INGEST_CHAT_MODE=all`:
+
+- Your local mnemon DB will contain other people's messages — friends, family, group chats. They didn't consent to this.
+- The mnemon DB is unencrypted SQLite. Anyone with access to your unlocked laptop can read it.
+- This is legally loaded in many jurisdictions (EU GDPR informational duties, two-party-consent laws, etc.). You're responsible for compliance.
+- Messages stay on your laptop unless you explicitly `/recall` them into a Claude prompt — at which point only the recalled facts go to the API (visible in `/audit`).
+
+If any of that gives you pause, use `self` or `dms`. They're plenty useful as journal/note-stream tools.
+
+### Enabling
+
+```env
+# .env
+INGEST_CHAT_MODE=all
+```
+
+Restart service: `nssm restart pocketclaw` (admin). Within seconds of receiving the next chat message, mnemon will have a new insight tagged `src:<platform>-chat`. Verify:
+
+```powershell
+mnemon recall "<some keyword from a recent chat>" --limit 5
+```
+
+### Disabling at any time
+
+Set `INGEST_CHAT_MODE=off` in `.env` and restart. Future messages stop being archived. Existing archived messages stay in mnemon — to wipe them you'd need to selectively delete via `mnemon` CLI, or `pnpm svc:uninstall:purge` for a full reset.
 
 ---
 
