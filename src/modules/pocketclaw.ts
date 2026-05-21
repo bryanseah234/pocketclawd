@@ -13,10 +13,17 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { spawn } from 'node:child_process';
 
 import { CloudScheduler } from './ingestion/scheduler.js';
 import { WikiGenerator } from './wiki-generator.js';
 import { envPath } from './paths.js';
+import {
+  watchAllConfiguredRoots,
+  ProcessedRegistry,
+  processFile,
+} from './ingestion/file-watcher.js';
+import { startTelegramMtprotoIngester } from './ingestion/telegram-mtproto.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
@@ -145,6 +152,67 @@ export function startPocketClawCron(): void {
   if (driverTimer) return;
   void audit('POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, morning-digest@07:00');
   driverTimer = setInterval(() => void tick(), driverInterval);
+  // Kick off file-watcher in background; failure here must not prevent
+  // the cron driver from running.
+  void startFileWatcher().catch((err) => {
+    void audit(`FILE_WATCHER_FAIL | ${(err as Error).message}`);
+  });
+  // Telegram MTProto ingester — no-ops if creds/session not present yet.
+  void startTelegramMtprotoIngester().catch((err) => {
+    void audit(`MTPROTO_FAIL | ${(err as Error).message}`);
+  });
+}
+
+/** Pipe a single Fact to mnemon via the same pattern as scheduler.ts. */
+async function mnemonRemember(text: string, tags: string[]): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const proc = spawn(
+      'mnemon',
+      ['remember', text, '--source', 'external', '--tags', tags.join(','), '--no-diff'],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    proc.on('error', () => resolve());
+    proc.on('exit', () => resolve());
+  });
+}
+
+let fileWatcherStarted = false;
+async function startFileWatcher(): Promise<void> {
+  if (fileWatcherStarted) return;
+  fileWatcherStarted = true;
+  const registry = new ProcessedRegistry();
+  await audit('FILE_WATCHER_START | configuring chokidar over WATCH_PATHS_ROOT');
+  let processed = 0;
+  let skipped = 0;
+  await watchAllConfiguredRoots(async (file: string) => {
+    try {
+      const result = await processFile(file, registry);
+      if (result === null) {
+        skipped += 1;
+        return;
+      }
+      // Each chunk → mnemon insight, tagged for source-attribution.
+      for (const fact of result.facts) {
+        await mnemonRemember(fact.text, [
+          'pocketclaw',
+          `src:file`,
+          `path:${truncForTag(fact.source)}`,
+        ]);
+      }
+      processed += 1;
+      if (processed % 100 === 0) {
+        void audit(`FILE_WATCHER_PROGRESS | processed=${processed} skipped=${skipped}`);
+      }
+    } catch (err) {
+      // Per-file failure must not kill the watcher
+      void audit(`FILE_WATCHER_FILE_FAIL | ${file} | ${(err as Error).message}`);
+    }
+  });
+  void audit('FILE_WATCHER_RUNNING | listening for adds + changes');
+}
+
+function truncForTag(value: string): string {
+  return value.replace(/[\s,]/g, '_').slice(0, 80);
 }
 
 export function stopPocketClawCron(): void {

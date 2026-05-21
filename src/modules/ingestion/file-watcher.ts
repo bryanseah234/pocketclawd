@@ -209,7 +209,65 @@ export async function processFile(
 /**
  * Watch a directory tree. New/modified files trigger `onFile`. Uses chokidar
  * (lazy import) so this file compiles before deps are installed.
+ *
+ * Smart exclusions are baked in for whole-drive watch scenarios (e.g.
+ * `WATCH_PATHS_ROOT=X:/` to ingest your whole repo+docs drive without
+ * indexing 50 GB of node_modules).
  */
+const DEFAULT_IGNORES: RegExp[] = [
+  /(^|[\\/])\.git([\\/]|$)/,
+  /(^|[\\/])\.svn([\\/]|$)/,
+  /(^|[\\/])\.hg([\\/]|$)/,
+  /(^|[\\/])node_modules([\\/]|$)/,
+  /(^|[\\/])\.venv([\\/]|$)/,
+  /(^|[\\/])venv([\\/]|$)/,
+  /(^|[\\/])__pycache__([\\/]|$)/,
+  /(^|[\\/])\.pytest_cache([\\/]|$)/,
+  /(^|[\\/])\.mypy_cache([\\/]|$)/,
+  /(^|[\\/])\.ruff_cache([\\/]|$)/,
+  /(^|[\\/])\.next([\\/]|$)/,
+  /(^|[\\/])\.nuxt([\\/]|$)/,
+  /(^|[\\/])\.cache([\\/]|$)/,
+  /(^|[\\/])\.parcel-cache([\\/]|$)/,
+  /(^|[\\/])dist([\\/]|$)/,
+  /(^|[\\/])build([\\/]|$)/,
+  /(^|[\\/])out([\\/]|$)/,
+  /(^|[\\/])target([\\/]|$)/,
+  /(^|[\\/])bin([\\/]|$)/,
+  /(^|[\\/])obj([\\/]|$)/,
+  /(^|[\\/])\.idea([\\/]|$)/,
+  /(^|[\\/])\.vscode([\\/]|$)/,
+  /(^|[\\/])coverage([\\/]|$)/,
+  /(^|[\\/])\.nyc_output([\\/]|$)/,
+  /(^|[\\/])\.turbo([\\/]|$)/,
+  /(^|[\\/])\.gradle([\\/]|$)/,
+  /(^|[\\/])\.terraform([\\/]|$)/,
+  /(^|[\\/])\.bundle([\\/]|$)/,
+  /(^|[\\/])\$RECYCLE\.BIN([\\/]|$)/,
+  /(^|[\\/])System Volume Information([\\/]|$)/,
+  /(^|[\\/])PocketClawData([\\/]|$)/,    // don't ingest our own data dir
+  /(^|[\\/])tmp([\\/]|$)/,
+  /(^|[\\/])temp([\\/]|$)/,
+  /(^|[\\/])\.tmp([\\/]|$)/,
+  /(^|[\\/])\.DS_Store$/,
+  /(^|[\\/])Thumbs\.db$/,
+];
+
+const SUPPORTED_EXTENSIONS = new Set([
+  '.md', '.txt', '.docx', '.pdf', '.pptx', '.eml', '.vcf', '.ics',
+]);
+
+/**
+ * Should this path be ignored? Centralized so chokidar's `ignored` filter
+ * and our extension allowlist agree.
+ */
+export function shouldIgnore(p: string): boolean {
+  for (const re of DEFAULT_IGNORES) {
+    if (re.test(p)) return true;
+  }
+  return false;
+}
+
 export async function watchDir(
   rootDir: string,
   onFile: (file: string) => Promise<void> | void,
@@ -222,11 +280,28 @@ export async function watchDir(
     throw new Error('chokidar not installed. Run `pnpm install chokidar`.');
   }
 
+  const ignored = (p: string): boolean => {
+    if (shouldIgnore(p)) return true;
+    // For files (have extension), only allow our supported set; for dirs
+    // (no extension after path.extname), pass through so chokidar can recurse.
+    const ext = path.extname(p).toLowerCase();
+    if (ext) return !SUPPORTED_EXTENSIONS.has(ext);
+    return false;
+  };
+
   const watcher = chokidar.default.watch(rootDir, {
-    ignored: /(^|[\\/])\../,
+    ignored,
     persistent: true,
-    ignoreInitial: false,
+    // Default: don't ingest the initial snapshot — only react to NEW changes
+    // from now on. Override with POCKETCLAW_WATCH_INITIAL=true if you want
+    // to bulk-ingest the existing tree (warning: 50k+ files possible on
+    // an X:\ drive).
+    ignoreInitial: process.env.POCKETCLAW_WATCH_INITIAL !== 'true',
     awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 100 },
+    // Performance for whole-drive watches:
+    depth: 99,
+    usePolling: false,
+    alwaysStat: false,
   });
 
   watcher.on('add', (file: string) => void onFile(file));
@@ -234,6 +309,35 @@ export async function watchDir(
 
   return {
     stop: () => watcher.close(),
+  };
+}
+
+/**
+ * Watch ALL configured roots. Comma-separated `WATCH_PATHS_ROOT` lets you
+ * point at multiple drives or trees. Each root gets its own chokidar
+ * watcher.
+ */
+export async function watchAllConfiguredRoots(
+  onFile: (file: string) => Promise<void> | void,
+): Promise<{ stop: () => Promise<void> }> {
+  const raw = process.env.WATCH_PATHS_ROOT ?? '';
+  const roots = raw.split(',').map((r) => expandHome(r.trim())).filter(Boolean);
+  if (roots.length === 0) roots.push(WATCH_ROOT);
+
+  const watchers: Array<{ stop: () => Promise<void> }> = [];
+  for (const r of roots) {
+    try {
+      const w = await watchDir(r, onFile);
+      watchers.push(w);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[file-watcher] failed to watch ${r}:`, (err as Error).message);
+    }
+  }
+  return {
+    stop: async () => {
+      await Promise.allSettled(watchers.map((w) => w.stop()));
+    },
   };
 }
 
