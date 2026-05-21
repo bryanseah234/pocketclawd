@@ -36,7 +36,8 @@
     "svc:uninstall:elevated": "cmd /c powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/uninstall-elevated.ps1",
     "svc:uninstall:purge": "cmd /c powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/uninstall.ps1 -Purge",
     "svc:export": "cmd /c powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/migrate-export.ps1",
-    "ingest:now": "tsx scripts/ingest-now.ts"
+    "ingest:now": "tsx scripts/ingest-now.ts",
+    "tg:login": "tsx scripts/telegram-mtproto-login.ts"
   },
   "dependencies": {
     "@azure/msal-node": "3.5.0",
@@ -55,6 +56,7 @@
     "docx": "9.5.0",
     "googleapis": "146.0.0",
     "imapflow": "1.0.190",
+    "input": "^1.0.1",
     "kleur": "^4.1.5",
     "mailparser": "3.7.4",
     "mammoth": "1.11.0",
@@ -64,6 +66,7 @@
     "pptxgenjs": "4.0.1",
     "qrcode": "1.5.4",
     "sharp": "0.34.4",
+    "telegram": "^2.26.22",
     "tsdav": "2.2.2"
   },
   "devDependencies": {
