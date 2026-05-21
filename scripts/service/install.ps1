@@ -62,16 +62,26 @@ if (-not $nssm) {
 Write-Ok "NSSM found: $nssm"
 
 # --- 3. Locate Node 22 ------------------------------------------------------
-$node = (Get-Command node -ErrorAction SilentlyContinue).Source
-if (-not $node) {
-    $node22 = "C:\Users\bryan\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.22_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v22.22.3-win-x64\node.exe"
-    if (Test-Path $node22) { $node = $node22 }
+# The repo's .nvmrc pins Node 22 because better-sqlite3@11 native binding
+# is compiled against NODE_MODULE_VERSION 127 (Node 22), not 147 (Node 26).
+# Always prefer the Node 22 binary if present, even if a newer Node is on
+# PATH for the user's interactive shell.
+$node22 = "C:\Users\bryan\AppData\Local\Microsoft\WinGet\Packages\OpenJS.NodeJS.22_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v22.22.3-win-x64\node.exe"
+if (Test-Path $node22) {
+    $node = $node22
+} else {
+    $node = (Get-Command node -ErrorAction SilentlyContinue).Source
 }
 if (-not $node) {
-    Write-Err "Node not found. Install Node 22+ first."
+    Write-Err "Node 22 not found at expected path and no `node` on PATH."
+    Write-Err "Install Node 22: winget install OpenJS.NodeJS.22 --scope user"
     exit 1
 }
 $nodeVer = & $node --version 2>&1
+if ($nodeVer -notmatch "^v22\.") {
+    Write-Warn "Node version is $nodeVer — expected v22.x. better-sqlite3 may crash with NODE_MODULE_VERSION mismatch."
+    Write-Warn "If service fails to start, install Node 22: winget install OpenJS.NodeJS.22 --scope user"
+}
 Write-Ok "Node: $node ($nodeVer)"
 
 # --- 4. Verify build artifacts ---------------------------------------------
