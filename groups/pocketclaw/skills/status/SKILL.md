@@ -1,22 +1,122 @@
 ---
 name: status
-description: Show PocketClaw status — mnemon entity count, last ingestion run, watcher health.
+description: Show PocketClaw runtime health. Use when the user types `/status`, asks "are you up?", "what's your memory count?", "how many facts have you ingested?", "when was the last ingestion?", or wants a quick health check.
 ---
 
-# /status
+# /status — PocketClaw Health Check
 
-Usage:
+## When to invoke
+
+- User types: `/status` in Telegram or WhatsApp
+- User asks: "how are you?", "are you working?", "what's your status?"
+- User asks: "how many facts do you remember?", "what's in your memory?"
+- User asks: "when was the last ingestion?", "is the cron running?"
+
+## Behaviour
+
+Run a quick read-only health check across mnemon + the file system, then reply
+with a compact human-readable summary. No mutations, no API calls, no LLM
+involvement beyond formatting the response.
+
+## Implementation steps
+
+The agent calls these tools in order, then formats the reply:
+
+### 1. `mnemon status` — get total fact count + DB size + top entities
+
+```bash
+mnemon status
+```
+
+Returns JSON with `total_insights`, `edge_count`, `db_size_bytes`,
+`top_entities`. Parse and surface:
+
+- Total insights (deduped)
+- Top 5 entities by frequency
+- DB size in KB
+
+### 2. Read audit log — find last ingestion run
+
+The audit log lives at `${LOG_PATH}/audit.log` (LOG_PATH from env, defaults
+to `~/.pocketclaw/logs/`). Read the last 20 lines and pull out the most
+recent line containing `cloud-ingest` or `runAll`.
+
+```bash
+tail -n 20 "$LOG_PATH/audit.log"
+```
+
+If the file does not exist, say "no audit log yet — service may not have
+fired a cron yet".
+
+### 3. Count vault artifacts by category
+
+```bash
+ls "$VAULT_PATH/wiki"          | wc -l   # wiki entries
+ls "$VAULT_PATH/meetings"      | wc -l   # /minutes outputs
+ls "$VAULT_PATH/research"      | wc -l   # /research PDFs
+ls "$VAULT_PATH/presentations" | wc -l   # /slides PPTX
+ls "$VAULT_PATH/speeches"      | wc -l   # /speech markdown
+```
+
+Surface counts only — never list filenames (privacy in chat history).
+
+### 4. Source live/parked status
+
+Compute from the env file:
+
+| Source | Live if | Parked if |
+|---|---|---|
+| Google (Gmail / GCal / GContacts) | `~/.pocketclaw/secrets/google_token.json` exists OR `POCKETCLAW_SECRETS_DIR/google_token.json` exists | else |
+| Microsoft (Outlook x3) | `MS_CLIENT_ID` is set AND non-empty | else |
+| Apple (iCloud x3) | `APPLE_ID_EMAIL` AND `APPLE_APP_PASSWORD` set | else |
+| GitHub (PRs / commits / issues) | `GITHUB_PAT` set | else |
+| Slack | `SLACK_USER_TOKEN` set | else |
+
+### 5. Format reply
+
+Produce a compact message that fits in one Telegram bubble (≤2000 chars).
+Use platform-native formatting:
+
+- **Telegram** (Markdown V2): `*bold*`, code blocks via triple backticks. Escape `_*[]()~>#+-=|{}.!` outside code blocks.
+- **WhatsApp** (plain): no markdown; use `-` for bullets and emoji.
+
+### Example reply (Telegram)
 
 ```
-/status
+*PocketClaw status*
+🧠 Memory: 204 insights, 2,171 edges (2.1 MB)
+📂 Vault: 1 wiki · 1 minutes · 1 research · 1 slides · 0 speeches
+🕐 Last ingest: 2026-05-21 22:15 (47 min ago)
+🔝 Top entities: GitHub, gmail, PocketClaw, README, mail
+
+Live: Google ✅ ×3 · iCloud ✅ ×3 · GitHub ✅ ×3
+Parked: Outlook ⏸ ×3 · Slack ⏸ ×1
 ```
 
-Action — gather and reply with:
+### Example reply (WhatsApp)
 
-1. **Memory**: `mnemon list --type entity --format count` → entity count
-2. **Last ingestion**: most recent `IngestSummary` (read from `${LOG_PATH}/last-ingest.json` if cached, else "never run")
-3. **File watcher**: count of files in `${WATCH_PATHS_ROOT}` and whether the watcher process is alive
-4. **Cron schedule**: next run times for the 02:00 / 03:00 / 07:00 jobs
-5. **Cloud sources**: which of Google / Microsoft / Apple have valid tokens
+```
+PocketClaw status
+- Memory: 204 insights, 2171 edges (2.1 MB)
+- Vault: wiki=1 minutes=1 research=1 slides=1 speeches=0
+- Last ingest: 22:15 (47 min ago)
+- Top entities: GitHub, gmail, PocketClaw, README, mail
 
-Format as a compact bulleted list. No more than 8 lines.
+Live: Google x3, iCloud x3, GitHub x3
+Parked: Outlook x3, Slack x1
+```
+
+## Must-do
+
+- Reply within 5 seconds (it's a status check, not a search).
+- Always show memory count + last-ingest time at minimum.
+- Adapt formatting for the calling channel (Telegram Markdown V2 vs WhatsApp plain).
+- Use the parsed mnemon JSON — never hard-code numbers.
+
+## Must-not-do
+
+- Don't expose absolute paths in the reply (privacy in chat history).
+- Don't include credentials, tokens, or chat IDs.
+- Don't kick off a fresh ingestion as part of /status — that's what `/ingest` is for.
+- Don't include internal entity-count noise (top 5 only, no full list).
+- Don't list vault filenames — counts only.
