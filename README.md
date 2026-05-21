@@ -2,133 +2,374 @@
 
 Local-first personal assistant built on top of [NanoClaw v2](https://github.com/nanocoai/nanoclaw). Talks to you via Telegram + WhatsApp with shared memory across both, ingests email / calendar / contacts from Google / Microsoft / Apple, processes photos via local vision, and generates an Obsidian wiki you can sync peer-to-peer with Syncthing.
 
-**Why local-first?** Only the final assembled prompt to Anthropic's API ever leaves your machine. Emails, photos, contacts, and files stay in `~/.pocketclaw/`.
+**Why local-first?** Only the final assembled prompt to Anthropic's API ever leaves your machine. Emails, photos, contacts, and files stay on disk in a folder you choose.
 
-## Quick Links
+---
 
-- [SETUP.md](docs/SETUP.md) — clone-to-first-message walkthrough
-- [POCKETCLAW.md](docs/POCKETCLAW.md) — PocketClaw-specific architecture
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — underlying NanoClaw architecture
-- [PRD.md](PRD.md) — full product spec v3.0
+## Table of contents
+
+- [Quick links](#quick-links)
+- [Slash commands](#slash-commands)
+- [Where data lives](#where-data-lives)
+- [Project structure](#project-structure)
+- [First-time setup](#first-time-setup)
+- [Service lifecycle (install / start / stop / migrate)](#service-lifecycle)
+- [Sign-in walkthroughs](#sign-in-walkthroughs)
+- [Live ingestion sources](#live-ingestion-sources)
+- [Day-to-day commands (`pnpm run …`)](#day-to-day-commands)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+
+---
+
+## Quick links
+
+- [docs/SETUP.md](docs/SETUP.md) — clone-to-first-message walkthrough
+- [docs/SERVICE.md](docs/SERVICE.md) — Windows service lifecycle (install / migrate / teardown)
+- [docs/POCKETCLAW.md](docs/POCKETCLAW.md) — PocketClaw-specific architecture
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — underlying NanoClaw architecture
+- [PRD.md](PRD.md) — full product spec v3.0 + v1.1 extensions (§17)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch naming, commit format, PR flow
 
-## Slash Commands (in Telegram / WhatsApp)
+---
+
+## Slash commands
+
+Send these in Telegram or WhatsApp:
 
 | Command | What it does |
 |---------|--------------|
 | `/memory <fact>` | Save a fact to mnemon |
-| `/recall <query>` | Search mnemon graph |
-| `/wiki <topic>` | Regenerate Obsidian wiki entry |
-| `/ingest` | Trigger immediate cloud ingestion |
-| `/status` | Show entity count, last ingest time, watcher health |
-| `/digest` | Send morning digest now (auto-fires at 07:00) |
-| `/audit [date]` | Show audit log entries for a date |
-| `/auth google\|microsoft\|apple` | Start OAuth / device-code flow |
+| `/recall <query>` | Search the mnemon graph |
+| `/wiki <topic>` | Regenerate Obsidian wiki entry for a topic |
+| `/ingest` | Trigger immediate cloud ingestion (don't wait for 02:00 cron) |
+| `/status` | Memory count, last ingest, vault counts, source health |
+| `/digest` | Send morning digest now (auto-fires at 07:00 daily) |
+| `/audit [date]` | Show audit log entries |
+| `/auth google\|microsoft\|apple` | Start OAuth / device-code flow for that provider |
 | `/photo <description>` | Manually save a photo description |
+| `/minutes <meeting-name>` | Generate meeting minutes `.docx` from calendar + email context (§17.3) |
+| `/research <topic>` | Generate research report PDF from local data only — no web search (§17.4) |
+| `/slides <topic> [--style minimal\|corporate\|creative]` | Generate `.pptx` deck from mnemon (§17.5) |
+| `/speech <topic> [--duration 5m] [--tone formal\|casual\|persuasive]` | Draft a speech as Markdown (§17.6) |
 
-## Project Structure
+---
+
+## Where data lives
+
+PocketClaw keeps **everything on disk in one folder** that you control. Configurable via `.env`. By default it's `~/.pocketclaw/`, but you should put it on a drive with space — emails, vault wikis, presentations, and the mnemon graph will grow into GBs over time.
+
+This install uses **`X:\PocketClawData\`** (~580 GB free). Layout:
+
+```
+X:\PocketClawData\
+├── secrets\                      OAuth tokens (Google / Microsoft / Apple)
+├── vault\                        Obsidian-compatible knowledge base
+│   ├── wiki\                     auto-generated wiki entries (.md)
+│   ├── meetings\                 /minutes outputs (.docx)
+│   ├── research\                 /research PDF reports
+│   ├── presentations\            /slides decks (.pptx)
+│   └── speeches\                 /speech drafts (.md)
+├── watch\                        files dropped here are auto-ingested
+├── logs\                         service.stdout.log / service.stderr.log / audit.log
+├── processed.db                  SHA256 fingerprints for file-watcher idempotency
+└── mnemon\
+    └── data\default\mnemon.db    the entire memory graph
+```
+
+The `.env` env-vars that control these paths:
+
+```env
+VAULT_PATH=X:/PocketClawData/vault
+MNEMON_DATA_DIR=X:/PocketClawData/mnemon
+MNEMON_DB_PATH=X:/PocketClawData/mnemon/data/default/mnemon.db
+WATCH_PATHS_ROOT=X:/PocketClawData/watch
+LOG_PATH=X:/PocketClawData/logs
+POCKETCLAW_SECRETS_DIR=X:/PocketClawData/secrets
+POCKETCLAW_PROCESSED_DB=X:/PocketClawData/processed.db
+```
+
+To move data to a different drive later, edit `.env`, run `pnpm svc:export` to bundle current state, copy the zip to the new location, run `migrate-import.ps1` (see [Service lifecycle](#service-lifecycle)).
+
+> **Repo itself stays at `X:\01 REPOSITORIES\pocketclaw\`** — only the data lives at `X:\PocketClawData\`.
+
+---
+
+## Project structure
 
 This repo is two things stacked:
 
-1. **NanoClaw v2** harness — `src/`, `container/`, `groups/global/`, `groups/main/`, etc.
-2. **PocketClaw** layer on top — `groups/pocketclaw/`, `src/modules/debouncer.ts`, `src/modules/photo-processor.ts`, `src/modules/ingestion/*`, `src/modules/wiki-generator.ts`, `src/modules/pocketclaw.ts`.
+1. **NanoClaw v2 harness** — `src/`, `container/`, `groups/global/`, `groups/main/`, channel adapters, host orchestration. Runs as a Node service.
+2. **PocketClaw layer** — `groups/pocketclaw/` agent identity + skills, `src/modules/debouncer.ts`, `src/modules/photo-processor.ts`, `src/modules/ingestion/*`, `src/modules/wiki-generator.ts`, `src/modules/meeting-minutes.ts`, `src/modules/research-report.ts`, `src/modules/slide-generator.ts`, `src/modules/pocketclaw.ts` (cron driver).
 
-For the NanoClaw layout see [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md). For the PocketClaw layer see [docs/POCKETCLAW.md](docs/POCKETCLAW.md).
+Layout details:
 
-## Table of Contents
+- NanoClaw: [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+- PocketClaw: [docs/POCKETCLAW.md](docs/POCKETCLAW.md)
 
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Create a Virtual Environment](#create-a-virtual-environment)
-  - [Install Dependencies](#install-dependencies)
-  - [Install Git Hooks](#install-git-hooks)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
+---
 
-## Getting Started <a id="getting-started"></a>
+## First-time setup
 
-## Prerequisites <a id="prerequisites"></a>
+### Prerequisites
 
-TODO.
+- Windows 10/11 with PowerShell 5.1+
+- Admin rights for service registration (one-time, only for `pnpm svc:install`)
+- [Node 22](https://nodejs.org/) (`.nvmrc` enforces this)
+- [pnpm](https://pnpm.io/) (any 10.x; `package.json` pins `pnpm@10.33.0`)
+- [mnemon](https://github.com/dipampaul17/mnemon) on PATH: `go install github.com/dipampaul17/mnemon@latest`
+- [Ollama](https://ollama.com/) for local vision (`ollama pull llava`)
+- A Telegram bot token (talk to `@BotFather` in Telegram)
 
-### Create a Virtual Environment <a id="create-a-virtual-environment"></a>
-
-**uv (Recommended)**
-
-To manage our project dependencies, we are using uv which is an extremely fast Python package and project manager, written in Rust. For more information on how to get started with uv, please visit the [uv documentation](https://docs.astral.sh/uv/).
-
-To create a virtual environment, run the following command:
-
-```bash
-uv venv
-```
-
-Once you have created a virtual environment, you may activate it.
-
-On Linux or macOS, run the following command:
-
-```bash
-source .venv/bin/activate
-```
-
-On Windows, run:
+### Steps
 
 ```powershell
-.venv/Scripts/activate
+# 1. Clone the repo (or you already have it)
+cd "X:\01 REPOSITORIES\pocketclaw"
+
+# 2. Install Node deps (skip-scripts because sharp's postinstall is buggy on Windows)
+pnpm install --ignore-scripts --frozen-lockfile
+
+# 3. Create your .env from the template
+Copy-Item .env.example .env
+# then edit .env — at minimum fill in:
+#   TELEGRAM_BOT_TOKEN=...
+#   TELEGRAM_ALLOWED_CHAT_ID=...
+#   ANTHROPIC_API_KEY=... (or AWS Bedrock vars if using Claude on Bedrock)
+# and update the path env-vars to point at your data drive (see "Where data lives")
+
+# 4. Create your data root
+New-Item -ItemType Directory -Path X:\PocketClawData -Force
+foreach ($s in @("vault","secrets","logs","watch")) {
+  New-Item -ItemType Directory -Path "X:\PocketClawData\$s" -Force
+}
+
+# 5. Build
+pnpm run build
+
+# 6. Run a one-off ingestion to verify everything wires up
+pnpm ingest:now --hours 24
 ```
 
-### Install Dependencies <a id="install-dependencies"></a>
+You should see facts ingest from any cloud source you've credentialed. Now register the long-running service (next section).
 
-```bash
-uv sync
-```
+---
 
-### Install Git Hooks <a id="install-git-hooks"></a>
+## Service lifecycle
 
-There are three main Git hooks used in this project:
+PocketClaw runs as a Windows service (via [NSSM](https://nssm.cc/)) so the cron jobs (02:00 ingest / 03:00 wiki / 07:00 digest) fire automatically. All commands have `pnpm run` shortcuts:
 
-- [`pre-push`](.githooks/pre-push): Ensures branches follow proper naming convention before pushing. See the [Git Branching Strategy](CONTRIBUTING.md#git-branching-strategy-) section for more details.
-- [`commit-msg`](.githooks/commit-msg): Ensures commit messages follow our conventions. See the [Issue Tracking & Commit Message Conventions](CONTRIBUTING.md#issue-tracking--commit-message-conventions-) section for more details.
-- [`pre-commit`](.pre-commit-config.yaml): Runs linting and formatting checks before committing. For more information, refer to the [pre-commit docs](https://pre-commit.com/). To see what hooks are used, refer to the [`.pre-commit-config.yaml`](.pre-commit-config.yaml) YAML file.
-
-To set up Git hooks, run the following commands for Linux or Windows users respectively:
-
-```bash
-./scripts/setup_hooks.sh
-```
-
-or
+### Install (one-time, needs admin)
 
 ```powershell
-./scripts/setup_hooks.ps1
+# Right-click PowerShell -> "Run as administrator", then:
+cd "X:\01 REPOSITORIES\pocketclaw"
+pnpm svc:install
 ```
 
-You should see the following upon successful installation:
+This auto-installs NSSM (via Chocolatey or winget if missing), registers the `pocketclaw` service to start on boot, sets up log rotation at 10 MB, and starts the service.
 
-![Git Hooks Installation](./media/git-hooks.png)
+### Day-to-day
 
-_Successful Git Hooks Installation_
+```powershell
+pnpm svc                 # one-shot status snapshot (no admin needed)
+pnpm svc:status          # alias for pnpm svc
+pnpm svc:tail            # tail logs in real time (Ctrl-C to stop)
 
-> [!TIP]
-> You can manually run the command `pre-commit run --all-files` to lint and reformat your code. It is generally recommended to run the hooks against all of the files when working on your changes or fixes (usually `pre-commit` will only run on the changed files during commits).
->
-> The `pre-commit` will run regardless if you forget to explicitly call it. Nonetheless, it is recommended to call it explicitly so you can make any necessary changes in advanced.
+# Stop/start/restart need admin:
+nssm stop pocketclaw
+nssm start pocketclaw
+nssm restart pocketclaw
+```
 
-> [!NOTE]
-> You should ensure that all `pre-commit` cases are satisfied before you push to GitHub (you should see that all have passed). If not, please debug accordingly or your pull request may be rejected and closed.
->
-> The [`run-checks.yml`](.github/workflows/run-checks.yml) is a GitHub Action workflow that kicks off several GitHub Actions when a pull request is made. These actions check that your code have been properly linted and formatted before it is passed for review. Once all actions have passed and the PR approved, your changes will be merged to the `main` branch.
+### After code changes
 
-## Project Structure <a id="project-structure"></a>
+```powershell
+pnpm run build
+nssm restart pocketclaw   # admin
+```
 
-For more information on our project structure, please refer to the [Project Structure](./docs/PROJECT_STRUCTURE.md) guide.
+### After `.env` changes
 
-## Development <a id="development"></a>
+```powershell
+nssm restart pocketclaw   # admin
+```
 
-For more information on development, you may find the following documentations useful:
+### Migrate to another machine
 
-- [Data Management](./docs/DATA_MANAGEMENT.md) - Instructions and guidelines on retrieving and managing version-controlled datasets using DVC integrated with Azure Blob Storage.
+```powershell
+# On THIS machine — bundle everything (creds + memory + vault):
+pnpm svc:export
+# -> pocketclaw-export-YYYYMMDD-HHMM.zip in current dir
 
-## Contributing <a id="contributing"></a>
+# Copy zip to new machine. On NEW machine after cloning + pnpm install + build:
+pnpm svc:install
+# (run migrate-import.ps1 manually first if you want to restore data, see docs/SERVICE.md)
 
-Please refer to the [Contributing](CONTRIBUTING.md) guide for detailed guidelines on contributing and the process for submitting pull requests.
+# Then on THIS machine, tear down:
+pnpm svc:uninstall          # remove service, KEEP data
+pnpm svc:uninstall:purge    # remove service AND wipe X:\PocketClawData
+```
+
+### Dry-run anything
+
+```powershell
+pnpm svc:install:dry        # see what install would do, no changes
+```
+
+Full lifecycle docs: [docs/SERVICE.md](docs/SERVICE.md).
+
+---
+
+## Sign-in walkthroughs
+
+Each cloud source needs its own credential. PocketClaw never holds raw passwords — only OAuth tokens or app-specific passwords that you can revoke from the provider's portal.
+
+### Google (Gmail + Calendar + Contacts) — easiest
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → create a new project (any name)
+2. **APIs & Services → Library** → enable: `Gmail API`, `Google Calendar API`, `People API`
+3. **APIs & Services → OAuth consent screen** → External, fill in app name + your email, save
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID → Desktop app**
+5. Download the JSON, save as `X:\PocketClawData\secrets\google_credentials.json`
+6. From Telegram or WhatsApp, send: `/auth google` — PocketClaw prints a URL, you sign in, paste the code back. Token caches at `X:\PocketClawData\secrets\google_token.json`.
+
+### Microsoft (Outlook Mail + Calendar + Contacts)
+
+1. [entra.microsoft.com](https://entra.microsoft.com) → **Applications → App registrations → New registration**
+2. Name: `PocketClaw`. Account types: `Personal Microsoft accounts only` (use a personal `outlook.com` / `hotmail.com` account if your work tenant blocks app creation).
+3. Redirect URI: leave blank. Click **Register**.
+4. Copy the **Application (client) ID** → paste into `.env` as `MS_CLIENT_ID=...`
+5. **Authentication → Allow public client flows → Yes → Save**
+6. **API permissions → Add → Microsoft Graph → Delegated** → tick `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `User.Read`
+7. From Telegram: `/auth microsoft` — device-code flow, short URL + 9-char code, sign in once.
+
+### Apple (iCloud Mail + Calendar + Contacts)
+
+Apple does NOT support OAuth for these APIs — only **app-specific passwords** with 2FA enabled.
+
+1. [account.apple.com](https://account.apple.com) → **Sign-In and Security → App-Specific Passwords → Generate**
+2. Label: `PocketClaw`. Apple shows the password ONCE — copy immediately.
+3. In `.env`:
+   ```env
+   APPLE_ID_EMAIL=your.email@icloud.com
+   APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
+   ```
+4. Restart service. No `/auth` flow needed — PocketClaw uses these on every IMAP/CalDAV/CardDAV connection.
+
+### GitHub (PRs + commits + issues)
+
+1. [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**
+2. Scopes: `repo` (read) + `read:org`. Expiration: your choice (90 days is reasonable).
+3. Copy the `ghp_...` token, paste into `.env` as `GITHUB_PAT=ghp_...`
+4. Restart service.
+
+### Slack (read your own channels)
+
+⚠️ **Many corporate workspaces block this** via app-creation policy. Try in a personal/community workspace first.
+
+1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App → From scratch** → pick the workspace
+2. **OAuth & Permissions → User Token Scopes** (NOT Bot Token Scopes!) → add: `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `users:read`, `search:read`
+3. **Install to Workspace → Allow** → copy the `xoxp-...` token
+4. In `.env`:
+   ```env
+   SLACK_USER_TOKEN=xoxp-...
+   SLACK_WORKSPACE=your-workspace-name
+   ```
+5. Restart service.
+
+---
+
+## Live ingestion sources
+
+| Source | Status when fully credentialed | Pulls | Cron |
+|---|---|---|---|
+| Gmail | ✅ live | last 24h emails (sender, subject, body preview) | 02:00 daily |
+| Google Calendar | ✅ live | upcoming 7 days of events | 02:00 daily |
+| Google Contacts | ✅ live | full address book | 02:00 daily |
+| Outlook Mail | ⏸ needs `MS_CLIENT_ID` | last 24h emails via Graph API | 02:00 daily |
+| Outlook Calendar | ⏸ needs `MS_CLIENT_ID` | upcoming 7 days of events | 02:00 daily |
+| Outlook Contacts | ⏸ needs `MS_CLIENT_ID` | full address book | 02:00 daily |
+| iCloud Mail | ✅ live | last 24h via IMAP | 02:00 daily |
+| iCloud Calendar | ✅ live | events via CalDAV | 02:00 daily |
+| iCloud Contacts | ✅ live | contacts via CardDAV | 02:00 daily |
+| GitHub PRs | ✅ live | recent + review-requested | 02:00 daily |
+| GitHub Commits | ✅ live | last 24h push events | 02:00 daily |
+| GitHub Issues | ✅ live | open + assigned to you | 02:00 daily |
+| Slack | ⏸ needs `SLACK_USER_TOKEN` | recent messages from joined channels | 02:00 daily |
+| File watcher | ✅ live | drop files into `X:\PocketClawData\watch\` | continuous |
+
+Run `pnpm svc` for live status of each source.
+
+---
+
+## Day-to-day commands
+
+| Command | Purpose |
+|---------|---------|
+| `pnpm run dev` | Run host in foreground with hot reload (logs visible in your terminal) |
+| `pnpm run build` | Compile TypeScript to `dist/` |
+| `pnpm run start` | Run compiled host (what the service runs) |
+| `pnpm test` | Run vitest suite |
+| `pnpm ingest:now` | Run all ingesters once, write to mnemon (24h window) |
+| `pnpm ingest:now --hours 1 --dry` | Quick smoke test, no mnemon writes |
+| `pnpm svc` | Service status snapshot |
+| `pnpm svc:tail` | Tail service logs in real time |
+| `pnpm svc:install` | Register Windows service (admin) |
+| `pnpm svc:install:dry` | Show install plan without applying |
+| `pnpm svc:uninstall` | Remove service, keep data (admin) |
+| `pnpm svc:uninstall:purge` | Remove service and wipe data (admin) |
+| `pnpm svc:export` | Bundle creds + memory + vault for migration |
+
+---
+
+## Troubleshooting
+
+### Service won't start
+
+```powershell
+pnpm svc                 # check Status field
+Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 50
+```
+
+Common issues:
+- `.env` missing → installer refuses; the error tells you exactly what's missing
+- `dist/index.js` missing → run `pnpm run build` first
+- mnemon not on PATH → cloud ingestion errors but service still runs
+
+### Some sources show as `[ERR]` in `pnpm ingest:now`
+
+Look at the error line:
+- `MS_CLIENT_ID env var not set` → Outlook walkthrough above
+- `Apple iCloud creds missing` → Apple walkthrough above
+- `SLACK_USER_TOKEN not set` → Slack walkthrough above
+- `Invalid Credentials` → token expired, re-run `/auth <provider>` from Telegram
+
+### Mnemon recall returns nothing
+
+Run `pnpm svc` — if `Insights` count is 0, ingestion hasn't fired yet. Trigger manually with `pnpm ingest:now`.
+
+### Move data to a different drive
+
+1. Stop service: `nssm stop pocketclaw`
+2. Move folder: `Move-Item X:\PocketClawData D:\PocketClawData`
+3. Update `.env` — change every `X:/PocketClawData` to `D:/PocketClawData`
+4. `pnpm run build && nssm start pocketclaw`
+
+### Disk getting full
+
+The big consumers, in order:
+1. `X:\PocketClawData\mnemon\` — the memory graph. Grows ~1 KB per fact. 100k facts ≈ 100 MB.
+2. `X:\PocketClawData\vault\research\` — PDFs from `/research`, ~50-200 KB each
+3. `X:\PocketClawData\vault\presentations\` — PPTX, ~50-100 KB each
+4. `X:\PocketClawData\logs\` — capped at 10 MB rotation by NSSM
+
+To reclaim space: delete unwanted vault files manually (won't affect mnemon), or `pnpm svc:uninstall:purge` for a full reset.
+
+Full troubleshooting: [docs/SERVICE.md#troubleshooting](docs/SERVICE.md#troubleshooting).
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch naming (`feature/xxx`), commit format (Conventional Commits, ≤72 chars), and PR flow.
