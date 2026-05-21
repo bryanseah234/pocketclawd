@@ -74,20 +74,49 @@ if ($Purge) {
 
 # --- 4. Stop + remove service ----------------------------------------------
 if ($existing) {
-    if ($existing.Status -eq "Running") {
-        Write-Step "Stopping service..."
-        if ($nssm) { & $nssm stop $Name 2>&1 | Out-Null } else { Stop-Service -Name $Name -Force }
-        Start-Sleep -Seconds 2
+    # Handle Disabled / Paused / Running states properly. Windows SCM may
+    # have moved the service to Paused+Disabled after a crash-loop, both of
+    # which block `nssm stop` and `nssm remove` from working cleanly.
+    if ($existing.StartType -eq "Disabled") {
+        Write-Step "Service is Disabled — re-enabling for clean removal..."
+        & sc.exe config $Name start= demand 2>&1 | Out-Null
     }
+
+    if ($existing.Status -eq "Paused") {
+        Write-Step "Service is Paused — sending continue before stop..."
+        if ($nssm) { & $nssm continue $Name 2>&1 | Out-Null }
+        else { & sc.exe continue $Name 2>&1 | Out-Null }
+        Start-Sleep -Seconds 1
+    }
+
+    Write-Step "Stopping service..."
+    if ($nssm) { & $nssm stop $Name 2>&1 | Out-Null }
+    else { Stop-Service -Name $Name -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Seconds 2
+
+    # Force-kill the supervising NSSM process if it's still up
+    $svcPid = (Get-CimInstance Win32_Service -Filter "Name='$Name'" -ErrorAction SilentlyContinue).ProcessId
+    if ($svcPid -and $svcPid -gt 0) {
+        Write-Warn "Force-killing NSSM supervisor PID $svcPid..."
+        Stop-Process -Id $svcPid -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+
     Write-Step "Removing service registration..."
     if ($nssm) {
         & $nssm remove $Name confirm 2>&1 | Out-Null
-    } else {
-        & sc.exe delete $Name 2>&1 | Out-Null
     }
     Start-Sleep -Seconds 1
+
+    # sc.exe delete as a fallback hammer
     if (Get-Service -Name $Name -ErrorAction SilentlyContinue) {
-        Write-Warn "Service still listed (Windows may need a moment). Check 'Get-Service $Name'."
+        & sc.exe delete $Name 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+    }
+
+    if (Get-Service -Name $Name -ErrorAction SilentlyContinue) {
+        Write-Warn "Service still listed (Windows may need a moment, or a reboot)."
+        Write-Warn "If it persists, reboot and re-run uninstall.ps1."
     } else {
         Write-Ok "Service removed."
     }

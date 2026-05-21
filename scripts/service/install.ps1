@@ -185,10 +185,62 @@ if ($DryRun) {
 # --- 8. Stop + remove existing if present -----------------------------------
 $existing = Get-Service -Name $Name -ErrorAction SilentlyContinue
 if ($existing) {
-    Write-Step "Service '$Name' exists — stopping + removing for re-install..."
-    if ($existing.Status -eq "Running") { & $nssm stop $Name 2>&1 | Out-Null }
+    Write-Step "Service '$Name' exists (status=$($existing.Status)) — removing for re-install..."
+
+    # Windows SCM may have moved the service to Paused state and Disabled
+    # StartType after a crash-loop. Both block `nssm stop` and `nssm remove`.
+    # Walk through the recovery sequence:
+    #   Disabled  -> sc config to manual so we can interact
+    #   Paused    -> nssm continue, then stop
+    #   Running   -> nssm stop
+    #   Anything  -> nssm remove + sc delete fallback
+
+    if ($existing.StartType -eq "Disabled") {
+        & sc.exe config $Name start= demand 2>&1 | Out-Null
+    }
+
+    if ($existing.Status -eq "Paused") {
+        Write-Warn "Service is Paused — sending continue before stop..."
+        & $nssm continue $Name 2>&1 | Out-Null
+        Start-Sleep -Seconds 1
+    }
+
+    # Stop attempts (all states funnel here)
+    & $nssm stop $Name 2>&1 | Out-Null
+    Start-Sleep -Seconds 1
+
+    # If still alive, try sc.exe stop as a stronger hammer
+    $afterStop = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if ($afterStop -and $afterStop.Status -ne "Stopped") {
+        & sc.exe stop $Name 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+    }
+
+    # Kill any lingering NSSM supervisor process bound to this service
+    $svcPid = (Get-CimInstance Win32_Service -Filter "Name='$Name'" -ErrorAction SilentlyContinue).ProcessId
+    if ($svcPid -and $svcPid -gt 0) {
+        Write-Warn "Force-killing NSSM supervisor PID $svcPid..."
+        Stop-Process -Id $svcPid -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+
+    # Now remove
     & $nssm remove $Name confirm 2>&1 | Out-Null
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 1
+
+    # Fallback: sc.exe delete (works even when nssm remove fails)
+    if (Get-Service -Name $Name -ErrorAction SilentlyContinue) {
+        Write-Warn "nssm remove didn't clear the service — using sc.exe delete..."
+        & sc.exe delete $Name 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+    }
+
+    if (Get-Service -Name $Name -ErrorAction SilentlyContinue) {
+        Write-Err "Service '$Name' still exists after removal attempts. Reboot may be needed."
+        Write-Err "Try: Restart Windows, then re-run install.ps1."
+        exit 1
+    }
+    Write-Ok "Old service removed."
 }
 
 # --- 9. Install service -----------------------------------------------------
@@ -214,14 +266,21 @@ Write-Ok "Service registered."
 
 # --- 10. Start service ------------------------------------------------------
 Write-Step "Starting service..."
+# Force StartType to Automatic via sc.exe in case Windows SCM left it Disabled
+# from a previous crash-loop. NSSM's `set Start SERVICE_AUTO_START` is
+# supposed to do this, but Windows can later override it after auto-disable.
+& sc.exe config $Name start= auto 2>&1 | Out-Null
+
 & $nssm start $Name 2>&1 | Out-String | Write-Host
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5
 $status = (Get-Service -Name $Name).Status
+$startType = (Get-Service -Name $Name).StartType
 if ($status -eq "Running") {
-    Write-Ok "Service is running."
+    Write-Ok "Service is running. StartType=$startType"
 } else {
-    Write-Warn "Service status: $status"
-    Write-Warn "Check $stderrLog for errors."
+    Write-Warn "Service status: $status (StartType=$startType)"
+    Write-Warn "Check $stderrLog for errors. If empty, the wrapper batch may have failed silently."
+    Write-Warn "Manual debug: cmd /c $wrapperBat"
 }
 
 Write-Host ""
