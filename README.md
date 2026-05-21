@@ -245,44 +245,19 @@ Each cloud source needs its own credential. PocketClaw never holds raw passwords
 5. Download the JSON, save as `X:\PocketClawData\secrets\google_credentials.json`
 6. From Telegram or WhatsApp, send: `/auth google` — PocketClaw prints a URL, you sign in, paste the code back. Token caches at `X:\PocketClawData\secrets\google_token.json`.
 
-### Microsoft (Outlook Mail + Calendar + Contacts)
+### Microsoft (Outlook Mail + Calendar + Contacts) — currently parked
 
-Two paths depending on which Microsoft account you're using.
+⚠️ **Code is built and ready, but Outlook ingestion is parked indefinitely.**
 
-#### Path A — Personal account (`outlook.com` / `hotmail.com` / `live.com`) — RECOMMENDED if your work tenant blocks app creation
+Microsoft's Entra app registration system has a tenant-lifecycle policy that automatically blocks personal-account "shadow tenants" after ~200 days of inactivity (error `AADSTS5000225`). For new personal accounts, the only way to register an app and use device-code flow is to phone Microsoft support and request manual reactivation within a 20-day window — this is documented at https://learn.microsoft.com/en-us/entra/fundamentals/inaccessible-tenant.
 
-1. Sign in at [entra.microsoft.com](https://entra.microsoft.com) **with your personal Microsoft account** (not a work account).
-   - If your work account auto-signs-in, sign out first, or use an InPrivate browser window.
-   - Personal accounts get a self-managed "consumer" tenant with no admin gates.
-2. Left sidebar → **Applications → App registrations → New registration**
-3. Fill in:
-   - **Name**: `PocketClaw`
-   - **Supported account types**: pick the **first option** — *"Personal Microsoft accounts only"*
-   - **Redirect URI**: leave blank
-   - Click **Register**
-4. On the app overview page, copy the **Application (client) ID** (a GUID like `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`)
-5. Left sidebar → **Authentication** → scroll to **Advanced settings** → **Allow public client flows** → **Yes** → **Save**
-6. Left sidebar → **API permissions** → **+ Add a permission** → **Microsoft Graph** → **Delegated permissions** → tick:
-   - `Mail.Read`
-   - `Calendars.Read`
-   - `Contacts.Read`
-   - `User.Read` (usually pre-selected)
-   - Click **Add permissions**. No "grant admin consent" needed for personal accounts — you consent at sign-in.
+If you ever want to revisit, the options are:
+- **Phone Microsoft support** with the AADSTS5000225 trace ID and ask for tenant reactivation (free, 15-30 min on the phone)
+- **Subscribe to Microsoft 365 Personal** ($7/mo trial, free first month) — paid subscriptions auto-keep the tenant active
+- **Use a corporate/school account** where app registration is allowed by IT
+- Skip Outlook entirely — the rest of PocketClaw works fine without it
 
-Then locally:
-
-```env
-# .env
-MS_CLIENT_ID=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
-```
-
-Restart service. From Telegram: `/auth microsoft` — device-code flow prints a short URL + 9-char code, you sign in once with your personal account at [microsoft.com/devicelogin](https://microsoft.com/devicelogin), click **Allow**. Token caches at `X:\PocketClawData\secrets\ms_token.json`.
-
-#### Path B — Work or school account
-
-Same flow as Path A but pick **"Accounts in any organizational directory and personal Microsoft accounts"** in step 3. **Some company tenants block users from registering apps** — if step 3 errors with "you don't have permission", you'd need IT to grant you the `Application Developer` role, or use Path A with a personal account instead.
-
-You can ingest **both** a personal AND a work mailbox by registering one app per account and switching `MS_CLIENT_ID` (less convenient) — most people just pick one.
+The ingester code at `src/modules/ingestion/microsoft.ts` and the `/auth microsoft` flow remain ready. Setting `MS_CLIENT_ID` in `.env` is enough to wake it up later.
 
 ### Apple (iCloud Mail + Calendar + Contacts)
 
@@ -327,9 +302,9 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
 | Gmail | ✅ live | last 24h emails (sender, subject, body preview) | 02:00 daily |
 | Google Calendar | ✅ live | upcoming 7 days of events | 02:00 daily |
 | Google Contacts | ✅ live | full address book | 02:00 daily |
-| Outlook Mail | ⏸ needs `MS_CLIENT_ID` | last 24h emails via Graph API | 02:00 daily |
-| Outlook Calendar | ⏸ needs `MS_CLIENT_ID` | upcoming 7 days of events | 02:00 daily |
-| Outlook Contacts | ⏸ needs `MS_CLIENT_ID` | full address book | 02:00 daily |
+| Outlook Mail | ⏸ parked — see Microsoft walkthrough above for why | last 24h emails via Graph API | 02:00 daily |
+| Outlook Calendar | ⏸ parked | upcoming 7 days of events | 02:00 daily |
+| Outlook Contacts | ⏸ parked | full address book | 02:00 daily |
 | iCloud Mail | ✅ live | last 24h via IMAP | 02:00 daily |
 | iCloud Calendar | ✅ live | events via CalDAV | 02:00 daily |
 | iCloud Contacts | ✅ live | contacts via CardDAV | 02:00 daily |
