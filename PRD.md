@@ -335,6 +335,8 @@ PocketClaw solves this by creating a personal AI assistant that lives on your ow
 
 ### Architecture Clarification Notes
 
+> ⚠️ **As-built reality (2026-05-22):** the architecture diagram above is the **original v3.0 spec**. The actual deployed system replaced the top-level Docker container with NanoClaw v2's dynamic per-agent-group spawn model and runs the host as a Windows service via NSSM. Cloud-ingested data lives at `X:\PocketClawData\` (configurable per machine) instead of `~/.pocketclaw/`. See `.omo/notepads/pocketclaw/prd-vs-built-audit.md` for the full delta and `§18` below for everything we built that wasn't in this PRD.
+
 **Why does the diagram show an arrow to Anthropic?**
 
 Claude Code is a CLI that sends the assembled prompt (user message + Mnemon context) to Anthropic's LLM API and returns the reasoning response. It is the only outbound data flow. Embeddings (Ollama), memory (Mnemon), file ingestion, photo processing, and wiki generation all execute locally first — the final prompt is the only thing that leaves.
@@ -2388,14 +2390,16 @@ export PHOTO_CACHE="$POCKETCLAW_HOME/photo-cache"
 
 ### Phase 10 — Testing & Hardening (Day 7)
 
+> **As-built status (2026-05-22):** ⚠️ Partially done. Unit tests for debouncer, photo-processor, chat-archive, paths, file-watcher (predicate), scheduler (fault isolation), and §17 generators all pass (52 cases). NFR measurements + integration/performance/security suites deferred to v2.
+
 ```
-[ ] Run full unit test suite (Section 11.1)
-[ ] Run integration tests (Section 11.2)
-[ ] Run performance tests (Section 11.3)
-[ ] Run security tests (Section 11.4)
-[ ] Tune NFR targets (Section 15)
-[ ] Final security review
-[ ] Documentation review
+[ ] Run full unit test suite (Section 11.1)               — DONE for PocketClaw modules (52 cases)
+[ ] Run integration tests (Section 11.2)                  — partial (scheduler fault-isolation, generator round-trips)
+[ ] Run performance tests (Section 11.3)                  — DEFERRED v2
+[ ] Run security tests (Section 11.4)                     — DEFERRED v2
+[ ] Tune NFR targets (Section 15)                         — DEFERRED v2
+[ ] Final security review                                 — informal: no Docker socket, no hardcoded secrets, no privileged flag, all credentials env-driven
+[ ] Documentation review                                  — DONE: README + docs/SERVICE.md + PRD §17 + §18 + audit notepad
 ```
 
 ---
@@ -2486,6 +2490,15 @@ Low  │  [Vault conflicts]  [Photo timeout]      [Syncthing setup]
 ## 16. Open Items & Future Work
 
 ### Open Items (Resolve Before Phase 5)
+
+> **As-built status (2026-05-22):**
+>
+> - **Claude Max:** Not used. Switched to AWS Bedrock for Claude (`CLAUDE_CODE_USE_BEDROCK=1`).
+> - **Apple Principal ID:** Resolved automatically inside `apple.ts` via `.well-known/carddav` redirect.
+> - **WhatsApp secondary number:** ⏸ Not procured. Using primary number per user choice.
+> - **Google Cloud project:** ✅ Resolved. OAuth tokens at `${POCKETCLAW_SECRETS_DIR}/google_token.json`.
+> - **Microsoft Azure app:** ❌ **Permanently parked.** Personal-account tenant blocked by AADSTS5000225 (lifecycle inactivity). Reactivation requires phoning Microsoft support; user opted out. Code stays compiled and ready in `microsoft.ts`.
+> - **Slack:** ❌ **Permanently parked.** User's org policy blocks app creation. Code compiled and ready in `slack.ts`.
 
 1. **Claude Max subscription:** Confirm active before Phase 1. Claude Code at agentic scale requires Max.
 2. **Apple Principal ID:** Required for CalDAV/CardDAV URLs. Obtain by calling `https://contacts.icloud.com/.well-known/carddav` with credentials — it redirects to your principal URL.
@@ -2812,3 +2825,112 @@ The self-chat model in §7.7 still controls **command routing** (which messages 
 | `POCKETCLAW_SECRETS_DIR` | No | `~/.pocketclaw/secrets` | Override secrets directory |
 | `POCKETCLAW_PROCESSED_DB` | No | `~/.pocketclaw/processed.db` | Override file-watcher dedup DB |
 
+
+---
+
+## 18. As-Built Additions (not in original PRD)
+
+This section documents everything we shipped during the build that wasn't specified in PRD §1–17. Captured here so the PRD stays the single source of truth instead of drifting from reality. Detailed cross-reference in `.omo/notepads/pocketclaw/prd-vs-built-audit.md`.
+
+### 18.1 Windows service hosting (NSSM)
+
+**Why:** PRD §7.1 assumed Docker-compose with a single long-running container. NanoClaw v2 spawns containers per-agent-group dynamically, so the host itself runs as a Node process. We host that process as a Windows service via [NSSM](https://nssm.cc/) so it auto-starts on boot and self-heals on crash.
+
+**What's there:**
+
+- `scripts/service/install.ps1` — registers the service. Auto-installs NSSM via Chocolatey or winget. Auto-rebuilds `better-sqlite3` native binding if missing. Pins Node 22 (avoids ABI mismatch with Node 26 on the user's PATH). Generates a `.run-host.cmd` wrapper so NSSM's space-in-path tokenizer doesn't break Windows paths.
+- `scripts/service/uninstall.ps1` — removes service registration. Handles `Paused` + `Disabled` states caused by SCM crash-loop auto-disable. Optional `-Purge` wipes `X:\PocketClawData\` and `~/.mnemon\`.
+- `scripts/service/install-elevated.ps1` + `uninstall-elevated.ps1` — self-elevating UAC wrappers. User runs from non-admin shell, UAC prompt opens, admin window does the work.
+- `scripts/service/status.ps1` — read-only snapshot. Reads `.env` paths so it always points at the actual configured locations (not hardcoded `~/.pocketclaw/`). Reports source health (Google ✅, Microsoft ⏸, Apple ✅, GitHub ✅, Slack ⏸).
+- `scripts/service/migrate-export.ps1` + `migrate-import.ps1` — bundle creds + memory + vault into a zip on the source machine, restore on the destination. For moving PocketClaw between laptops without re-OAuthing every cloud source.
+- `docs/SERVICE.md` — full lifecycle docs.
+- `pnpm run` shortcuts (10): `svc`, `svc:status`, `svc:tail`, `svc:install`, `svc:install:elevated`, `svc:install:dry`, `svc:uninstall`, `svc:uninstall:elevated`, `svc:uninstall:purge`, `svc:export`. All prefixed with `cmd /c` to work around a pnpm 10.x Windows shell-tokenizer bug.
+
+### 18.2 Telegram MTProto user-mode ingestion
+
+**Why:** PRD §7.6 used the Telegram Bot API. Bots can only see messages addressed to them — they can't read your DMs or group history. To ingest your full Telegram data we need to sign in as YOU via MTProto.
+
+**What's there:**
+
+- `src/modules/telegram-mtproto-service.ts` — sign-in state machine (idle → awaiting_code → awaiting_password → connected). Uses GramJS (`telegram` npm package). Session string persisted to `${POCKETCLAW_SECRETS_DIR}/telegram_session.txt`.
+- `src/modules/ingestion/telegram-mtproto.ts` — runtime ingester. Connects on host startup if a saved session exists, listens for `NewMessage` events, pipes every inbound message through `archiveChatMessage()` so it lands in mnemon with the same tagging as WhatsApp.
+- `src/channels/telegram.ts` — extended the existing pairing interceptor with a `/connect_telegram` flow. User DMs the bot `/connect_telegram`, bot asks for phone, kicks off MTProto, asks for SMS code, asks for 2FA password if needed, confirms session saved.
+- `scripts/telegram-mtproto-login.ts` — fallback CLI sign-in (`pnpm tg:login`) for users who prefer terminal flow.
+- Optional backfill via `TELEGRAM_BACKFILL_DAYS` env var (default 0 = realtime only).
+
+**Privacy posture:** Same as §17.7. The session string is the equivalent of a logged-in Telegram client — anyone with that file can read all your Telegram. Stored in gitignored secrets dir, file mode `0o600` on POSIX.
+
+### 18.3 File auto-discovery on whole drives
+
+**Why:** PRD §7.10 spec'd a single `WATCH_PATHS_ROOT` directory. Real-world use wants to point at a whole drive (e.g. `X:\`) and have ingestion ignore the obvious noise.
+
+**What's there:**
+
+- `src/modules/ingestion/file-watcher.ts` extended with:
+  - `WATCH_PATHS_ROOT` now comma-separated for multiple roots (`X:/,X:/PocketClawData/watch`)
+  - `shouldIgnore(path)` predicate covering `node_modules`, `.git`, `dist`, `build`, `target`, `__pycache__`, `.next`, `.turbo`, `.gradle`, `$RECYCLE.BIN`, `System Volume Information`, OS junk, our own data dir
+  - `ignoreInitial: true` by default — only react to NEW changes. Override with `POCKETCLAW_WATCH_INITIAL=true` for bulk backfill of existing files.
+- Wired into `pocketclaw.ts` startup. Each detected file → SHA256 fingerprint → mnemon insight tagged `pocketclaw, src:file, path:<rel>`.
+
+### 18.4 Chat archive (PRD §17.7 was added during build, but worth restating)
+
+Already documented in §17.7 above. Important addendum: real-time hooks live in `src/channels/whatsapp.ts` (Baileys `messages.upsert` event) and `src/channels/chat-sdk-bridge.ts` (Telegram bot + Discord + Slack + Matrix). MTProto ingestion (§18.2) uses the same `archiveChatMessage()` sink so ALL chat sources funnel through one tagged-mnemon writer.
+
+### 18.5 Path helper (`src/modules/paths.ts`)
+
+**Why:** Node doesn't expand `~` in paths. PRD didn't anticipate this. Without it, env vars like `VAULT_PATH=~/.pocketclaw/vault` would create a literal `~` directory inside `cwd`.
+
+**What's there:** `expandHome(path)` + `envPath(envVar, defaultSubdir)`. Used by every module that reads a path env var. Tested: 9 cases in `src/modules/paths.test.ts`.
+
+### 18.6 Per-machine relocatable data root
+
+**Why:** PRD assumed `~/.pocketclaw/`. User's C: drive was tight, so we made every path env-var configurable and put data on `X:\PocketClawData\` (~580 GB free). The mock Obsidian vault structure (`wiki/`, `meetings/`, `research/`, `presentations/`, `speeches/`, `contacts/`, `photos/`, `notes/`, `.obsidian/`) lives there.
+
+**What's there:**
+
+- 7 new path env vars (all optional, default to `~/.pocketclaw/...`):
+  `VAULT_PATH`, `MNEMON_DATA_DIR`, `MNEMON_DB_PATH`, `WATCH_PATHS_ROOT`, `LOG_PATH`, `POCKETCLAW_SECRETS_DIR`, `POCKETCLAW_PROCESSED_DB`
+- Mock vault populated with `README.md`, `.obsidian/app.json`, plugin placeholder dirs, `notes/inbox.md` starter, `wiki/Example_Wiki_Entry.md` showing the auto-generated format.
+- Service migrate scripts (`§18.1`) bundle/restore the entire data root.
+
+### 18.7 Test coverage extension
+
+**Why:** PRD §11 listed unit/integration/performance/security suites in aspirational form. We delivered unit + scoped integration tests for everything PocketClaw-specific.
+
+**What's there (52 cases total, all green):**
+
+- 23 baseline cases (debouncer ×7, photo-processor ×16) from original Phase 5/7
+- 9 new cases for `expandHome` + `envPath` (`paths.test.ts`)
+- 5 new cases for `archiveChatMessage` filter modes (`chat-archive.test.ts`)
+- 8 new cases for `shouldIgnore` (`file-watcher.test.ts`)
+- 4 new cases for `CloudScheduler.runAll` fault isolation (`scheduler.test.ts`)
+- 3 new cases for §17.3/4/5 generator render round-trips (`generators.test.ts`)
+
+### 18.8 Documentation overhaul
+
+**Why:** README in original repo was the Azure ML template boilerplate. PRD §13 Phase 10 listed "documentation review" as a checkbox but didn't define artifacts.
+
+**What's there:**
+
+- `README.md` — full lifecycle (clone → install → run → migrate → teardown), data location story, source-by-source sign-in walkthroughs (Google, Microsoft, Apple, GitHub, Slack), all `pnpm` commands, troubleshooting.
+- `docs/SERVICE.md` — Windows service install/migrate/teardown deep-dive. Covers UAC patterns, NSSM gotchas, log paths, NSSM service-recovery semantics that bit us during initial install.
+- `.omo/notepads/pocketclaw/prd-vs-built-audit.md` — phase-by-phase scorecard cross-referencing PRD §1–17 against shipped code.
+- `.omo/notepads/pocketclaw/prd-distance.md` — earlier sister doc (live ingestion evidence + commit-by-commit diff).
+
+### 18.9 Environment Variables (extension to Appendix B)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TELEGRAM_API_ID` | For MTProto | — | from https://my.telegram.org/apps |
+| `TELEGRAM_API_HASH` | For MTProto | — | from https://my.telegram.org/apps — treat as password |
+| `TELEGRAM_PHONE` | For MTProto | — | E.164 format, used by `/connect_telegram` flow |
+| `TELEGRAM_SESSION_PATH` | No | `${POCKETCLAW_SECRETS_DIR}/telegram_session.txt` | Override MTProto session location |
+| `TELEGRAM_BACKFILL_DAYS` | No | 0 | If >0, backfill that many days of history on first connect |
+| `INGEST_CHAT_MODE` | No | off | `off` / `self` / `dms` / `all` — see §17.7 |
+| `POCKETCLAW_WATCH_INITIAL` | No | false | If `true`, file-watcher ingests existing tree on first start (warning: slow on whole-drive watches) |
+| `MNEMON_DATA_DIR` | No | `~/.mnemon` | Override mnemon data dir (used to relocate to X: drive) |
+| `VAULT_PATH` | No | `~/.pocketclaw/vault` | Override vault location |
+| `LOG_PATH` | No | `~/.pocketclaw/logs` | Override service log location |
+| `WATCH_PATHS_ROOT` | No | `~/.pocketclaw/watch` | Comma-separated list of directories to watch |
+| `POCKETCLAW_SECRETS_DIR` | No | `~/.pocketclaw/secrets` | Override OAuth tokens + session files dir |
+| `POCKETCLAW_PROCESSED_DB` | No | `~/.pocketclaw/processed.db` | Override file-watcher SHA256 dedup DB |
