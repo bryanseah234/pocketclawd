@@ -12,6 +12,8 @@ import { spawn } from 'node:child_process';
 import { googleIngesters } from './google.js';
 import { microsoftIngesters } from './microsoft.js';
 import { appleIngesters } from './apple.js';
+import { githubIngesters } from './github.js';
+import { slackIngesters } from './slack.js';
 import type { CloudIngester, Fact, IngestResult } from './types.js';
 
 export interface IngestSummary {
@@ -26,6 +28,8 @@ const ALL_INGESTERS: CloudIngester[] = [
   ...googleIngesters,
   ...microsoftIngesters,
   ...appleIngesters,
+  ...githubIngesters,
+  ...slackIngesters,
 ];
 
 export interface RunOptions {

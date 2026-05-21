@@ -192,3 +192,6 @@ wa-session/
 vault/
 logs/
 .photo-cache/
+
+data/
+
