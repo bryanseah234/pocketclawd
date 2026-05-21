@@ -21,15 +21,14 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import * as os from 'node:os';
 import type { Fact } from './types.js';
 import { stripHtml } from './types.js';
+import { envPath, expandHome } from '../paths.js';
 
-const WATCH_ROOT =
-  process.env.WATCH_PATHS_ROOT ?? path.join(os.homedir(), '.pocketclaw', 'watch');
-const PROCESSED_DB_PATH =
-  process.env.POCKETCLAW_PROCESSED_DB ??
-  path.join(os.homedir(), '.pocketclaw', 'processed.db');
+const WATCH_ROOT = envPath('WATCH_PATHS_ROOT', 'watch');
+const PROCESSED_DB_PATH = process.env.POCKETCLAW_PROCESSED_DB
+  ? expandHome(process.env.POCKETCLAW_PROCESSED_DB)
+  : envPath('POCKETCLAW_PROCESSED_DB', 'processed.db');
 
 /** SHA256 of the file's bytes — content fingerprint. */
 export async function sha256(file: string): Promise<string> {

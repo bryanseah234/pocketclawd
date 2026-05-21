@@ -19,11 +19,10 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { spawn } from 'node:child_process';
+import { envPath } from './paths.js';
 
-const VAULT_PATH =
-  process.env.VAULT_PATH ?? path.join(os.homedir(), '.pocketclaw', 'vault');
+const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 const WIKI_DIR = path.join(VAULT_PATH, 'wiki');
 
 export type EntityType = 'person' | 'organisation' | 'concept' | 'event' | 'project' | 'unknown';

@@ -13,13 +13,12 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 
 import { CloudScheduler } from './ingestion/scheduler.js';
 import { WikiGenerator } from './wiki-generator.js';
+import { envPath } from './paths.js';
 
-const LOG_PATH =
-  process.env.LOG_PATH ?? path.join(os.homedir(), '.pocketclaw', 'logs');
+const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
 
 const SCHEDULES = [

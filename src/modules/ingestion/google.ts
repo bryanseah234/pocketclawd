@@ -10,13 +10,14 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import type { CloudIngester, Fact } from './types.js';
 import { stripHtml } from './types.js';
+import { envPath, expandHome } from '../paths.js';
 
 const SECRETS_DIR =
-  process.env.POCKETCLAW_SECRETS_DIR ??
-  path.join(os.homedir(), '.pocketclaw', 'secrets');
+  process.env.POCKETCLAW_SECRETS_DIR
+    ? expandHome(process.env.POCKETCLAW_SECRETS_DIR)
+    : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
 const TOKEN_PATH = path.join(SECRETS_DIR, 'google_token.json');
 const CREDENTIALS_PATH = path.join(SECRETS_DIR, 'google_credentials.json');
 
