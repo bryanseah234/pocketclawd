@@ -147,6 +147,10 @@ async function spawnContainer(session: Session): Promise<void> {
   );
 
   log.info('Spawning container', { sessionId: session.id, agentGroup: agentGroup.name, containerName });
+  log.debug('Container args', { args: args.join(' ') });
+
+  // DEBUG: dump args to file for troubleshooting container exit 125
+  fs.writeFileSync('logs/last-docker-args.txt', args.join('\n'), 'utf-8');
 
   // Clear any orphan heartbeat from a previous container instance — the
   // sweep's ceiling check treats a missing file as "fresh spawn, give grace"
@@ -366,32 +370,59 @@ function syncSkillSymlinks(claudeDir: string, containerConfig: import('./contain
 
   const desiredSet = new Set(desired);
 
-  // Remove symlinks not in the desired set
+  // Remove symlinks/markers not in the desired set
   for (const entry of fs.readdirSync(skillsDir)) {
     const entryPath = path.join(skillsDir, entry);
+    const skillName = entry.endsWith('.symlink-target') ? entry.replace(/\.symlink-target$/, '') : entry;
     let isSymlink = false;
     try {
       isSymlink = fs.lstatSync(entryPath).isSymbolicLink();
     } catch {
       continue;
     }
-    if (isSymlink && !desiredSet.has(entry)) {
+    const isMarker = entry.endsWith('.symlink-target') && !isSymlink;
+    if ((isSymlink || isMarker) && !desiredSet.has(skillName)) {
       fs.unlinkSync(entryPath);
     }
   }
 
-  // Create symlinks for desired skills (container path targets)
+  // Create symlinks for desired skills (container path targets).
+  // exFAT/Windows quirk: filesystem path-pointing symlinks fail with EISDIR
+  // on some Windows configurations. Fall back to a `.symlink-target` marker
+  // file that the container entrypoint converts back into a real symlink at
+  // start-up. See container/entrypoint.sh.
   for (const skill of desired) {
     const linkPath = path.join(skillsDir, skill);
-    let exists = false;
+    const markerPath = `${linkPath}.symlink-target`;
+    const target = `/app/skills/${skill}`;
+    let alreadyPresent = false;
     try {
       fs.lstatSync(linkPath);
-      exists = true;
+      alreadyPresent = true;
     } catch {
-      /* missing */
+      /* missing — try marker */
     }
-    if (!exists) {
-      fs.symlinkSync(`/app/skills/${skill}`, linkPath);
+    if (!alreadyPresent) {
+      try {
+        fs.lstatSync(markerPath);
+        alreadyPresent = true;
+      } catch {
+        /* missing */
+      }
+    }
+    if (!alreadyPresent) {
+      try {
+        fs.symlinkSync(target, linkPath);
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === 'EPERM' || code === 'EISDIR' || code === 'EEXIST') {
+          // Fall back to marker file — container entrypoint creates real
+          // symlink inside the container where /app/skills/<name> exists.
+          fs.writeFileSync(markerPath, target, 'utf8');
+        } else {
+          throw err;
+        }
+      }
     }
   }
 }
@@ -423,14 +454,22 @@ async function buildContainerArgs(
   // a transient hard failure: if we can't wire the gateway, we don't spawn.
   // The caller (router or host-sweep) catches the throw, leaves the inbound
   // message pending, and the next sweep tick retries.
-  if (agentIdentifier) {
-    await onecli.ensureAgent({ name: agentGroup.name, identifier: agentIdentifier });
+  //
+  // PocketClaw/Bedrock: when ONECLI_URL is not configured, skip the gateway
+  // entirely — Bedrock uses SigV4 directly (env vars forwarded by the claude
+  // provider), not bearer tokens through OneCLI's proxy.
+  if (ONECLI_URL) {
+    if (agentIdentifier) {
+      await onecli.ensureAgent({ name: agentGroup.name, identifier: agentIdentifier });
+    }
+    const onecliApplied = await onecli.applyContainerConfig(args, { addHostMapping: false, agent: agentIdentifier });
+    if (!onecliApplied) {
+      throw new Error('OneCLI gateway not applied — refusing to spawn container without credentials');
+    }
+    log.info('OneCLI gateway applied', { containerName });
+  } else {
+    log.info('OneCLI not configured — skipping gateway (direct auth mode)', { containerName });
   }
-  const onecliApplied = await onecli.applyContainerConfig(args, { addHostMapping: false, agent: agentIdentifier });
-  if (!onecliApplied) {
-    throw new Error('OneCLI gateway not applied — refusing to spawn container without credentials');
-  }
-  log.info('OneCLI gateway applied', { containerName });
 
   // Host gateway
   args.push(...hostGatewayArgs());

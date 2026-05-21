@@ -201,7 +201,20 @@ function syncSymlink(linkPath: string, target: string): void {
   } catch {
     /* missing */
   }
-  fs.symlinkSync(target, linkPath);
+  try {
+    fs.symlinkSync(target, linkPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EPERM' || code === 'EISDIR' || code === 'EACCES') {
+      // exFAT / Windows without symlink privileges — write content inline
+      // so the @import in CLAUDE.md resolves. The `target` is a container
+      // path (e.g. /app/CLAUDE.md) which doesn't exist on the host, so we
+      // write a placeholder that the container's real symlink will override.
+      fs.writeFileSync(linkPath, `# Symlink target (resolved inside container): ${target}\n`);
+    } else {
+      throw err;
+    }
+  }
 }
 
 function writeAtomic(filePath: string, content: string): void {

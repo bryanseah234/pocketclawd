@@ -54,6 +54,10 @@ import './channels/index.js';
 // append registry-based modules. Imported for side effects (registrations).
 import './modules/index.js';
 
+// Providers barrel — registers provider-specific container config (env passthrough,
+// mounts). The Claude provider forwards AWS/Bedrock env vars when configured.
+import './providers/index.js';
+
 // CLI command barrel — populates the `ncl` registry before the CLI server
 // accepts connections.
 import './cli/commands/index.js';

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {},
+  "packages": {
+    "apt": [],
+    "npm": []
+  },
+  "additionalMounts": [],
+  "skills": "all",
+  "groupName": "PocketClaw",
+  "assistantName": "PocketClaw",
+  "agentGroupId": "ag-1779335520163-gzrk2c"
+}

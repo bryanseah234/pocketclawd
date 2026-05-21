@@ -6,9 +6,9 @@
       "work_id": "pocketclaw-2e6ae9ca",
       "active_plan": "X:\\01 REPOSITORIES\\pocketclaw\\.omo\\plans\\pocketclaw.md",
       "plan_name": "pocketclaw",
-      "status": "active",
+      "status": "completed",
       "started_at": "2026-05-20T11:47:41.354Z",
-      "updated_at": "2026-05-20T11:47:41.354Z",
+      "updated_at": "2026-05-21T07:04:21.434Z",
       "session_ids": [
         "ses_1bb5c759cffeXNEgCCM0kAfNNa"
       ],
@@ -16,13 +16,15 @@
         "ses_1bb5c759cffeXNEgCCM0kAfNNa": "direct"
       },
       "agent": "atlas",
-      "task_sessions": {}
+      "task_sessions": {},
+      "ended_at": "2026-05-21T07:04:21.429Z",
+      "elapsed_ms": 69400075
     }
   },
   "active_plan": "X:\\01 REPOSITORIES\\pocketclaw\\.omo\\plans\\pocketclaw.md",
   "started_at": "2026-05-20T11:47:41.354Z",
-  "status": "active",
-  "updated_at": "2026-05-20T11:47:41.354Z",
+  "status": "completed",
+  "updated_at": "2026-05-21T07:04:21.434Z",
   "session_ids": [
     "ses_1bb5c759cffeXNEgCCM0kAfNNa"
   ],
@@ -31,5 +33,7 @@
   },
   "plan_name": "pocketclaw",
   "task_sessions": {},
-  "agent": "atlas"
+  "agent": "atlas",
+  "ended_at": "2026-05-21T07:04:21.429Z",
+  "elapsed_ms": 69400075
 }
