@@ -25,7 +25,16 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "svc": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/status.ps1",
+    "svc:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/status.ps1",
+    "svc:tail": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/status.ps1 -Follow",
+    "svc:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/install.ps1",
+    "svc:install:dry": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/install.ps1 -DryRun",
+    "svc:uninstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/uninstall.ps1",
+    "svc:uninstall:purge": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/uninstall.ps1 -Purge",
+    "svc:export": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/migrate-export.ps1",
+    "ingest:now": "tsx scripts/ingest-now.ts"
   },
   "dependencies": {
     "@azure/msal-node": "3.5.0",
