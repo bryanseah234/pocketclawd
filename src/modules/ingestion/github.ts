@@ -21,6 +21,14 @@ function getToken(): string {
   return token;
 }
 
+let cachedLogin: string | null = null;
+async function getAuthenticatedLogin(): Promise<string> {
+  if (cachedLogin) return cachedLogin;
+  const me = (await ghFetch('/user')) as { login: string };
+  cachedLogin = me.login;
+  return me.login;
+}
+
 async function ghFetch(path: string): Promise<unknown> {
   const res = await fetch(`${GITHUB_API}${path}`, {
     headers: {
@@ -45,8 +53,10 @@ export class GitHubPRIngester implements CloudIngester {
     const facts: Fact[] = [];
     const errors: string[] = [];
     try {
-      // Get recent events for the authenticated user (covers all repos)
-      const events = (await ghFetch('/users/events?per_page=100')) as GHEvent[];
+      // Get recent events for the authenticated user (covers all repos).
+      // GitHub requires the username in the path: `/users/{login}/events`.
+      const login = await getAuthenticatedLogin();
+      const events = (await ghFetch(`/users/${login}/events?per_page=100`)) as GHEvent[];
       const prEvents = events.filter(
         (e) => e.type === 'PullRequestEvent' && new Date(e.created_at) >= since,
       );
@@ -88,7 +98,8 @@ export class GitHubCommitIngester implements CloudIngester {
     const facts: Fact[] = [];
     const errors: string[] = [];
     try {
-      const events = (await ghFetch('/users/events?per_page=100')) as GHEvent[];
+      const login = await getAuthenticatedLogin();
+      const events = (await ghFetch(`/users/${login}/events?per_page=100`)) as GHEvent[];
       const pushEvents = events.filter(
         (e) => e.type === 'PushEvent' && new Date(e.created_at) >= since,
       );
