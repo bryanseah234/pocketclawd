@@ -47,7 +47,11 @@
     "chokidar": "4.0.3",
     "pdf-parse": "1.1.1",
     "mailparser": "3.7.4",
-    "mammoth": "1.11.0"
+    "mammoth": "1.11.0",
+    "@slack/web-api": "7.8.0",
+    "@octokit/rest": "21.1.1",
+    "pptxgenjs": "4.0.1",
+    "docx": "9.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",
