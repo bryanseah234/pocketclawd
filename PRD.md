@@ -188,14 +188,15 @@ PocketClaw solves this by creating a personal AI assistant that lives on your ow
 
 ### US-8: Privacy-Compliant Memory
 
-**As a** privacy-conscious user  
-**I want** to know exactly what data leaves my device  
-**So that** I can trust PocketClaw with sensitive information  
+**As a** privacy-conscious user
+**I want** to know exactly what data leaves my device
+**So that** I can trust PocketClaw with sensitive information
 
 **Acceptance Criteria:**
 - Audit log records every data point sent to Anthropic API
 - Only assembled prompts leave the machine — raw emails/messages never leave
 - User can query: `/audit yesterday` to see what was shared
+- Chat ingestion (Telegram + WhatsApp message archive) defaults to `INGEST_CHAT_MODE=off`. The user must explicitly opt in (`self`, `dms`, or `all`). When enabled at any level beyond `off`, the user accepts that they are storing other people's messages on their local disk.
 
 ---
 
@@ -839,14 +840,20 @@ docker logs -f pocketclaw | grep "QR"
 - Session ID = your registered WhatsApp number (E.164 format: `+6591234567`)
 - Same session ID strategy as Telegram ensures cross-platform batching works
 
-**Self-chat model (matching Vivian's setup):**
+**Self-chat model (default for command routing):**
+
+By default, only messages **from the user themselves** wake the agent for command processing. This prevents the agent from auto-replying to friends, family, or group conversations the user happens to be in.
 
 ```javascript
-// Baileys skill — only respond to messages from self
+// Baileys adapter — only respond/route to messages from self
 if (message.key.fromMe || message.key.remoteJid === selfJid) {
     await debouncer.push(sessionId, parsedMessage);
 }
 ```
+
+**Passive chat archive (opt-in, separate from command routing):**
+
+Independent of command routing, every inbound chat message can be archived to mnemon (controlled by `INGEST_CHAT_MODE` env var, default `off`). Archive runs fire-and-forget BEFORE the self-chat filter, so it captures both directions of conversation if enabled. See §17.7 for the full chat-archive design and the privacy posture.
 
 **Session Security:**
 
@@ -2736,6 +2743,57 @@ Low  │  [Vault conflicts]  [Photo timeout]      [Syncthing setup]
 
 ---
 
+### 17.7 Chat Archive (Telegram + WhatsApp passive ingestion)
+
+**Status:** Implemented in `src/modules/chat-archive.ts`. **Opt-in only** via `INGEST_CHAT_MODE`.
+
+**Why this exists:** PocketClaw's primary identity is your assistant, not a chat-history scraper. By default the agent only sees messages addressed to it (per §7.7 self-chat model). Some users want their full chat history searchable through mnemon — this module enables that, with explicit consent.
+
+**Modes (env var `INGEST_CHAT_MODE`):**
+
+| Mode | What gets archived | Privacy posture |
+|------|---------------------|------------------|
+| `off` (default) | Nothing — chat-archive is a no-op | Most private; only direct commands flow |
+| `self` | Only messages YOU send (any chat) | Privacy-respecting journal/note-stream |
+| `dms` | Self messages + 1-on-1 DMs from anyone | Group chats stay private to participants |
+| `all` | Every message in every chat the user is part of | **Privacy bombshell.** Stores other people's messages on the user's local disk. |
+
+**Where archived data goes:**
+
+- Mnemon insight, tagged: `pocketclaw, src:<platform>-chat, chat:<chatId>, kind:group|dm, from:self|other, sender:<senderId>`
+- Content format: `<Platform> group "<name>" — <sender>: <body> [N images] [voice note]`
+- Attachments are NOTED but NOT downloaded (just `[image]` / `[voice note]` markers). Photos that hit `/photo` flow continue to use the existing photo pipeline (§7.8).
+- Stickers are still skipped (matches §8.5).
+- Bodies > 600 chars are truncated.
+- Stored locally in mnemon DB at `${MNEMON_DATA_DIR}/data/default/mnemon.db` — never leaves the machine unless the user explicitly recalls something into a Claude prompt.
+
+**Implementation:**
+
+- `src/modules/chat-archive.ts` — `archiveChatMessage(record)` — fire-and-forget, serialized through a process-wide promise chain to avoid SQLITE_BUSY under message storms.
+- Hooked into `src/channels/whatsapp.ts` inside the `messages.upsert` handler (BEFORE the fromMe self-chat filter, so we capture both directions).
+- Hooked into `src/channels/chat-sdk-bridge.ts` — `archiveSdkMessage()` called inside all 4 dispatch paths (subscribed / mention / DM / new). Captures Telegram, Discord, Slack, Matrix, etc.
+- Mnemon writes use `--no-diff` (skip dedup) — chat is high-volume and identical-message dedup is more harmful (loses count) than helpful (saves bytes).
+
+**Privacy guarantees:**
+
+- Default `off` — opt-in required.
+- Vault and mnemon DB are gitignored. Survive only on local disk.
+- No third-party API calls happen as part of archival (mnemon is local).
+- The recorded content reaches Anthropic API ONLY if the user explicitly recalls it into a Claude prompt. The audit log (§US-8) tracks this.
+- User can `pnpm svc:uninstall:purge` to nuke everything in one command (see `docs/SERVICE.md`).
+
+**Privacy non-guarantees (must communicate to user):**
+
+- If `INGEST_CHAT_MODE=all` is set, the user's local mnemon DB will contain other people's messages. This is legally / ethically loaded in many jurisdictions.
+- Anyone with physical access to the user's laptop AND the unlocked OS account can read the archive (mnemon DB is unencrypted SQLite).
+- The user is responsible for compliance with applicable laws (e.g. EU GDPR informational duties, US two-party-consent recording laws if voice notes were ever transcribed — currently they aren't).
+
+**Compatibility with existing PRD §7.7:**
+
+The self-chat model in §7.7 still controls **command routing** (which messages wake the agent for a Claude turn). Chat-archive runs **before** that filter and is independent — archival mode is set by `INGEST_CHAT_MODE`, agent routing is set by §7.7 wiring rules. The two are orthogonal.
+
+---
+
 ## Environment Variables (Extended — Appendix B v2)
 
 | Variable | Required | Default | Description |
@@ -2746,4 +2804,11 @@ Low  │  [Vault conflicts]  [Photo timeout]      [Syncthing setup]
 | `PPTX_STYLE` | No | minimal | Default slide style |
 | `MEETING_MINUTES_FORMAT` | No | docx | Output format: docx or txt |
 | `RESEARCH_OUTPUT_FORMAT` | No | pdf | Output format: pdf or md |
+| `INGEST_CHAT_MODE` | No | off | Chat archive scope: `off`, `self`, `dms`, `all` (see §17.7) |
+| `MNEMON_DATA_DIR` | No | `~/.mnemon` | Override mnemon data directory (used to relocate to X: drive) |
+| `VAULT_PATH` | No | `~/.pocketclaw/vault` | Override vault location |
+| `LOG_PATH` | No | `~/.pocketclaw/logs` | Override service log location |
+| `WATCH_PATHS_ROOT` | No | `~/.pocketclaw/watch` | Override file-watcher root |
+| `POCKETCLAW_SECRETS_DIR` | No | `~/.pocketclaw/secrets` | Override secrets directory |
+| `POCKETCLAW_PROCESSED_DB` | No | `~/.pocketclaw/processed.db` | Override file-watcher dedup DB |
 
