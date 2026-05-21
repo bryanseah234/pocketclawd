@@ -24,6 +24,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
+import { Logger, LogLevel } from 'telegram/extensions/Logger.js';
 import { envPath, expandHome } from './paths.js';
 
 export type ConnectStep = 'idle' | 'awaiting_code' | 'awaiting_password' | 'connected' | 'error';
@@ -86,7 +87,7 @@ export async function startConnect(userKey: string, phone: string): Promise<{ st
   const stringSession = new StringSession('');
   const client = new TelegramClient(stringSession, apiId, apiHash, {
     connectionRetries: 3,
-    baseLogger: { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} } as never,
+    baseLogger: new Logger(LogLevel.NONE),
   });
 
   const state: PendingSignIn = {
