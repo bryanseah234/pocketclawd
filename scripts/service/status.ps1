@@ -44,12 +44,39 @@ if ($svc) {
     Kv "Status" "NOT INSTALLED"
 }
 
+# --- read env vars from .env so paths match the running config ----
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$envFile = Join-Path $repoRoot ".env"
+$envHash = @{}
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^([A-Z_]+)=(.+)$') { $envHash[$Matches[1]] = $Matches[2].Trim() }
+    }
+}
+
+function Get-EnvOrDefault($key, $defaultPath) {
+    $v = $envHash[$key]
+    if ($v) {
+        # Expand ~ to home if present
+        if ($v.StartsWith('~')) { return Join-Path $env:USERPROFILE $v.Substring(2) }
+        return $v.Replace('/', '\')
+    }
+    return $defaultPath
+}
+
+$logDir   = Get-EnvOrDefault "LOG_PATH"               (Join-Path $env:USERPROFILE ".pocketclaw\logs")
+$vaultDir = Get-EnvOrDefault "VAULT_PATH"             (Join-Path $env:USERPROFILE ".pocketclaw\vault")
+$mnemonDir = Get-EnvOrDefault "MNEMON_DATA_DIR"       (Join-Path $env:USERPROFILE ".mnemon")
+
 # --- mnemon ----
 Heading "mnemon"
 $mnemonExe = (Get-Command mnemon -ErrorAction SilentlyContinue).Source
 if ($mnemonExe) {
-    Kv "CLI"     $mnemonExe
+    Kv "CLI"       $mnemonExe
+    Kv "Data dir"  $mnemonDir
     try {
+        # Tell mnemon where to look
+        $env:MNEMON_DATA_DIR = $mnemonDir
         $st = mnemon status 2>&1 | ConvertFrom-Json
         Kv "DB"            $st.db_path
         Kv "Insights"      "$($st.total_insights) (deleted $($st.deleted_insights))"
@@ -61,16 +88,15 @@ if ($mnemonExe) {
         Kv "Status" "ERROR: $($_.Exception.Message)"
     }
 } else {
-    Kv "Status" "mnemon CLI not on PATH"
+    Kv "Status" "mnemon CLI not on PATH (run: go install github.com/dipampaul17/mnemon@latest)"
 }
 
 # --- logs ----
-$logDir = Join-Path $env:USERPROFILE ".pocketclaw\logs"
 $stdout = Join-Path $logDir "service.stdout.log"
 $stderr = Join-Path $logDir "service.stderr.log"
 $audit  = Join-Path $logDir "audit.log"
 
-Heading "Logs"
+Heading "Logs (LOG_PATH=$logDir)"
 foreach ($f in @($stdout, $stderr, $audit)) {
     if (Test-Path $f) {
         $size = [Math]::Round((Get-Item $f).Length / 1KB, 1)
@@ -82,18 +108,39 @@ foreach ($f in @($stdout, $stderr, $audit)) {
 }
 
 # --- vault ----
-$vault = Join-Path $env:USERPROFILE ".pocketclaw\vault"
-Heading "Vault"
-if (Test-Path $vault) {
+Heading "Vault (VAULT_PATH=$vaultDir)"
+if (Test-Path $vaultDir) {
     foreach ($sub in @("wiki", "meetings", "research", "presentations", "speeches")) {
-        $p = Join-Path $vault $sub
+        $p = Join-Path $vaultDir $sub
         if (Test-Path $p) {
             $count = (Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue).Count
             Kv $sub "$count files"
         }
     }
 } else {
-    Kv "Status" "vault not yet created (run /ingest or any /minutes /research /slides)"
+    Kv "Status" "vault dir does not exist yet — will be created on first /minutes /research /slides"
+}
+
+# --- source health (which creds are configured) ----
+Heading "Sources"
+$sources = @(
+    @{ Name = "Google";    Required = @("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"); Files = @("$($envHash['POCKETCLAW_SECRETS_DIR'] -replace '/','\')\google_token.json") }
+    @{ Name = "Microsoft"; Required = @("MS_CLIENT_ID");                              Files = @() }
+    @{ Name = "Apple";     Required = @("APPLE_ID_EMAIL", "APPLE_APP_PASSWORD");      Files = @() }
+    @{ Name = "GitHub";    Required = @("GITHUB_PAT");                                Files = @() }
+    @{ Name = "Slack";     Required = @("SLACK_USER_TOKEN");                          Files = @() }
+)
+foreach ($s in $sources) {
+    $hasEnv = $true
+    foreach ($k in $s.Required) {
+        if (-not $envHash[$k]) { $hasEnv = $false; break }
+    }
+    $hasFile = $false
+    foreach ($f in $s.Files) {
+        if (Test-Path $f) { $hasFile = $true; break }
+    }
+    $live = $hasEnv -or $hasFile
+    Kv $s.Name $(if ($live) { "✅ live" } else { "⏸ parked (missing $($s.Required -join ', '))" })
 }
 
 # --- recent log lines ----
