@@ -2579,3 +2579,171 @@ Low  │  [Vault conflicts]  [Photo timeout]      [Syncthing setup]
 *Document Version: 3.0*  
 *Last Updated: 2026-05-20*  
 *Author: MiniMax Agent*
+
+---
+
+## 17. Extended Features (v1.1) — Added Post-Initial Build
+
+### 17.1 GitHub Integration (Read-Only, All Repos)
+
+**Scope:** Read-only PAT with access to all user repos.
+**Features:**
+- PR summaries (open, merged, stale)
+- Commit digests (daily/weekly activity across repos)
+- Issue tracking (open issues, assigned to me, stale)
+- Slash command: `/github-report [daily|weekly]`
+- Auto-ingest: daily pull of PR/issue/commit activity → mnemon
+
+**Auth:** GitHub Personal Access Token (PAT) with `repo:read`, `read:org` scopes.
+**Storage:** `.env` → `GITHUB_PAT=ghp_...`
+
+**Implementation:**
+- `src/modules/ingestion/github.ts` — GitHub REST API client
+- Ingests: PRs, issues, commits, reviews assigned to user
+- Stores as mnemon facts with source attribution
+- Daily cron at 02:00 (alongside cloud ingestion)
+
+---
+
+### 17.2 Slack Integration (User Token, Multi-Workspace)
+
+**Scope:** Connect as the user (NOT a bot), user chooses workspace.
+**Constraint:** Cannot use bot token — must use Slack user OAuth token (xoxp-).
+
+**How user tokens work:**
+- Create a Slack app in YOUR workspace → OAuth & Permissions → User Token Scopes
+- Required scopes: `channels:history`, `channels:read`, `groups:read`, `groups:history`, `im:history`, `im:read`, `users:read`, `search:read`
+- OAuth flow: user approves → receives `xoxp-` token → stored in `.env`
+- NOTE: company workspaces may block custom apps; user must have permission to install apps
+
+**Features:**
+- Read channel messages (ingest key channels → mnemon)
+- Search Slack history via `/recall` (facts from Slack messages)
+- Reply via PocketClaw (Telegram command → Slack message)
+- Slash command: `/slack-search <query>`
+
+**Storage:** `.env` → `SLACK_USER_TOKEN=xoxp-...`, `SLACK_WORKSPACE=<workspace-name>`
+
+**Implementation:**
+- `src/modules/ingestion/slack.ts` — Slack Web API client with user token
+- Ingests: messages from configured channels → mnemon facts
+- Does NOT use NanoClaw's `/add-slack` skill (that's bot-token based)
+- Custom adapter for user-token read/write
+
+---
+
+### 17.3 Meeting Minutes Generator
+
+**Source:** Auto-generated from calendar events + email threads.
+**Output:** .docx or .txt file saved to Obsidian vault.
+
+**Flow:**
+1. Calendar event detected (from Google/Outlook/iCloud ingestion)
+2. PocketClaw pulls email threads related to the meeting (subject match + attendees)
+3. Generates structured meeting minutes from context:
+   - Attendees, date, duration
+   - Agenda (from calendar description)
+   - Key discussion points (from emails)
+   - Action items extracted
+   - Decisions made
+4. Saves to `vault/meetings/YYYY-MM-DD_<meeting-title>.docx`
+
+**Slash command:** `/minutes [meeting-name]` — generates from most recent matching calendar event
+**Auto-trigger:** After each calendar event ends (if email threads exist)
+
+**Implementation:**
+- `src/modules/meeting-minutes.ts` — minutes generator
+- Uses `docx` npm package for .docx output
+- Pulls from mnemon: calendar facts + email facts for same attendees/timeframe
+- Template: attendees → agenda → discussion → actions → decisions
+
+---
+
+### 17.4 Research Report Generator (Local Files Only)
+
+**Source:** User's local files and ingested emails. NO web search (privacy-first).
+**Output:** PDF report saved to vault.
+
+**Flow:**
+1. User: `/research <topic>` or `/research <topic> --location /path/to/folder`
+2. PocketClaw searches:
+   - Mnemon graph for all facts related to `<topic>`
+   - File watcher index for documents matching topic
+   - Email threads mentioning the topic
+3. Generates structured research report:
+   - Executive summary
+   - Key findings (with source citations)
+   - Timeline of events
+   - Related entities (people, orgs, projects)
+   - Appendix: source list
+4. Renders to PDF via `pdfkit` or `puppeteer` (HTML → PDF)
+5. Saves to `vault/research/YYYY-MM-DD_<topic>.pdf`
+
+**Implementation:**
+- `src/modules/research-report.ts` — report generator
+- `pdfkit` for PDF output (or puppeteer for richer layout)
+- Pulls exclusively from local mnemon + file index
+- No external API calls (fully local after Haiku reasoning)
+
+---
+
+### 17.5 Presentation Slide Generator (PPTX)
+
+**Output:** Actual PowerPoint .pptx files.
+**Library:** `pptxgenjs` (JavaScript) or `python-pptx` (Python via child process)
+
+**Flow:**
+1. User: `/slides <topic> [--slides N] [--style minimal|corporate|creative]`
+2. PocketClaw:
+   - Recalls all context about `<topic>` from mnemon
+   - Generates slide outline (title, bullets, speaker notes per slide)
+   - Renders to .pptx with chosen style
+3. Saves to `vault/presentations/YYYY-MM-DD_<topic>.pptx`
+4. Optionally sends file via Telegram
+
+**Slide structure per deck:**
+- Title slide (topic + date + author)
+- Agenda/overview slide
+- Content slides (3-10 depending on `--slides N`)
+- Summary/key takeaways
+- Q&A / next steps
+
+**Implementation:**
+- `src/modules/slide-generator.ts` — pptx generator
+- Uses `pptxgenjs@4` npm package (pure JS, no Python needed)
+- Templates: minimal (white, clean), corporate (blue headers), creative (gradients)
+- Speaker notes generated by Haiku alongside slide content
+
+---
+
+### 17.6 Speech Draft Generator
+
+**Output:** Markdown or .docx speech draft.
+
+**Flow:**
+1. User: `/speech <topic> [--duration 5m|10m|15m] [--tone formal|casual|persuasive]`
+2. PocketClaw:
+   - Recalls context about `<topic>` from mnemon
+   - Generates speech with appropriate length (~150 words/minute)
+   - Includes: opening hook, key points, transitions, closing
+3. Saves to `vault/speeches/YYYY-MM-DD_<topic>.md`
+
+**Implementation:**
+- Handled by agent skill (no separate module needed)
+- Speech skill at `groups/pocketclaw/skills/speech/SKILL.md`
+- Word count calibrated to requested duration
+- Tone adjustment via prompt engineering
+
+---
+
+## Environment Variables (Extended — Appendix B v2)
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GITHUB_PAT` | For GitHub | — | Personal Access Token (read-only all repos) |
+| `SLACK_USER_TOKEN` | For Slack | — | Slack user OAuth token (xoxp-...) |
+| `SLACK_WORKSPACE` | For Slack | — | Workspace name for context |
+| `PPTX_STYLE` | No | minimal | Default slide style |
+| `MEETING_MINUTES_FORMAT` | No | docx | Output format: docx or txt |
+| `RESEARCH_OUTPUT_FORMAT` | No | pdf | Output format: pdf or md |
+
