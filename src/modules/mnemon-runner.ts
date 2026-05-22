@@ -40,10 +40,10 @@ export interface RunMnemonOptions {
   /** Override the input string piped to stdin (currently unused; reserved for future server mode). */
   stdin?: string;
   /**
-   * Hard timeout in ms. Defaults to 15s. Steady-state mnemon ops complete in
-   * ~200ms (max ~500ms under burst), so 15s is 30× headroom; anything slower
-   * is wedged and we want to surface it fast rather than block the writer
-   * queue. Timeouts are retried like SQLITE_BUSY (see runMnemonOnce).
+   * Hard timeout in ms. Defaults to 5s. Steady-state mnemon ops complete in
+   * ~500ms on NTFS; 5s is 10× headroom and short enough that a wedge fails
+   * fast before downstream queues back up. Timeouts retry like SQLITE_BUSY
+   * (see runMnemonOnce).
    */
   timeoutMs?: number;
   /**
@@ -72,6 +72,18 @@ export interface MnemonResult {
 let writeChain: Promise<unknown> = Promise.resolve();
 
 /**
+ * Hard cap on outstanding queued writes. When chat-archive ingests a backfill
+ * burst (e.g. Telegram MTProto returning thousands of messages) it can fire
+ * thousands of `await runMnemon([...])` calls back-to-back. Each await holds
+ * a closure + spawn handles in memory until its turn in the FIFO comes up.
+ * On Windows under S4U, that drove a 30k-handle leak that wedged the host.
+ * We shed load past this depth so the leak has a ceiling.
+ */
+const MAX_PENDING_WRITES = 50;
+let pendingWrites = 0;
+let dropCounter = 0;
+
+/**
  * Spawn mnemon with `args`, returning stdout/stderr/exit code.
  *
  * If the first arg is a known write subcommand, the call is serialized
@@ -92,9 +104,35 @@ export function runMnemon(
 
   if (!isWrite) return job();
 
+  // Backpressure: if the queue is already saturated, shed this write.
+  // chat-archive already tolerates non-zero exits (logs + swallows). Better to
+  // drop a few archived messages than wedge the host.
+  if (pendingWrites >= MAX_PENDING_WRITES) {
+    dropCounter += 1;
+    // Log every 50th drop to make sustained shedding visible without spamming.
+    if (dropCounter % 50 === 1) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[mnemon-runner] BACKPRESSURE shedding write — pending=${pendingWrites} dropped_total=${dropCounter} args=${sanitizeArgs(args)}`,
+      );
+    }
+    return Promise.resolve({
+      code: 99,
+      stdout: '',
+      stderr: '[mnemon-runner] dropped: write queue saturated',
+      retried: false,
+      attempts: 0,
+    });
+  }
+
   // Serialize: append to the shared chain. We swallow errors on the chain
   // itself so one failed write can't poison the rest.
-  const next = writeChain.then(job, job);
+  pendingWrites += 1;
+  const tracked = (): Promise<MnemonResult> =>
+    job().finally(() => {
+      pendingWrites -= 1;
+    });
+  const next = writeChain.then(tracked, tracked);
   writeChain = next.catch(() => undefined);
   return next;
 }
@@ -124,7 +162,7 @@ async function runMnemonOnce(
   const maxRetries = opts.maxRetries ?? 5;
   const initialBackoff = opts.initialBackoffMs ?? 50;
   const maxBackoff = opts.maxBackoffMs ?? 1000;
-  const timeoutMs = opts.timeoutMs ?? 15_000;
+  const timeoutMs = opts.timeoutMs ?? 5_000;
 
   let attempt = 0;
   let last: MnemonResult = { code: -1, stdout: '', stderr: '', retried: false, attempts: 0 };
@@ -205,28 +243,57 @@ function spawnMnemon(
   stdin: string | undefined,
   timeoutMs: number,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
+  return new Promise((resolveOuter) => {
+    // windowsHide prevents a flashing console window per spawn (also reduces
+    // handle pressure on services running under S4U logon tokens, where
+    // console-allocation handles leak on every spawn). detached:false keeps
+    // the child in our process group so a TerminateProcess on the parent
+    // would also tear down stragglers.
     const stdio: SpawnOptions['stdio'] = [stdin === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'];
-    const proc = spawn(mnemonBin(), args as string[], { stdio });
+    const proc = spawn(mnemonBin(), args as string[], { stdio, windowsHide: true });
 
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const settle = (code: number) => {
+
+    const cleanup = (): void => {
+      // Drain + destroy stdio streams BEFORE the process object is GC'd. On
+      // Windows, an undrained pipe FD lingers in the kernel handle table even
+      // after the child exits — that's the leak that wedged the service
+      // (PID 2436 reached 30,537 handles before this fix).
+      try { proc.stdout?.removeAllListeners(); proc.stdout?.destroy(); } catch { /* noop */ }
+      try { proc.stderr?.removeAllListeners(); proc.stderr?.destroy(); } catch { /* noop */ }
+      try { proc.stdin?.removeAllListeners(); proc.stdin?.destroy(); } catch { /* noop */ }
+      proc.removeAllListeners();
+    };
+
+    const settle = (code: number): void => {
       if (settled) return;
       settled = true;
       clearTimeout(killTimer);
-      resolve({ code, stdout, stderr });
+      cleanup();
+      resolveOuter({ code, stdout, stderr });
     };
 
     const killTimer = setTimeout(() => {
+      // Order matters on Windows: destroy pipes FIRST so the kernel releases
+      // their handles, THEN kill the process. The opposite order leaks the
+      // pipe handles for the lifetime of the parent node process.
+      try { proc.stdout?.destroy(); } catch { /* noop */ }
+      try { proc.stderr?.destroy(); } catch { /* noop */ }
+      try { proc.stdin?.destroy(); } catch { /* noop */ }
       try { proc.kill('SIGKILL'); } catch { /* noop */ }
       stderr += `\n[mnemon-runner] killed after ${timeoutMs}ms timeout`;
+      // Don't wait for proc.on('exit') — on Windows after destroying the
+      // pipes, exit may never fire if the kernel never harvests the zombie.
+      // We've captured everything; settle now and let cleanup() run.
       settle(124);
     }, timeoutMs);
+    // Avoid this setTimeout itself keeping the event loop alive in tests.
+    if (typeof killTimer.unref === 'function') killTimer.unref();
 
-    proc.stdout?.on('data', (c) => (stdout += String(c)));
-    proc.stderr?.on('data', (c) => (stderr += String(c)));
+    proc.stdout?.on('data', (c) => { stdout += String(c); });
+    proc.stderr?.on('data', (c) => { stderr += String(c); });
     proc.on('error', (err) => {
       stderr += `\n[mnemon-runner] spawn error: ${err.message}`;
       settle(-1);
