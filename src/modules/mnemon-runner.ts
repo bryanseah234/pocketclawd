@@ -126,14 +126,60 @@ async function runMnemonOnce(
     if (r.code === 0) return last;
 
     if (!isBusy(r.stderr) || attempt > maxRetries) {
+      // Only warn on BUSY-exhaustion, not on unrelated non-zero exits.
+      if (isBusy(r.stderr)) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[mnemon-runner] BUSY retries exhausted attempts=${attempt} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
+        );
+      }
       return last;
     }
+
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[mnemon-runner] BUSY retry attempt=${attempt}/${maxRetries} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
+    );
 
     const backoff = Math.min(initialBackoff * 2 ** (attempt - 1), maxBackoff);
     await sleep(backoff);
   }
 
   return last;
+}
+
+/**
+ * Strip mnemon argv down to just the subcommand and flag NAMES — never
+ * flag values. Prevents log lines from leaking message bodies / API tokens
+ * / personally identifying content from `--content`, `--auth`, etc.
+ */
+function sanitizeArgs(args: readonly string[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const a = String(args[i]);
+    if (i === 0) {
+      // Subcommand (e.g. "remember").
+      out.push(a);
+      continue;
+    }
+    if (a.startsWith('--') || a.startsWith('-')) {
+      // Flag name. If it's `--flag=value`, keep just `--flag`.
+      const eq = a.indexOf('=');
+      out.push(eq === -1 ? a : a.slice(0, eq));
+      // Skip the next token if it's the value of this flag (no leading dash).
+      if (eq === -1 && i + 1 < args.length && !String(args[i + 1]).startsWith('-')) {
+        i += 1;
+      }
+    }
+    // Bare positionals are also dropped (could be content).
+  }
+  return out.join(' ');
+}
+
+/** Compress stderr to a single-line ≤120-char snippet for log readability. */
+function snippet(s: string): string {
+  const oneLine = s.replace(/\s+/g, ' ').trim();
+  return oneLine.length > 120 ? `${oneLine.slice(0, 117)}...` : oneLine;
 }
 
 function spawnMnemon(
