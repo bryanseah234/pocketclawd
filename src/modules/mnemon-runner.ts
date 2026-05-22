@@ -37,9 +37,17 @@ const WRITE_SUBCOMMANDS = new Set([
 export interface RunMnemonOptions {
   /** Override the input string piped to stdin (currently unused; reserved for future server mode). */
   stdin?: string;
-  /** Hard timeout in ms. Defaults to 60s — mnemon ops are local SQLite, anything slower is wedged. */
+  /**
+   * Hard timeout in ms. Defaults to 15s. Steady-state mnemon ops complete in
+   * ~200ms (max ~500ms under burst), so 15s is 30× headroom; anything slower
+   * is wedged and we want to surface it fast rather than block the writer
+   * queue. Timeouts are retried like SQLITE_BUSY (see runMnemonOnce).
+   */
   timeoutMs?: number;
-  /** Maximum number of retries on SQLITE_BUSY. Default 5 (≈1.9s total backoff). */
+  /**
+   * Maximum number of retries on retryable failures (SQLITE_BUSY *or* hard
+   * timeout). Default 5 (≈1.9s total backoff).
+   */
   maxRetries?: number;
   /** Initial backoff in ms; doubled each attempt up to `maxBackoffMs`. Default 50. */
   initialBackoffMs?: number;
@@ -51,7 +59,7 @@ export interface MnemonResult {
   code: number;
   stdout: string;
   stderr: string;
-  /** True if at least one BUSY retry was performed. */
+  /** True if at least one retry (BUSY or timeout) was performed. */
   retried: boolean;
   attempts: number;
 }
@@ -113,7 +121,7 @@ async function runMnemonOnce(
   const maxRetries = opts.maxRetries ?? 5;
   const initialBackoff = opts.initialBackoffMs ?? 50;
   const maxBackoff = opts.maxBackoffMs ?? 1000;
-  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const timeoutMs = opts.timeoutMs ?? 15_000;
 
   let attempt = 0;
   let last: MnemonResult = { code: -1, stdout: '', stderr: '', retried: false, attempts: 0 };
@@ -125,20 +133,27 @@ async function runMnemonOnce(
 
     if (r.code === 0) return last;
 
-    if (!isBusy(r.stderr) || attempt > maxRetries) {
-      // Only warn on BUSY-exhaustion, not on unrelated non-zero exits.
-      if (isBusy(r.stderr)) {
+    const busy = isBusy(r.stderr);
+    const timedOut = isTimeout(r.stderr);
+    const retryable = busy || timedOut;
+
+    if (!retryable || attempt > maxRetries) {
+      // Only warn on retry-exhaustion of a known retryable cause; stay silent
+      // on unrelated non-zero exits so the runner doesn't spam logs.
+      if (retryable) {
+        const reason = busy ? 'BUSY' : 'TIMEOUT';
         // eslint-disable-next-line no-console
         console.warn(
-          `[mnemon-runner] BUSY retries exhausted attempts=${attempt} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
+          `[mnemon-runner] ${reason} retries exhausted attempts=${attempt} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
         );
       }
       return last;
     }
 
+    const reason = busy ? 'BUSY' : 'TIMEOUT';
     // eslint-disable-next-line no-console
     console.warn(
-      `[mnemon-runner] BUSY retry attempt=${attempt}/${maxRetries} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
+      `[mnemon-runner] ${reason} retry attempt=${attempt}/${maxRetries} args=${sanitizeArgs(args)} stderr=${snippet(r.stderr)}`,
     );
 
     const backoff = Math.min(initialBackoff * 2 ** (attempt - 1), maxBackoff);
@@ -234,6 +249,17 @@ function isBusy(stderr: string): boolean {
   if (!stderr) return false;
   const s = stderr.toLowerCase();
   return s.includes('database is locked') && (s.includes('(5)') || s.includes('sqlite_busy'));
+}
+
+/**
+ * Detect a hard-timeout kill from spawnMnemon. We append the literal marker
+ * `[mnemon-runner] killed after <N>ms timeout` to stderr inside the kill
+ * timer; that's the canonical signal a wedge happened. A wedge under sustained
+ * load is itself a contention symptom — same retry policy as BUSY applies.
+ */
+function isTimeout(stderr: string): boolean {
+  if (!stderr) return false;
+  return stderr.includes('[mnemon-runner] killed after ') && stderr.includes('ms timeout');
 }
 
 function sleep(ms: number): Promise<void> {

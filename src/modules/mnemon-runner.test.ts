@@ -15,7 +15,8 @@ import { EventEmitter } from 'node:events';
 type FakeStep =
   | { kind: 'busy'; stderr?: string }
   | { kind: 'ok'; stdout?: string }
-  | { kind: 'fail'; code: number; stderr?: string };
+  | { kind: 'fail'; code: number; stderr?: string }
+  | { kind: 'timeout'; timeoutMs?: number };
 
 interface FakeProc {
   args: readonly string[];
@@ -72,6 +73,16 @@ vi.mock('node:child_process', async () => {
         } else if (step.kind === 'busy') {
           proc.stderr.emit('data', Buffer.from(step.stderr ?? BUSY_STDERR));
           proc.emit('exit', 1);
+        } else if (step.kind === 'timeout') {
+          // Simulate spawnMnemon's own kill-timer path: it appends this marker
+          // to stderr and resolves with code=124. We bypass the actual kill
+          // timer (real spawn would hang) and emit the post-kill state directly.
+          const ms = step.timeoutMs ?? 15000;
+          proc.stderr.emit(
+            'data',
+            Buffer.from(`\n[mnemon-runner] killed after ${ms}ms timeout`),
+          );
+          proc.emit('exit', 124);
         } else {
           proc.stderr.emit(
             'data',
@@ -278,10 +289,70 @@ describe('runMnemon — retry telemetry', () => {
     expect(last).not.toContain('always-busy');
   });
 
-  it('does NOT warn on non-BUSY failures', async () => {
+  it('does NOT warn on non-BUSY non-timeout failures', async () => {
     plan = [{ kind: 'fail', code: 2, stderr: 'unrelated\n' }];
     await runMnemon(['remember', 'x']);
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('runMnemon — TIMEOUT retry', () => {
+  it('retries on hard timeout then succeeds', async () => {
+    plan = [{ kind: 'timeout' }, { kind: 'timeout' }, { kind: 'ok' }];
+    const r = await runMnemon(['remember', 'after-timeout'], {
+      initialBackoffMs: 1,
+      maxBackoffMs: 5,
+    });
+    expect(r.code).toBe(0);
+    expect(r.attempts).toBe(3);
+    expect(r.retried).toBe(true);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('warns once per timeout retry with TIMEOUT prefix + sanitized args', async () => {
+    plan = [{ kind: 'timeout' }, { kind: 'ok' }];
+    const r = await runMnemon(['remember', 'secret', '--store', 'main'], {
+      initialBackoffMs: 1,
+      maxBackoffMs: 5,
+    });
+    expect(r.code).toBe(0);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const msg = String(warnSpy.mock.calls[0]?.[0] ?? '');
+    expect(msg).toMatch(/^\[mnemon-runner\] TIMEOUT retry attempt=1\/\d+/);
+    expect(msg).toContain('args=remember --store');
+    expect(msg).not.toContain('secret');
+  });
+
+  it('warns once on TIMEOUT-retries-exhausted', async () => {
+    plan = [{ kind: 'timeout' }, { kind: 'timeout' }, { kind: 'timeout' }];
+    const r = await runMnemon(['remember', 'wedged'], {
+      maxRetries: 2,
+      initialBackoffMs: 1,
+      maxBackoffMs: 5,
+    });
+    expect(r.code).toBe(124);
+    // 2 retry warns + 1 exhaustion warn = 3 total.
+    expect(warnSpy).toHaveBeenCalledTimes(3);
+    const last = String(warnSpy.mock.calls.at(-1)?.[0] ?? '');
+    expect(last).toMatch(/TIMEOUT retries exhausted attempts=3/);
+    expect(last).toContain('args=remember');
+    expect(last).not.toContain('wedged');
+  });
+
+  it('mixed BUSY then TIMEOUT both retried, distinct telemetry prefixes', async () => {
+    plan = [{ kind: 'busy' }, { kind: 'timeout' }, { kind: 'ok' }];
+    const r = await runMnemon(['remember', 'mixed'], {
+      initialBackoffMs: 1,
+      maxBackoffMs: 5,
+    });
+    expect(r.code).toBe(0);
+    expect(r.attempts).toBe(3);
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    const prefixes = warnSpy.mock.calls.map((c: unknown[]) =>
+      String(c[0]).slice(0, 32),
+    );
+    expect(prefixes[0]).toContain('BUSY retry');
+    expect(prefixes[1]).toContain('TIMEOUT retry');
   });
 });
 
