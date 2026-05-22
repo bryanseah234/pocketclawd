@@ -21,7 +21,9 @@
  * the SQLITE_BUSY drop-on-the-floor bug.
  */
 
-import { spawn, type SpawnOptions } from 'node:child_process';
+import { spawn, execFileSync, type SpawnOptions } from 'node:child_process';
+import { platform } from 'node:os';
+import { resolve } from 'node:path';
 import { mnemonBin } from './paths.js';
 
 /** Subcommands that take an exclusive write lock on the SQLite DB. */
@@ -84,6 +86,7 @@ export function runMnemon(
   args: readonly string[],
   opts: RunMnemonOptions = {},
 ): Promise<MnemonResult> {
+  checkMnemonFilesystemOnce();
   const isWrite = args.length > 0 && WRITE_SUBCOMMANDS.has(String(args[0]));
   const job = () => runMnemonOnce(args, opts);
 
@@ -264,6 +267,54 @@ function isTimeout(stderr: string): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+
+// --- Filesystem sanity check ----------------------------------------------
+//
+// SQLite WAL mode requires byte-range locking that exFAT/FAT32 does NOT
+// implement. A mnemon DB on exFAT will fail with SQLITE_BUSY even from an
+// idle shell with zero contention — this is reproducible against `mnemon
+// status` from a fresh terminal. The fix is filesystem-level (move the
+// store to NTFS / ext4 / APFS); no amount of in-process serialization can
+// work around it.
+//
+// We log a loud one-time warning at first mnemon invocation if the
+// configured data dir lives on a non-NTFS volume on Windows. On macOS /
+// Linux this check is a no-op (APFS / ext4 / btrfs / xfs all work fine).
+
+let fsCheckDone = false;
+function checkMnemonFilesystemOnce(): void {
+  if (fsCheckDone) return;
+  fsCheckDone = true;
+  if (platform() !== 'win32') return;
+  const dir = process.env.MNEMON_DATA_DIR;
+  if (!dir) return;
+  try {
+    const abs = resolve(dir);
+    const drive = abs.length >= 2 && abs[1] === ':' ? abs[0].toUpperCase() : null;
+    if (!drive) return;
+    // fsutil exits 0 with text like "File System Name : NTFS".
+    // We invoke it sync because this runs once and we want the warning to
+    // land before any mnemon spawn that might wedge.
+    const out = execFileSync('fsutil', ['fsinfo', 'volumeinfo', `${drive}:\\`], {
+      encoding: 'utf8',
+      timeout: 3000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const m = /File System Name\s*:\s*(\S+)/i.exec(out);
+    const fs = m ? m[1].toUpperCase() : 'UNKNOWN';
+    if (fs !== 'NTFS' && fs !== 'REFS') {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[mnemon-runner] WARNING: MNEMON_DATA_DIR=${dir} is on ${drive}: (${fs}). ` +
+          `SQLite WAL requires NTFS/ext4/APFS — exFAT/FAT will cause SQLITE_BUSY ` +
+          `even when idle. Move the store to an NTFS volume; see docs/setup.md §4.`,
+      );
+    }
+  } catch {
+    // fsutil missing or refused — silently skip. Not worth blocking startup.
+  }
 }
 
 // Test-only: drain the write chain. Lets tests await all in-flight writes

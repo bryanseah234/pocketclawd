@@ -31,6 +31,10 @@ const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
 const SCHEDULES = [
   { name: 'cloud-ingest', cron: '0 2 * * *', handler: runCloudIngest },
   { name: 'wiki-regen', cron: '0 3 * * *', handler: runWikiRegen },
+  // mnemon gc: visibility into growth + low-importance candidate list.
+  // Suggest-mode only — does not auto-evict. Auto-eviction policy TBD;
+  // see TODO in runMnemonGc().
+  { name: 'mnemon-gc', cron: '0 4 * * *', handler: runMnemonGc },
   { name: 'morning-digest', cron: '0 7 * * *', handler: runMorningDigest },
 ] as const;
 
@@ -80,6 +84,27 @@ async function runWikiRegen(): Promise<void> {
     );
   } catch (e) {
     await audit(`CRON | wiki-regen FAIL | ${(e as Error).message}`);
+  }
+}
+
+async function runMnemonGc(): Promise<void> {
+  await audit('CRON | mnemon-gc START');
+  try {
+    // suggest-mode: returns low-importance candidates so we have visibility
+    // into store growth without auto-deleting. If/when we want enforcement,
+    // we can extend this to parse the JSON output and call `mnemon forget`
+    // for items past a retention threshold (by age, by access_count, or
+    // both). For now: log the candidate count to audit so we can size the
+    // problem before designing a policy.
+    const out = await runMnemon(['gc', '--threshold', '0.5', '--limit', '50']);
+    const lines = out.stdout.split(/\r?\n/).filter((l: string) => l.trim().length);
+    // gc output is human-readable text — count non-empty lines as a rough
+    // proxy for candidate count. Header lines are noise but bounded.
+    await audit(
+      `CRON | mnemon-gc END | output_lines=${lines.length}`,
+    );
+  } catch (e) {
+    await audit(`CRON | mnemon-gc FAIL | ${(e as Error).message}`);
   }
 }
 
@@ -150,7 +175,7 @@ async function tick(): Promise<void> {
 
 export function startPocketClawCron(): void {
   if (driverTimer) return;
-  void audit('POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, morning-digest@07:00');
+  void audit('POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, mnemon-gc@04:00, morning-digest@07:00');
   driverTimer = setInterval(() => void tick(), driverInterval);
   // Kick off file-watcher in background; failure here must not prevent
   // the cron driver from running.

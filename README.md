@@ -83,8 +83,12 @@ The `.env` env-vars that control these paths:
 
 ```env
 VAULT_PATH=X:/PocketClawData/vault
-MNEMON_DATA_DIR=X:/PocketClawData/mnemon
-MNEMON_DB_PATH=X:/PocketClawData/mnemon/data/default/mnemon.db
+# IMPORTANT: MNEMON_DATA_DIR MUST be on an NTFS / ext4 / APFS volume.
+# exFAT/FAT lacks SQLite WAL byte-range locks -> SQLITE_BUSY even when idle.
+# On Windows, keep this on the OS drive (C:) even if other PocketClaw data
+# lives on a secondary exFAT drive.
+MNEMON_DATA_DIR=C:/Users/<you>/.mnemon-pocketclaw
+MNEMON_DB_PATH=C:/Users/<you>/.mnemon-pocketclaw/data/default/mnemon.db
 WATCH_PATHS_ROOT=X:/PocketClawData/watch
 LOG_PATH=X:/PocketClawData/logs
 POCKETCLAW_SECRETS_DIR=X:/PocketClawData/secrets
@@ -342,7 +346,7 @@ Beyond the cron-based cloud sources above, PocketClaw can also archive **every c
 - Attachments are **noted but not downloaded** (just `[image]`, `[voice note]`, `[2 documents]` markers)
 - Stickers and protocol messages are skipped
 - Long bodies (>600 chars) get truncated
-- Stored locally only — `X:\PocketClawData\mnemon\data\default\mnemon.db`
+- Stored locally only — `C:\Users\<you>\.mnemon-pocketclaw\data\default\mnemon.db` (NTFS — must NOT be on exFAT)
 
 ### Privacy implications of `all` mode
 

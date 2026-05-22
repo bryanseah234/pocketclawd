@@ -59,6 +59,29 @@ Optional but recommended (cloud ingestion):
 
 ## 4. Install mnemon
 
+> ### ⚠️ CRITICAL: mnemon DB MUST be on an NTFS / ext4 / APFS volume
+>
+> **NEVER place the mnemon SQLite store on an exFAT or FAT32 drive.**
+> exFAT lacks the byte-range locking primitives SQLite WAL mode requires.
+> A mnemon store on exFAT will fail with `SQLITE_BUSY` even from an idle
+> shell with zero contention — this is a filesystem limitation, no code
+> fix can work around it. Symptoms include `mnemon status` hanging or
+> returning `open database: migrate: database is locked (5)`.
+>
+> **Set `MNEMON_DATA_DIR` to a path on a true journaling filesystem**:
+> - Windows: `C:\Users\<you>\.mnemon-pocketclaw` (NTFS) — **NOT** a
+>   secondary data drive if it's been formatted exFAT for cross-platform
+>   compatibility. Check with `Get-Volume` in PowerShell — if the target
+>   drive's `FileSystemType` is anything other than `NTFS`, pick a
+>   different drive.
+> - macOS: anywhere under `~` (APFS).
+> - Linux: anywhere under `~` (ext4 / btrfs / xfs).
+>
+> Other PocketClaw data (vault, photos, logs, ingestion staging) is
+> safe on exFAT — only the mnemon SQLite is sensitive. You can mix:
+> `VAULT_PATH=X:/PocketClawData/vault` on the data drive, but
+> `MNEMON_DATA_DIR=C:/Users/<you>/.mnemon-pocketclaw` on the OS drive.
+
 ```bash
 brew install mnemon-dev/tap/mnemon
 # or: go install github.com/mnemon-dev/mnemon@latest
@@ -106,6 +129,7 @@ If that line is present, the three cron jobs are wired. They'll fire at 02:00 / 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `pnpm install` hangs forever | exFAT drive without `node-linker=hoisted` | Confirm `.npmrc` has it |
+| `mnemon` returns `SQLITE_BUSY` from idle | mnemon DB is on exFAT/FAT | Move `MNEMON_DATA_DIR` to NTFS/ext4/APFS — see §4 warning |
 | `better-sqlite3` compile error | Node version mismatch | Use Node 22 (`nvm use 22`) |
 | Pre-push hook rejects branch | Branch not in allowed pattern | Rename to `feature/...`, `fix/...`, etc. |
 | Telegram bot silent | Wrong `TELEGRAM_ALLOWED_CHAT_ID` | Check your chat id via @userinfobot |
