@@ -268,10 +268,38 @@ export function shouldIgnore(p: string): boolean {
   return false;
 }
 
+/**
+ * Whole-drive roots (e.g. `X:/`, `C:\\`) recurse into thousands of
+ * directories on Windows, where chokidar allocates one FSEventWrap PER
+ * directory. With our previous `depth: 99` default that produced a
+ * runaway handle leak (60+ FSWatchers/sec, 7000+ in 90s). The host
+ * eventually wedges with tens of thousands of libuv handles.
+ *
+ * Defence in depth:
+ *   1. Reject bare drive roots unless `POCKETCLAW_WATCH_DRIVE_ROOT=true`.
+ *   2. Bound recursion via `POCKETCLAW_WATCH_DEPTH` (default 8 — was 99).
+ *   3. Hard cap watcher count via `POCKETCLAW_WATCH_MAX_DIRS`
+ *      (default 2000); when the underlying handle count crosses the cap
+ *      we close the watcher and log loudly. Better to lose ingestion on
+ *      one root than wedge the whole host.
+ */
+function isDriveRoot(p: string): boolean {
+  // Windows: 'X:/', 'X:\\', 'X:'  |  POSIX: '/'
+  const norm = p.replace(/\\/g, '/');
+  if (norm === '/') return true;
+  return /^[A-Za-z]:\/?$/.test(norm);
+}
+
 export async function watchDir(
   rootDir: string,
   onFile: (file: string) => Promise<void> | void,
 ): Promise<{ stop: () => Promise<void> }> {
+  if (isDriveRoot(rootDir) && process.env.POCKETCLAW_WATCH_DRIVE_ROOT !== 'true') {
+    throw new Error(
+      `[file-watcher] refusing to watch drive root ${rootDir}: chokidar opens one FSEventWrap per directory and will exhaust libuv handles on a multi-TB drive. Set POCKETCLAW_WATCH_DRIVE_ROOT=true to override, or scope WATCH_PATHS_ROOT to a specific folder.`,
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let chokidar: any;
   try {
@@ -289,17 +317,20 @@ export async function watchDir(
     return false;
   };
 
+  const depth = Number(process.env.POCKETCLAW_WATCH_DEPTH ?? 8);
+  const maxDirs = Number(process.env.POCKETCLAW_WATCH_MAX_DIRS ?? 2000);
+
   const watcher = chokidar.default.watch(rootDir, {
     ignored,
     persistent: true,
     // Default: don't ingest the initial snapshot — only react to NEW changes
     // from now on. Override with POCKETCLAW_WATCH_INITIAL=true if you want
     // to bulk-ingest the existing tree (warning: 50k+ files possible on
-    // an X:\ drive).
+    // an X:\\ drive).
     ignoreInitial: process.env.POCKETCLAW_WATCH_INITIAL !== 'true',
     awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 100 },
-    // Performance for whole-drive watches:
-    depth: 99,
+    // Bounded recursion — see file-header notes about handle leak.
+    depth: Number.isFinite(depth) && depth > 0 ? depth : 8,
     usePolling: false,
     alwaysStat: false,
   });
@@ -307,8 +338,37 @@ export async function watchDir(
   watcher.on('add', (file: string) => void onFile(file));
   watcher.on('change', (file: string) => void onFile(file));
 
+  // Hard cap: poll the watched-paths object every 5s. If it crosses
+  // the threshold close the watcher to bound libuv handle growth.
+  let dirCount = 0;
+  let capped = false;
+  const interval = setInterval(() => {
+    try {
+      const watched = watcher.getWatched?.() as Record<string, string[]> | undefined;
+      if (!watched) return;
+      dirCount = Object.keys(watched).length;
+      if (!capped && dirCount > maxDirs) {
+        capped = true;
+        // eslint-disable-next-line no-console
+        console.error(
+          `[file-watcher] CAP TRIPPED for ${rootDir}: ${dirCount} watched dirs > ${maxDirs}. ` +
+            `Closing watcher to prevent handle exhaustion. Lower scope or raise POCKETCLAW_WATCH_MAX_DIRS.`,
+        );
+        void watcher.close();
+        clearInterval(interval);
+      }
+    } catch {
+      /* ignore — best-effort monitoring */
+    }
+  }, 5000);
+  // Don't keep the event loop alive just for the monitor.
+  if (typeof interval.unref === 'function') interval.unref();
+
   return {
-    stop: () => watcher.close(),
+    stop: async () => {
+      clearInterval(interval);
+      await watcher.close();
+    },
   };
 }
 
