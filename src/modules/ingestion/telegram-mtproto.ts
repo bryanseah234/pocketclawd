@@ -4,11 +4,26 @@
  * Started at host boot if `${POCKETCLAW_SECRETS_DIR}/telegram_session.txt`
  * exists. Connects to Telegram AS THE USER (not a bot) via GramJS, then:
  *
- *   1. (Optional) Backfills recent message history from every dialog
- *      (controlled by TELEGRAM_BACKFILL_DAYS, default 0 = no backfill).
+ *   1. (Optional) Backfills message history from every dialog
+ *      (DMs + groups + channels). Mode is selected via env:
+ *        TELEGRAM_BACKFILL_MODE = off | full | since | days
+ *        - off    (default)        no backfill, realtime only
+ *        - full                    walk every dialog to its OLDEST message
+ *                                  ("from beginning of chat creation")
+ *        - since                   walk every dialog back to the absolute
+ *                                  cutoff in TELEGRAM_BACKFILL_SINCE
+ *                                  (ISO-8601, e.g. 2026-05-22T00:00:00Z)
+ *        - days                    walk back TELEGRAM_BACKFILL_DAYS days
+ *      Back-compat: if MODE is unset but TELEGRAM_BACKFILL_DAYS > 0,
+ *      behaviour is the legacy "days" window.
  *   2. Listens for new messages in real time and pipes them through
  *      `archiveChatMessage()` so they land in mnemon with the same
  *      tagging conventions as the WhatsApp adapter.
+ *
+ * Dialog scope: GramJS `iterDialogs()` returns every dialog the user has
+ * — 1:1 DMs, basic groups, supergroups, broadcast channels. We ingest
+ * messages from ALL of them; per-source filtering is the caller's job
+ * (see INGEST_CHAT_MODE).
  *
  * Like Baileys/WhatsApp, this is an OPT-IN ingestion path:
  *   - Won't start unless TELEGRAM_API_ID / TELEGRAM_API_HASH are set
@@ -94,10 +109,10 @@ export async function startTelegramMtprotoIngester(): Promise<void> {
     });
   }, new NewMessage({}));
 
-  // Optional backfill — only if user opted in via env var.
-  const backfillDays = Number(process.env.TELEGRAM_BACKFILL_DAYS ?? '0');
-  if (backfillDays > 0) {
-    void runBackfill(backfillDays).catch((err) => {
+  // Optional backfill — opt-in via env. See header comment for modes.
+  const plan = resolveBackfillPlan();
+  if (plan.mode !== 'off') {
+    void runBackfill(plan).catch((err) => {
       // eslint-disable-next-line no-console
       console.error(`[mtproto] backfill error: ${(err as Error).message}`);
     });
@@ -174,33 +189,105 @@ async function handleNewMessage(event: NewMessageEvent): Promise<void> {
   });
 }
 
+type BackfillMode = 'off' | 'full' | 'since' | 'days';
+interface BackfillPlan {
+  mode: BackfillMode;
+  /** Unix seconds; -Infinity means "no lower bound" (full history). */
+  sinceUnix: number;
+  /** Human-readable description of the cutoff for log lines. */
+  description: string;
+}
+
 /**
- * Backfill: walk every dialog, pull the last `days` worth of messages,
- * pipe each through chat-archive. Rate-limit to avoid Telegram's flood
- * controls.
+ * Resolve the backfill mode + cutoff from environment variables.
+ * Precedence:
+ *   1. TELEGRAM_BACKFILL_MODE if set
+ *   2. else legacy: TELEGRAM_BACKFILL_DAYS > 0 implies mode=days
+ *   3. else off
  */
-async function runBackfill(days: number): Promise<void> {
+function resolveBackfillPlan(): BackfillPlan {
+  const rawMode = (process.env.TELEGRAM_BACKFILL_MODE ?? '').trim().toLowerCase();
+  const legacyDays = Number(process.env.TELEGRAM_BACKFILL_DAYS ?? '0');
+
+  let mode: BackfillMode;
+  if (rawMode === 'full' || rawMode === 'since' || rawMode === 'days' || rawMode === 'off') {
+    mode = rawMode;
+  } else if (Number.isFinite(legacyDays) && legacyDays > 0) {
+    mode = 'days';
+  } else {
+    mode = 'off';
+  }
+
+  if (mode === 'off') {
+    return { mode, sinceUnix: Number.POSITIVE_INFINITY, description: '(disabled)' };
+  }
+  if (mode === 'full') {
+    return {
+      mode,
+      sinceUnix: Number.NEGATIVE_INFINITY,
+      description: 'beginning of every chat (full history)',
+    };
+  }
+  if (mode === 'since') {
+    const iso = (process.env.TELEGRAM_BACKFILL_SINCE ?? '').trim();
+    const ts = Date.parse(iso);
+    if (!Number.isFinite(ts)) {
+      // eslint-disable-next-line no-console
+      console.error(`[mtproto] TELEGRAM_BACKFILL_MODE=since but TELEGRAM_BACKFILL_SINCE is not a valid ISO date: "${iso}". Falling back to off.`);
+      return { mode: 'off', sinceUnix: Number.POSITIVE_INFINITY, description: '(invalid since; disabled)' };
+    }
+    return {
+      mode,
+      sinceUnix: Math.floor(ts / 1000),
+      description: `since ${new Date(ts).toISOString()}`,
+    };
+  }
+  // mode === 'days'
+  const days = Number.isFinite(legacyDays) && legacyDays > 0 ? legacyDays : 1;
+  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  return {
+    mode,
+    sinceUnix: Math.floor(cutoffMs / 1000),
+    description: `last ${days} day(s) (since ${new Date(cutoffMs).toISOString()})`,
+  };
+}
+
+/**
+ * Backfill: walk every dialog (DM + group + channel) and archive every
+ * message newer than the resolved cutoff. With `mode=full` there is no
+ * cutoff — we walk back to the very first message in each dialog,
+ * which is what the user means by "from the beginning of chat creation".
+ *
+ * Rate-limited to ~2 req/sec per dialog to stay well under Telegram's
+ * flood-wait threshold (~30 req/sec for MTProto user accounts).
+ */
+async function runBackfill(plan: BackfillPlan): Promise<void> {
   if (!client) return;
-  const since = Math.floor((Date.now() - days * 24 * 60 * 60 * 1000) / 1000);
   // eslint-disable-next-line no-console
-  console.log(`[mtproto] backfill starting — window ${days} day(s)`);
+  console.log(`[mtproto] backfill starting — mode=${plan.mode} cutoff=${plan.description}`);
 
   let total = 0;
-  for await (const dialog of client.iterDialogs({ limit: 200 })) {
+  let dialogCount = 0;
+  // No `limit` => GramJS pages through every dialog the user has.
+  for await (const dialog of client.iterDialogs({})) {
+    dialogCount += 1;
     try {
       const entity = dialog.entity;
       if (!entity) continue;
-      const isGroup = dialog.isChannel || dialog.isGroup;
+      const isGroup = Boolean(dialog.isChannel || dialog.isGroup);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ent = entity as any;
       const chatName: string | undefined = ent.title ?? ent.firstName ?? ent.username;
       const chatId = entity.id?.toString() ?? 'unknown';
 
       let count = 0;
-      for await (const msg of client.iterMessages(entity, { limit: 500 })) {
+      // No `limit` => walk every message in the dialog (oldest-allowed → newest).
+      // GramJS `iterMessages` yields newest-first, so we break when we drop
+      // below the cutoff. With mode=full, sinceUnix is -Infinity and we never break.
+      for await (const msg of client.iterMessages(entity, {})) {
         if (!msg) continue;
         const ts = Number(msg.date);
-        if (ts < since) break;
+        if (Number.isFinite(plan.sinceUnix) && ts < plan.sinceUnix) break;
         const text = String(msg.message ?? '');
         if (!text && !msg.media) continue;
 
@@ -217,7 +304,7 @@ async function runBackfill(days: number): Promise<void> {
           platform: 'telegram',
           chatId,
           chatName,
-          isGroup: Boolean(isGroup),
+          isGroup,
           senderId,
           senderName,
           text,
@@ -226,13 +313,17 @@ async function runBackfill(days: number): Promise<void> {
           messageId: `${chatId}:${msg.id}`,
         });
         count += 1;
+        // Gentle pace inside a dialog: ~2 req/sec.
+        if (count % 50 === 0) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
       }
       if (count > 0) {
         // eslint-disable-next-line no-console
         console.log(`[mtproto] backfill ${chatName ?? chatId}: ${count} messages`);
         total += count;
       }
-      // Gentle rate limit — Telegram tolerates ~30 req/sec but we don't need to push it.
+      // Pause between dialogs to be nice to the API.
       await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
       // eslint-disable-next-line no-console
@@ -240,7 +331,7 @@ async function runBackfill(days: number): Promise<void> {
     }
   }
   // eslint-disable-next-line no-console
-  console.log(`[mtproto] backfill complete — total ${total} messages archived`);
+  console.log(`[mtproto] backfill complete — ${total} messages across ${dialogCount} dialogs`);
 }
 
 /** Graceful shutdown for tests + restart paths. */
