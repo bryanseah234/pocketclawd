@@ -13,11 +13,11 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 
 import { CloudScheduler } from './ingestion/scheduler.js';
 import { WikiGenerator } from './wiki-generator.js';
 import { envPath } from './paths.js';
+import { runMnemon } from './mnemon-runner.js';
 import {
   watchAllConfiguredRoots,
   ProcessedRegistry,
@@ -165,15 +165,11 @@ export function startPocketClawCron(): void {
 
 /** Pipe a single Fact to mnemon via the same pattern as scheduler.ts. */
 async function mnemonRemember(text: string, tags: string[]): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const proc = spawn(
-      'mnemon',
-      ['remember', text, '--source', 'external', '--tags', tags.join(','), '--no-diff'],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    proc.on('error', () => resolve());
-    proc.on('exit', () => resolve());
-  });
+  // Errors are swallowed by design — file-watcher must not die on a single
+  // failed write. `runMnemon` already retries on SQLITE_BUSY internally.
+  await runMnemon(
+    ['remember', text, '--source', 'external', '--tags', tags.join(','), '--no-diff'],
+  ).catch(() => undefined);
 }
 
 let fileWatcherStarted = false;

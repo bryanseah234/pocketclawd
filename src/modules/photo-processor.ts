@@ -10,7 +10,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
+import { runMnemon } from './mnemon-runner.js';
 
 /** Allowed image extensions (lower-case, with dot). */
 export const ALLOWED_FORMATS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -206,20 +206,14 @@ export async function rememberInMnemon(
     .filter(Boolean)
     .join(' | ');
 
-  await runMnemon(['remember', '--photo', text, '--source', source]);
+  await runMnemonWrite(['remember', '--photo', text, '--source', source]);
 }
 
-function runMnemon(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('mnemon', args, { stdio: 'pipe' });
-    let stderr = '';
-    proc.stderr?.on('data', (chunk) => (stderr += String(chunk)));
-    proc.on('error', (err) => reject(err));
-    proc.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`mnemon exited with code ${code}: ${stderr}`));
-    });
-  });
+async function runMnemonWrite(args: string[]): Promise<void> {
+  const r = await runMnemon(args);
+  if (r.code !== 0) {
+    throw new Error(`mnemon exited with code ${r.code} (attempts=${r.attempts}): ${r.stderr}`);
+  }
 }
 
 /**

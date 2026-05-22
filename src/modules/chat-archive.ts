@@ -23,7 +23,7 @@
  * `src/channels/chat-sdk-bridge.ts` (dispatch path for Telegram + others).
  */
 
-import { spawn } from 'node:child_process';
+import { runMnemon } from './mnemon-runner.js';
 
 export type ChatPlatform = 'telegram' | 'whatsapp' | 'discord' | 'slack' | 'matrix' | 'imessage' | 'webex' | 'gchat' | 'teams';
 
@@ -61,13 +61,11 @@ export interface ChatMessageRecord {
   replyTo?: string;
 }
 
-let writeChain: Promise<void> = Promise.resolve();
-
 /**
  * Fire-and-forget chat archival. Returns immediately; the actual mnemon
- * write happens on a serialized promise chain so we never SQLITE_BUSY
- * the local mnemon DB even under message storms (e.g. Baileys's
- * post-pair history-sync flood).
+ * write goes through `runMnemon`, which serializes writes process-wide
+ * and retries on SQLITE_BUSY so we never silently drop chat archives
+ * under message storms (e.g. Baileys's post-pair history-sync flood).
  *
  * Errors are logged to stderr but never thrown. Channel adapters MUST NOT
  * await this — message routing has its own latency budget.
@@ -87,11 +85,10 @@ export function archiveChatMessage(record: ChatMessageRecord): void {
   // Skip if the only content is whitespace
   if (record.text && record.text.trim().length < 2 && !record.attachments) return;
 
-  const next = writeChain.then(
-    () => writeMnemon(record),
-    () => writeMnemon(record),
-  );
-  writeChain = next.catch(() => {});
+  // Fire-and-forget — `runMnemon` serializes writes internally.
+  void writeMnemon(record).catch((err) => {
+    console.error(`[chat-ingest] unexpected: ${(err as Error).message}`);
+  });
 }
 
 function isOnlySticker(att: NonNullable<ChatMessageRecord['attachments']>): boolean {
@@ -99,44 +96,30 @@ function isOnlySticker(att: NonNullable<ChatMessageRecord['attachments']>): bool
   return total === 0 && (att.sticker ?? 0) > 0;
 }
 
-function writeMnemon(record: ChatMessageRecord): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const content = formatContent(record);
-    const tags = [
-      'pocketclaw',
-      `src:${record.platform}-chat`,
-      `chat:${truncateForTag(record.chatId)}`,
-      record.isGroup ? 'kind:group' : 'kind:dm',
-      record.fromSelf ? 'from:self' : 'from:other',
-    ];
-    if (record.senderId) tags.push(`sender:${truncateForTag(record.senderId)}`);
+async function writeMnemon(record: ChatMessageRecord): Promise<void> {
+  const content = formatContent(record);
+  const tags = [
+    'pocketclaw',
+    `src:${record.platform}-chat`,
+    `chat:${truncateForTag(record.chatId)}`,
+    record.isGroup ? 'kind:group' : 'kind:dm',
+    record.fromSelf ? 'from:self' : 'from:other',
+  ];
+  if (record.senderId) tags.push(`sender:${truncateForTag(record.senderId)}`);
 
-    const args = [
-      'remember',
-      content,
-      '--source',
-      'external',
-      '--tags',
-      tags.join(','),
-      '--no-diff', // chat is high-volume; skip dedup for speed
-    ];
-
-    const proc = spawn('mnemon', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
-    proc.stderr?.on('data', (chunk) => (stderr += String(chunk)));
-    proc.on('error', (err) => {
-      // eslint-disable-next-line no-console
-      console.error(`[chat-ingest] spawn error: ${err.message}`);
-      resolve();
-    });
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        // eslint-disable-next-line no-console
-        console.error(`[chat-ingest] mnemon remember exit ${code}: ${stderr.slice(0, 200)}`);
-      }
-      resolve();
-    });
-  });
+  const r = await runMnemon([
+    'remember',
+    content,
+    '--source',
+    'external',
+    '--tags',
+    tags.join(','),
+    '--no-diff', // chat is high-volume; skip dedup for speed
+  ]);
+  if (r.code !== 0) {
+    // eslint-disable-next-line no-console
+    console.error(`[chat-ingest] mnemon remember exit ${r.code} (attempts=${r.attempts}): ${r.stderr.slice(0, 200)}`);
+  }
 }
 
 function formatContent(record: ChatMessageRecord): string {

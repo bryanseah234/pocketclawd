@@ -19,8 +19,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import { envPath } from './paths.js';
+import { runMnemon } from './mnemon-runner.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 const WIKI_DIR = path.join(VAULT_PATH, 'wiki');
@@ -98,54 +98,50 @@ export function sanitizeEntityFilename(name: string): string {
  * Run `mnemon recall` and return its raw stdout (intended for inclusion in
  * the wiki prompt as `Memory context`).
  */
-export function recallEntity(entityName: string, depth = 3): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('mnemon', [
-      'recall',
-      '--query',
-      entityName,
-      '--depth',
-      String(depth),
-      '--format',
-      'json',
-    ], { stdio: 'pipe' });
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (c) => (stdout += String(c)));
-    proc.stderr?.on('data', (c) => (stderr += String(c)));
-    proc.on('error', (err) => reject(err));
-    proc.on('exit', (code) => {
-      if (code === 0) resolve(stdout);
-      else reject(new Error(`mnemon recall failed (${code}): ${stderr}`));
-    });
-  });
+export async function recallEntity(entityName: string, depth = 3): Promise<string> {
+  const r = await runMnemon([
+    'recall',
+    '--query',
+    entityName,
+    '--depth',
+    String(depth),
+    '--format',
+    'json',
+  ]);
+  if (r.code !== 0) {
+    throw new Error(`mnemon recall failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
+  }
+  return r.stdout;
 }
 
-/** List entities currently known to mnemon (default: top 100). */
-export function listEntities(limit = 100): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('mnemon', [
-      'list',
-      '--type',
-      'entity',
-      '--limit',
-      String(limit),
-      '--format',
-      'plain',
-    ], { stdio: 'pipe' });
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (c) => (stdout += String(c)));
-    proc.stderr?.on('data', (c) => (stderr += String(c)));
-    proc.on('error', (err) => reject(err));
-    proc.on('exit', (code) => {
-      if (code === 0) {
-        resolve(stdout.split('\n').map((s) => s.trim()).filter(Boolean));
-      } else {
-        reject(new Error(`mnemon list failed (${code}): ${stderr}`));
-      }
-    });
-  });
+/**
+ * List entities currently known to mnemon (default: top 100).
+ *
+ * mnemon has no `list` subcommand; the canonical entity inventory comes from
+ * `mnemon status` (JSON), which returns a `top_entities` array sorted by
+ * insight count. We slice to `limit` and strip noise entries that aren't real
+ * topics (single-letter tokens, common process names, log-level words).
+ */
+export async function listEntities(limit = 100): Promise<string[]> {
+  const r = await runMnemon(['status']);
+  if (r.code !== 0) {
+    throw new Error(`mnemon status failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
+  }
+  try {
+    const parsed = JSON.parse(r.stdout) as {
+      top_entities?: Array<{ entity: string; count: number }>;
+    };
+    const NOISE = new Set([
+      'ID', 'OK', 'INFO', 'ERROR', 'DEBUG', 'WARN', 'WARNING',
+      'DB', 'API', 'PATH', 'DM', 'WSL',
+    ]);
+    return (parsed.top_entities ?? [])
+      .map((e) => e.entity)
+      .filter((e) => e && e.length > 1 && !NOISE.has(e) && !e.endsWith('.exe'))
+      .slice(0, limit);
+  } catch (e) {
+    throw new Error(`mnemon status parse: ${(e as Error).message}`);
+  }
 }
 
 /**

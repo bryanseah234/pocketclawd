@@ -11,7 +11,6 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 import {
   Document,
   Packer,
@@ -21,6 +20,7 @@ import {
   AlignmentType,
 } from 'docx';
 import { envPath } from './paths.js';
+import { runMnemon } from './mnemon-runner.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 
@@ -48,30 +48,18 @@ export interface MinutesResult {
 export async function gatherContextFromMnemon(
   meetingTitle: string,
 ): Promise<{ raw: string[]; errors: string[] }> {
-  return new Promise((resolve) => {
-    const proc = spawn(
-      'mnemon',
-      ['recall', meetingTitle, '--limit', '50'],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (d) => (stdout += String(d)));
-    proc.stderr.on('data', (d) => (stderr += String(d)));
-    proc.on('exit', () => {
-      try {
-        const parsed = JSON.parse(stdout) as {
-          results?: Array<{ insight?: { content?: string } }>;
-        };
-        const raw = (parsed.results ?? [])
-          .map((r) => r.insight?.content ?? '')
-          .filter(Boolean);
-        resolve({ raw, errors: stderr ? [stderr.trim()] : [] });
-      } catch (e) {
-        resolve({ raw: [], errors: [`mnemon recall parse: ${(e as Error).message}`] });
-      }
-    });
-  });
+  const r = await runMnemon(['recall', meetingTitle, '--limit', '50']);
+  try {
+    const parsed = JSON.parse(r.stdout) as {
+      results?: Array<{ insight?: { content?: string } }>;
+    };
+    const raw = (parsed.results ?? [])
+      .map((x) => x.insight?.content ?? '')
+      .filter(Boolean);
+    return { raw, errors: r.stderr ? [r.stderr.trim()] : [] };
+  } catch (e) {
+    return { raw: [], errors: [`mnemon recall parse: ${(e as Error).message}`] };
+  }
 }
 
 function safeFileSegment(input: string): string {

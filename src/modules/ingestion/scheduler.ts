@@ -8,13 +8,13 @@
  * via a `mnemon remember` call per fact).
  */
 
-import { spawn } from 'node:child_process';
 import { googleIngesters } from './google.js';
 import { microsoftIngesters } from './microsoft.js';
 import { appleIngesters } from './apple.js';
 import { githubIngesters } from './github.js';
 import { slackIngesters } from './slack.js';
 import type { CloudIngester, Fact, IngestResult } from './types.js';
+import { runMnemon } from '../mnemon-runner.js';
 
 export interface IngestSummary {
   startedAt: Date;
@@ -119,44 +119,24 @@ async function runOne(
  * specific ingester source (e.g. `gmail`, `outlook-mail`) so it can still
  * be queried later via `mnemon recall --tag gmail`.
  *
- * Mnemon writes to a single SQLite file, so concurrent CLI invocations
- * (one per parallel ingester) hit SQLITE_BUSY. We serialize all writes
- * through a process-wide promise chain.
+ * Mnemon writes to a single SQLite file. `runMnemon` (mnemon-runner.ts)
+ * serializes writes process-wide and retries on SQLITE_BUSY, so callers
+ * here just await it directly.
  */
-let mnemonWriteChain: Promise<void> = Promise.resolve();
-
 async function defaultOnFact(fact: Fact): Promise<void> {
-  const next = mnemonWriteChain.then(
-    () => runMnemonRemember(fact),
-    () => runMnemonRemember(fact),
-  );
-  // Swallow rejections on the chain so one failure doesn't poison the rest;
-  // the caller still sees the rejection through `next`.
-  mnemonWriteChain = next.catch(() => {});
-  return next;
-}
-
-function runMnemonRemember(fact: Fact): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const tags = [`pocketclaw`, `src:${fact.source}`];
-    if (fact.sourceId) tags.push(`id:${truncateForTag(fact.sourceId)}`);
-    const args = [
-      'remember',
-      fact.text,
-      '--source',
-      'external',
-      '--tags',
-      tags.join(','),
-    ];
-    const proc = spawn('mnemon', args, { stdio: 'pipe' });
-    let stderr = '';
-    proc.stderr?.on('data', (chunk) => (stderr += String(chunk)));
-    proc.on('error', (err) => reject(err));
-    proc.on('exit', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`mnemon remember failed (${code}): ${stderr}`));
-    });
-  });
+  const tags = [`pocketclaw`, `src:${fact.source}`];
+  if (fact.sourceId) tags.push(`id:${truncateForTag(fact.sourceId)}`);
+  const r = await runMnemon([
+    'remember',
+    fact.text,
+    '--source',
+    'external',
+    '--tags',
+    tags.join(','),
+  ]);
+  if (r.code !== 0) {
+    throw new Error(`mnemon remember failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
+  }
 }
 
 /** Tags can't contain spaces or commas — keep id readable but safe. */

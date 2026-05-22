@@ -12,10 +12,10 @@
 import * as fs from 'node:fs/promises';
 import * as fsSync from 'node:fs';
 import * as path from 'node:path';
-import { spawn } from 'node:child_process';
 // pdfkit's published types are CommonJS; import as default.
 import PDFDocument from 'pdfkit';
 import { envPath } from './paths.js';
+import { runMnemon } from './mnemon-runner.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 
@@ -69,44 +69,32 @@ export async function gatherLocalSources(
   topic: string,
   limit = 80,
 ): Promise<{ sources: ResearchSource[]; errors: string[] }> {
-  return new Promise((resolve) => {
-    const proc = spawn(
-      'mnemon',
-      ['recall', topic, '--limit', String(limit)],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (d) => (stdout += String(d)));
-    proc.stderr.on('data', (d) => (stderr += String(d)));
-    proc.on('exit', () => {
-      try {
-        const parsed = JSON.parse(stdout) as {
-          results?: Array<{
-            insight?: {
-              id?: string;
-              content?: string;
-              tags?: string[];
-              created_at?: string;
-            };
-          }>;
+  const r = await runMnemon(['recall', topic, '--limit', String(limit)]);
+  try {
+    const parsed = JSON.parse(r.stdout) as {
+      results?: Array<{
+        insight?: {
+          id?: string;
+          content?: string;
+          tags?: string[];
+          created_at?: string;
         };
-        const sources: ResearchSource[] = (parsed.results ?? []).map((r) => {
-          const ins = r.insight ?? {};
-          const tag = (ins.tags ?? []).find((t) => t.startsWith('src:')) ?? 'src:local';
-          return {
-            source: tag.replace(/^src:/, ''),
-            content: String(ins.content ?? ''),
-            id: String(ins.id ?? ''),
-            occurredAt: ins.created_at,
-          };
-        });
-        resolve({ sources, errors: stderr ? [stderr.trim()] : [] });
-      } catch (e) {
-        resolve({ sources: [], errors: [`mnemon recall parse: ${(e as Error).message}`] });
-      }
+      }>;
+    };
+    const sources: ResearchSource[] = (parsed.results ?? []).map((row) => {
+      const ins = row.insight ?? {};
+      const tag = (ins.tags ?? []).find((t) => t.startsWith('src:')) ?? 'src:local';
+      return {
+        source: tag.replace(/^src:/, ''),
+        content: String(ins.content ?? ''),
+        id: String(ins.id ?? ''),
+        occurredAt: ins.created_at,
+      };
     });
-  });
+    return { sources, errors: r.stderr ? [r.stderr.trim()] : [] };
+  } catch (e) {
+    return { sources: [], errors: [`mnemon recall parse: ${(e as Error).message}`] };
+  }
 }
 
 export class ResearchReportGenerator {
