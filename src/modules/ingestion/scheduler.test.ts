@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { CloudScheduler } from './scheduler.js';
-import type { CloudIngester } from './types.js';
+import type { CloudIngester, Fact } from './types.js';
 
 class HappyIngester implements CloudIngester {
   readonly source: string;
@@ -25,7 +25,7 @@ class HappyIngester implements CloudIngester {
 
 class FailingIngester implements CloudIngester {
   readonly source = 'broken-source';
-  async fetch() {
+  async fetch(): Promise<{ facts: Fact[]; errors: string[] }> {
     throw new Error('intentional test failure');
   }
 }
