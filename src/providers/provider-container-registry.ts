@@ -38,7 +38,7 @@ export interface ProviderContainerContribution {
   env?: Record<string, string>;
 }
 
-export type ProviderContainerConfigFn = (ctx: ProviderContainerContext) => ProviderContainerContribution;
+export type ProviderContainerConfigFn = (ctx: ProviderContainerContext) => ProviderContainerContribution | Promise<ProviderContainerContribution>;
 
 const registry = new Map<string, ProviderContainerConfigFn>();
 
