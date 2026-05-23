@@ -443,6 +443,35 @@ The big consumers, in order:
 
 To reclaim space: delete unwanted vault files manually (won't affect mnemon), or `pnpm svc:uninstall:purge` for a full reset.
 
+### WhatsApp / Telegram messages arrive but get no reply
+
+If you can see your inbound message in the logs but the bot never replies, walk the 7-link chain:
+
+```powershell
+Get-Content X:\PocketClawData\logs\service.stdout.log -Tail 80 | Select-String 'Inbound|Message routed|MESSAGE DROPPED|delivered'
+```
+
+Healthy chain:
+
+```
+Inbound <Channel> message ... fromMe=...
+Message routed sessionId=... agentGroup=ag-... wake=true
+Message delivered id=... platformMsgId=...
+```
+
+If a link is missing, that's where to look. Common causes:
+
+- **No `Inbound` line at all** — adapter early-return guard ate it. Most often the WhatsApp `fromMe` echo-loop guard dropping your own messages because the bot shares your phone number. Fix by setting `WHATSAPP_OWNER_ALIASES=@pocketclaw,@pocketclaw234` in `.env` (already set in the default install) and prefixing your messages with `@pocketclaw`.
+- **`MESSAGE DROPPED — unknown sender (strict policy) accessReason="not_member"`** — your platform identity (e.g. `whatsapp:6592348112@s.whatsapp.net`) isn't a member or owner of the agent group. Telegram-you and WhatsApp-you are *separate* user rows; granting owner on one does NOT carry to the other. Fix by inserting a `user_roles` row for the new identity (see the `chat-platform-silent-drop-debugging` Hermes skill for the exact SQL).
+- **`ENOENT mkdir ...inbox\<chatId>:<msgId>:...`** — colons in path components on NTFS are interpreted as Alternate Data Stream separators. Already fixed by `src/attachment-safety.ts` `sanitizeForFilesystem()` — if you see this, you're on a stale build, run `pnpm run build` and restart.
+- **`Message delivered` line is present but WhatsApp shows "Waiting for this message. This may take a while."** — Signal-protocol session-key desync between the bot's Baileys session and your phone. Not a bot bug. Open WhatsApp → Settings → Linked Devices to force a key refresh, or have anyone else send a message in the same group to trigger a sender-key re-fetch. Last resort: log out the bot's Baileys session and re-pair.
+
+Full debugging walkthrough including diagnostic tracers and exact patch sites: see the `chat-platform-silent-drop-debugging` skill in `~/.hermes/skills/software-development/`.
+
+### Service won't stop (Scheduled Task)
+
+The current host runs as a Windows Scheduled Task (`PocketClaw`), not NSSM. The old `nssm stop pocketclaw` command does nothing — use `.\scripts\service\Restart-PocketClaw-v2.ps1` (auto-elevates, anchors on `Get-NetTCPConnection -LocalPort 3000` + `taskkill /F /T /PID`). Plain `schtasks /End /TN PocketClaw` does NOT kill the detached child node.exe holding port 3000 — always use the v2 restart script.
+
 Full troubleshooting: [docs/SERVICE.md#troubleshooting](docs/SERVICE.md#troubleshooting).
 
 ---

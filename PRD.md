@@ -2934,3 +2934,58 @@ Already documented in §17.7 above. Important addendum: real-time hooks live in 
 | `WATCH_PATHS_ROOT` | No | `~/.pocketclaw/watch` | Comma-separated list of directories to watch |
 | `POCKETCLAW_SECRETS_DIR` | No | `~/.pocketclaw/secrets` | Override OAuth tokens + session files dir |
 | `POCKETCLAW_PROCESSED_DB` | No | `~/.pocketclaw/processed.db` | Override file-watcher SHA256 dedup DB |
+
+### 18.10 WhatsApp single-number summon + cross-platform identity grants
+
+**Why:** PRD §6 / §7 modelled WhatsApp as a separate-number bot (`ASSISTANT_HAS_OWN_NUMBER=true` implied). Real-world install uses the user's existing number (`6592348112`) so PocketClaw IS the user on WhatsApp. This collides with two NanoClaw v2 invariants:
+
+1. **The `fromMe` echo-loop guard in `src/channels/whatsapp.ts`** drops every message whose sender JID matches the bot's paired account — a deliberate safeguard against infinite reply loops. With a shared number, that means every message *you* type also gets dropped.
+2. **The router's `canAccessAgentGroup` strict-policy gate** treats `whatsapp:<phone>@s.whatsapp.net` and `telegram:<id>` as completely separate user rows. Owner role on Telegram does NOT carry over to WhatsApp.
+
+**What's there:**
+
+- `WHATSAPP_OWNER_ALIASES` env var (comma-separated, default `@pocketclaw`). The fromMe guard at `src/channels/whatsapp.ts:~L678` now allows messages where `fromMe=true` AND the trimmed-lowercased content starts with one of these aliases AND `msg.key.id` is not in `sentMessageCache` (excluding actual bot echoes). Echo-safe because outbound bot replies in single-number mode are prefixed `${ASSISTANT_NAME}:` (e.g. `PocketClaw:`), never `@pocketclaw`.
+- `engage_pattern` in `messaging_group_agents` is a `startsWith` substring check, so `@pocketclaw` matches both `@pocketclaw ping` and `@pocketclaw234 hello` — alias support without separate wiring rows.
+- Cross-platform identity must be granted explicitly. For each new platform identity that should have owner access, insert into `user_roles`:
+  ```sql
+  INSERT INTO user_roles (user_id, role, agent_group_id, granted_by, granted_at)
+  VALUES ('whatsapp:<phone>@s.whatsapp.net', 'owner', NULL, '<existing_owner_user_id>', '<iso_ts>');
+  ```
+  `isOwner` queries the DB live (no in-memory cache), so the grant takes effect without restarting the host.
+
+**Permanent observability:** added `Inbound WhatsApp message` INFO log at adapter entry in `src/channels/whatsapp.ts`, symmetric with the existing `Inbound DM` / `Inbound group message` lines in `src/channels/chat-sdk-bridge.ts`. Logs `chatJid`, `sender`, `senderName`, `fromMe`, `textLen`, `attachments`, `isMention` — irreplaceable for next-time triage.
+
+### 18.11 Filesystem-safe message IDs (NTFS Alternate Data Stream gotcha)
+
+**Why:** Router builds messageIds as `${chatId}:${msgId}:${agentGroupId}`. The host (Windows native node, NOT Docker) writes per-session attachment inboxes at `data\v2-sessions\<ag>\<sess>\inbox\<messageId>\photo.jpg` BEFORE Docker mounts the path into the agent container. On NTFS, `CreateDirectoryW("foo:bar")` interprets `bar` as an Alternate Data Stream and refuses with `ENOENT`. Docker would have hit the same thing on the bind-mount, but never gets that far because the host fails first.
+
+This is a recurring source of confusion for new contributors who think "everything is in Docker so filesystem rules don't matter" — they do, because the host is the one writer of inbound.db and inbox/.
+
+**What's there:**
+
+- `src/attachment-safety.ts` exports `sanitizeForFilesystem(s)` mapping `[<>:"/\\|?*\x00-\x1F]` → `-`. Filesystem-agnostic so it's safe on NTFS, exFAT, ReFS, ext4, APFS.
+- `src/session-manager.ts:extractAttachmentFiles()` calls it on both `inboxDir` (the `<messageId>` path component) and `att.localPath` (the per-attachment filename).
+- `src/channels/chat-sdk-bridge.ts` wraps `att.fetchData()` in `Promise.race` with a 30-second timeout, with `Attachment fetch start/ok/timeout` log markers. Without this, a slow Telegram CDN could wedge the inbound pipeline indefinitely (Node 22 `fetch` has no default timeout).
+
+### 18.12 Run-as principal: Scheduled Task with S4U token, not SYSTEM
+
+**Why:** PRD §18.1 documented NSSM hosting. We migrated to a Windows Scheduled Task because:
+
+- NSSM runs as `LocalSystem` by default. SYSTEM cannot reach Docker Desktop's user-owned named pipe (`\\.\pipe\docker_engine_<user>`), giving fatal `spawnSync ETIMEDOUT` when the host tries to spawn a per-session container.
+- A Scheduled Task with `Principal=PRAWN-E14\bryan` and `LogonType=S4U` runs the host as the user without storing their password. Docker Desktop pipe is reachable, container spawn works.
+
+**What's there:**
+
+- `scripts/service/install-task.ps1` — `New-ScheduledTask` with `RunLevel=Highest`, `S4U` logon, restart-on-fail, automatic boot trigger.
+- `scripts/service/Restart-PocketClaw-v2.ps1` — restart anchor uses `Get-NetTCPConnection -LocalPort 3000 | Select-Object -ExpandProperty OwningProcess` THEN `taskkill /F /T /PID <pid>`. Plain `schtasks /End` does NOT kill the detached child node.exe; the script enforces both.
+- `data/circuit-breaker.json` — auto-disable counter; deleted by the restart script before each `/Run` to avoid "attempt 2/3/4 → 30/120/300/900s backoff" lockout.
+
+**Gotcha:** S4U token ≠ interactive token. `Stop-Process -Id <pid>` from a non-elevated PowerShell window returns "Access is denied" when targeting the service node.exe, EVEN when the interactive user matches `PRAWN-E14\bryan`. Kill operations must come from an elevated shell (Win+X → Terminal Admin) or the restart script (which self-elevates via UAC). File ops on the breaker file (delete, etc.) work non-elevated.
+
+### 18.13 Chat-platform silent-drop debugging skill
+
+**Why:** Spent ~half a day across two sessions diagnosing why WhatsApp messages didn't reply, walking through 7 sequential silent-drop sites between Baileys recv and reply send. Captured as a Hermes skill so the next platform integration doesn't pay the same tax.
+
+**Where:** `~/.hermes/skills/software-development/chat-platform-silent-drop-debugging/SKILL.md` (off-repo, lives in user's Hermes skill library).
+
+**What it covers:** the 7 drop sites in order — adapter entry, adapter early-return guards, fromMe echo-loop guard, router strict sender-policy gate, messageId-colon NTFS ADS crash, attachment fetch hang, WhatsApp client-side decryption desync. Each with diagnostic tracer pattern, exact fix site, and verification chain (the 5-line happy-path log signature). Also documents the non-obvious `outbound.db` schema (`id, seq, in_reply_to, timestamp, deliver_after, recurrence, kind, platform_id, channel_type, thread_id, content` — NOT `destination_channel_id` like generic NanoClaw docs imply).
