@@ -1,6 +1,6 @@
 # PocketClaw — Service Installer (Windows Scheduled Task)
 #
-# Registers PocketClaw host as a SYSTEM-context Scheduled Task that:
+# Registers PocketClaw host as a Scheduled Task running as the interactive user (S4U) that:
 #   - starts on boot (no logon required, same as NSSM service)
 #   - restarts every 1 min if the process exits, indefinitely
 #   - logs stdout/stderr to $LOG_PATH (read from .env, default
@@ -146,7 +146,7 @@ Write-Host "  Wrapper:        $wrapperBat"
 Write-Host "  Working dir:    $repoRoot"
 Write-Host "  Stdout log:     $stdoutLog"
 Write-Host "  Stderr log:     $stderrLog"
-Write-Host "  Run-as:         NT AUTHORITY\SYSTEM (no logon required)"
+Write-Host "  Run-as:         $env:USERDOMAIN\$env:USERNAME (S4U, no password stored)"
 Write-Host "  Trigger:        At system startup"
 Write-Host "  Restart:        every 1 minute if task exits, unlimited count"
 Write-Host ""
@@ -172,7 +172,7 @@ Write-Step "Registering Scheduled Task '$Name'..."
 
 $action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$wrapperBat`"" -WorkingDirectory $repoRoot
 $trigger = New-ScheduledTaskTrigger -AtStartup
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
 
 # Settings: keep retrying forever, restart on failure.
 # IMPORTANT: do NOT put inline ``# comments`` after a backtick line-continuation
