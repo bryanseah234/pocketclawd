@@ -3,7 +3,7 @@
  * Spawns agent containers with session folder + agent group folder mounts.
  * The container runs the v2 agent-runner which polls the session DB.
  */
-import { ChildProcess, execSync, spawn } from 'child_process';
+import { ChildProcess, execSync, spawn, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -503,10 +503,49 @@ async function buildContainerArgs(
   return args;
 }
 
+/**
+ * Strict charset for apt + npm package names. Both ecosystems are far
+ * more permissive than this in theory, but in practice every legitimate
+ * package name fits this character set. We deliberately reject `;`, `&`,
+ * `|`, `` ` ``, `$`, spaces, quotes, backslashes, and other shell
+ * metachars that would let a maliciously crafted install_packages
+ * approval payload break out of the Dockerfile RUN line into arbitrary
+ * shell.
+ *
+ * Allowed:
+ *   apt: lowercase letters, digits, `+`, `-`, `.`, `:` (multi-arch like
+ *        `lib6:i386`), and `/` — no shell metachars.
+ *   npm: scoped names `@scope/name`, plus `.` and `-` and `_`. Versions
+ *        attached as `name@version` are also accepted (the `@` is fine —
+ *        it has no meaning to /bin/sh).
+ *
+ * If a real package name ever fails this gate, broaden the regex —
+ * never disable it.
+ */
+const APT_PACKAGE_NAME = /^[a-zA-Z0-9._+:\/-]+$/;
+const NPM_PACKAGE_NAME = /^@?[a-zA-Z0-9._\/-]+(@[a-zA-Z0-9._-]+)?$/;
+// Agent group ids are UUIDs in production but defensive whitelist so a
+// custom id can never carry shell metachars into the image tag or
+// Dockerfile filename.
+const AGENT_GROUP_ID_SAFE = /^[a-zA-Z0-9._-]+$/;
+
+function assertSafePackageName(re: RegExp, kind: string, name: string): void {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 200 || !re.test(name)) {
+    throw new Error(`Refusing to install ${kind} package: invalid name ${JSON.stringify(name)}`);
+  }
+}
+
 /** Build a per-agent-group Docker image with custom packages. */
 export async function buildAgentGroupImage(agentGroupId: string): Promise<void> {
   const agentGroup = getAgentGroup(agentGroupId);
   if (!agentGroup) throw new Error('Agent group not found');
+
+  // Defense-in-depth — agentGroupId is interpolated into a filesystem
+  // path AND a docker image tag below. UUIDs are safe; this rejects any
+  // future custom id with shell metachars.
+  if (!AGENT_GROUP_ID_SAFE.test(agentGroup.id)) {
+    throw new Error(`Refusing to build image: unsafe agent group id ${JSON.stringify(agentGroup.id)}`);
+  }
 
   const configRow = getContainerConfig(agentGroup.id);
   if (!configRow) throw new Error('Container config not found');
@@ -515,6 +554,14 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
   if (aptPackages.length === 0 && npmPackages.length === 0) {
     throw new Error('No packages to install. Use install_packages first.');
   }
+
+  // Validate every package name BEFORE composing any shell. The
+  // install_packages approval payload originates from an LLM, then is
+  // confirmed by an admin — but the admin sees the names rendered in a
+  // chat card and may not visually parse `; rm -rf /` hidden in a long
+  // list. The hard charset gate is the load-bearing protection.
+  for (const pkg of aptPackages) assertSafePackageName(APT_PACKAGE_NAME, 'apt', pkg);
+  for (const pkg of npmPackages) assertSafePackageName(NPM_PACKAGE_NAME, 'npm', pkg);
 
   let dockerfile = `FROM ${CONTAINER_IMAGE}\nUSER root\n`;
   if (aptPackages.length > 0) {
@@ -534,15 +581,24 @@ export async function buildAgentGroupImage(agentGroupId: string): Promise<void> 
 
   log.info('Building per-agent-group image', { agentGroupId, imageTag, apt: aptPackages, npm: npmPackages });
 
-  // Write Dockerfile to temp file and build
+  // Write Dockerfile to temp file and build. Use spawnSync(argv) instead
+  // of execSync(shell-string) so the runtime/tag/path are NOT subject
+  // to shell parsing — defense-in-depth on top of the charset gates
+  // above.
   const tmpDockerfile = path.join(DATA_DIR, `Dockerfile.${agentGroupId}`);
   fs.writeFileSync(tmpDockerfile, dockerfile);
   try {
-    execSync(`${CONTAINER_RUNTIME_BIN} build -t ${imageTag} -f ${tmpDockerfile} .`, {
-      cwd: DATA_DIR,
-      stdio: 'pipe',
-      timeout: 900_000,
-    });
+    const result = spawnSync(
+      CONTAINER_RUNTIME_BIN,
+      ['build', '-t', imageTag, '-f', tmpDockerfile, '.'],
+      { cwd: DATA_DIR, stdio: 'pipe', timeout: 900_000 },
+    );
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+      const stderr = result.stderr?.toString() ?? '';
+      const stdout = result.stdout?.toString() ?? '';
+      throw new Error(`Image build failed (exit ${result.status}): ${stderr || stdout}`);
+    }
   } finally {
     fs.unlinkSync(tmpDockerfile);
   }
