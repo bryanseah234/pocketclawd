@@ -40,6 +40,17 @@ import type { GroupMetadata, WAMessageKey, WAMessage, WASocket } from '@whiskeys
 
 import { isSafeAttachmentName } from '../attachment-safety.js';
 import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, DATA_DIR } from '../config.js';
+
+/**
+ * Aliases the user can prefix when summoning the bot from their own number.
+ * Comma-separated, case-insensitive, matched at start of trimmed message content.
+ * Default '@pocketclaw' — extend via WHATSAPP_OWNER_ALIASES env var.
+ * Only meaningful when ASSISTANT_HAS_OWN_NUMBER=false (single-number setup).
+ */
+const OWNER_ALIASES: string[] = (process.env.WHATSAPP_OWNER_ALIASES || '@pocketclaw')
+  .split(',')
+  .map((a) => a.trim().toLowerCase())
+  .filter((a) => a.length > 0);
 import { readEnvFile } from '../env.js';
 import { log } from '../log.js';
 import { registerChannelAdapter } from './channel-registry.js';
@@ -675,9 +686,21 @@ registerChannelAdapter('whatsapp', {
             // user-typed messages. For all other chats, the blanket fromMe
             // filter is correct since the user's phone messages shouldn't wake
             // the agent in third-party conversations.
+            //
+            // Single-number override: when the bot shares the user's WA number,
+            // the user can still summon the bot from their own phone by prefixing
+            // a message with one of WHATSAPP_OWNER_ALIASES (comma-separated, default
+            // '@pocketclaw'). The sentMessageCache check below still excludes the
+            // bot's own outbound echoes; bot replies are prefixed `${ASSISTANT_NAME}: `
+            // not `@pocketclaw`, so they cannot match the alias gate.
             if (fromMe) {
               const isSelfChat = botPhoneJid && chatJid === botPhoneJid;
-              if (!isSelfChat) continue;
+              const trimmed = content.trim().toLowerCase();
+              const isOwnerAliasMention = OWNER_ALIASES.some((alias) =>
+                trimmed.startsWith(alias)
+              );
+              const allow = isSelfChat || isOwnerAliasMention;
+              if (!allow) continue;
               if (sentMessageCache.has(msg.key.id || '')) continue;
             }
 
@@ -732,6 +755,16 @@ registerChannelAdapter('whatsapp', {
             };
 
             // WhatsApp doesn't use threads — threadId is null
+            log.info('Inbound WhatsApp message', {
+              chatJid,
+              isGroup,
+              isMention: inbound.isMention,
+              sender,
+              senderName,
+              attachments: attachments.length,
+              textLen: content.length,
+              fromMe,
+            });
             setupConfig.onInbound(chatJid, null, inbound);
           } catch (err) {
             log.error('Error processing incoming WhatsApp message', {

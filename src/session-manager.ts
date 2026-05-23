@@ -15,7 +15,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { deriveAttachmentName } from './attachment-naming.js';
-import { isSafeAttachmentName } from './attachment-safety.js';
+import { isSafeAttachmentName, sanitizeForFilesystem } from './attachment-safety.js';
 import type { OutboundFile } from './channels/adapter.js';
 import { DATA_DIR } from './config.js';
 import { getMessagingGroup } from './db/messaging-groups.js';
@@ -288,6 +288,13 @@ function extractAttachmentFiles(
     return contentStr;
   }
 
+  // messageIds passed isSafeAttachmentName (no path separators, no traversal)
+  // but may still contain characters that are illegal on Windows (`:` is the
+  // NTFS alt-stream delimiter, `?*<>|"` are reserved). On *nix this is a
+  // no-op; on Windows it's load-bearing — without it, mkdirSync fails with
+  // ENOENT and every photo DM silently drops.
+  const safeMessageId = sanitizeForFilesystem(messageId);
+
   let changed = false;
   for (const att of attachments) {
     if (typeof att.data !== 'string') continue;
@@ -302,7 +309,7 @@ function extractAttachmentFiles(
       });
     }
 
-    const inboxDir = path.join(sessionDir(agentGroupId, sessionId), 'inbox', messageId);
+    const inboxDir = path.join(sessionDir(agentGroupId, sessionId), 'inbox', safeMessageId);
 
     // Refuse to mkdir through a symlink that the container may have pre placed
     // at inboxDir. With recursive:true, mkdirSync would silently no op on a
@@ -348,7 +355,7 @@ function extractAttachmentFiles(
     }
 
     att.name = filename;
-    att.localPath = `inbox/${messageId}/${filename}`;
+    att.localPath = `inbox/${safeMessageId}/${filename}`;
     delete att.data;
     changed = true;
     log.debug('Saved attachment to inbox', { messageId, filename, size: att.size });

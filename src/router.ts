@@ -373,7 +373,14 @@ function evaluateEngage(
       const pat = agent.engage_pattern ?? '.';
       if (pat === '.') return true;
       try {
-        return new RegExp(pat).test(text);
+        // Case-insensitive by default: mention rendering is platform-controlled
+        // (Telegram/WhatsApp/Discord all surface bot handles in display-name
+        // case, which admins can't predict). Admins who genuinely need
+        // case-sensitive matching can express it via character classes,
+        // e.g. \`[Pp]ocketclaw\`. Without \`i\`, a wiring with pattern
+        // \`@pocketclaw\` silently drops every \`@PocketClaw\` from the
+        // WhatsApp adapter (which rewrites mention text to ASSISTANT_NAME).
+        return new RegExp(pat, 'i').test(text);
       } catch {
         // Bad regex: fail open so admin sees the agent responding + can fix.
         return true;

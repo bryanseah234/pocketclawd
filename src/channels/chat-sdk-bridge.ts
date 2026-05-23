@@ -212,11 +212,44 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
           height: (att as unknown as Record<string, unknown>).height,
         };
         if (att.fetchData) {
+          // Bounded download. Telegram (and friends) sometimes stall the file
+          // CDN response stream indefinitely (no socket close, no error). An
+          // unbounded `await att.fetchData()` here means routeInbound never
+          // runs and the user's photo silently disappears. Cap at 30s, log
+          // start/finish/timeout so we can see the gap, and degrade to a
+          // metadata-only attachment so routing still proceeds.
+          const FETCH_TIMEOUT_MS = 30_000;
+          const startedAt = Date.now();
+          log.info('Attachment fetch start', {
+            type: att.type,
+            name: att.name,
+            mimeType: att.mimeType,
+            size: att.size,
+          });
           try {
-            const buffer = await att.fetchData();
+            const buffer = await Promise.race([
+              att.fetchData(),
+              new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error(`attachment fetch timeout after ${FETCH_TIMEOUT_MS}ms`)),
+                  FETCH_TIMEOUT_MS,
+                ),
+              ),
+            ]);
             entry.data = buffer.toString('base64');
+            log.info('Attachment fetch ok', {
+              type: att.type,
+              name: att.name,
+              bytes: buffer.length,
+              durationMs: Date.now() - startedAt,
+            });
           } catch (err) {
-            log.warn('Failed to download attachment', { type: att.type, err });
+            log.warn('Failed to download attachment (continuing without data)', {
+              type: att.type,
+              name: att.name,
+              durationMs: Date.now() - startedAt,
+              err: (err as Error).message,
+            });
           }
         }
         enriched.push(entry);
@@ -285,6 +318,14 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       // wirings still fire on in-thread mentions.
       chat.onSubscribedMessage(async (thread, message) => {
         const channelId = adapter.channelIdFromThreadId(thread.id);
+        log.info('Inbound subscribed message', {
+          adapter: adapter.name,
+          channelId,
+          threadId: thread.id,
+          attachments: Array.isArray(message.attachments) ? message.attachments.length : 0,
+          textLen: (message.text ?? '').length,
+          isMention: message.isMention === true,
+        });
         archiveSdkMessage(adapter.name, thread, message, true);
         await setupConfig.onInbound(
           channelId,
@@ -311,6 +352,8 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
           channelId,
           sender: (message.author as any)?.fullName ?? (message.author as any)?.userId ?? 'unknown',
           threadId: thread.id,
+          attachments: Array.isArray(message.attachments) ? message.attachments.length : 0,
+          textLen: (message.text ?? '').length,
         });
         archiveSdkMessage(adapter.name, thread, message, false);
         await setupConfig.onInbound(channelId, thread.id, await messageToInbound(message, true, false));
@@ -328,6 +371,13 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
       // flood gate.
       chat.onNewMessage(/[\s\S]*/, async (thread, message) => {
         const channelId = adapter.channelIdFromThreadId(thread.id);
+        log.info('Inbound group message', {
+          adapter: adapter.name,
+          channelId,
+          threadId: thread.id,
+          attachments: Array.isArray(message.attachments) ? message.attachments.length : 0,
+          textLen: (message.text ?? '').length,
+        });
         archiveSdkMessage(adapter.name, thread, message, true);
         await setupConfig.onInbound(channelId, thread.id, await messageToInbound(message, false, true));
       });
