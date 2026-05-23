@@ -133,11 +133,17 @@ export function getRoutingBySeq(
 
 /** Get undelivered messages (for host polling — reads from outbound.db). */
 export function getUndeliveredMessages(): MessageOutRow[] {
+  // Order by seq, not timestamp. Two messages emitted in the same second
+  // share a timestamp string (ISO seconds resolution) and would deliver
+  // in arbitrary disk-insertion order. seq is the authoritative ordering
+  // primitive — the comment block at the top of this file explicitly
+  // calls it out as load-bearing, and edit_message / add_reaction target
+  // by seq.
   return getOutboundDb()
     .prepare(
       `SELECT * FROM messages_out
        WHERE (deliver_after IS NULL OR deliver_after <= datetime('now'))
-       ORDER BY timestamp ASC`,
+       ORDER BY seq ASC`,
     )
     .all() as MessageOutRow[];
 }

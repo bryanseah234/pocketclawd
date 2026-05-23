@@ -22,12 +22,18 @@ export function getAllAgentGroups(): AgentGroup[] {
   return getDb().prepare('SELECT * FROM agent_groups ORDER BY name').all() as AgentGroup[];
 }
 
+const AGENT_GROUP_UPDATABLE = new Set(['name', 'agent_provider']);
+
 export function updateAgentGroup(id: string, updates: Partial<Pick<AgentGroup, 'name' | 'agent_provider'>>): void {
   const fields: string[] = [];
   const values: Record<string, unknown> = { id };
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
+      // Whitelist the column name before interpolating it into SQL. TS types
+      // are erased at runtime; without this, a caller passing an unexpected
+      // key would inject arbitrary SQL into the UPDATE clause.
+      if (!AGENT_GROUP_UPDATABLE.has(key)) throw new Error(`Invalid updatable column: ${key}`);
       fields.push(`${key} = @${key}`);
       values[key] = value;
     }

@@ -16,6 +16,12 @@ export function initDb(dbPath: string): Database.Database {
   _db = new Database(dbPath);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
+  // Block briefly on lock contention instead of throwing SQLITE_BUSY.
+  // The host has multiple writers in normal operation: main process,
+  // ncl socket clients, sweep loops, scheduler. Without this, transient
+  // concurrent writes surface as user-visible errors. 5s matches the
+  // container-side setting (container/agent-runner/src/db/connection.ts).
+  _db.pragma('busy_timeout = 5000');
   log.info('Central DB initialized', { path: dbPath });
   return _db;
 }

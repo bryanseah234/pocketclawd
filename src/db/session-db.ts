@@ -121,16 +121,24 @@ export function insertMessage(
     onWake?: 0 | 1;
   },
 ): void {
-  db.prepare(
-    `INSERT INTO messages_in (id, seq, kind, timestamp, status, platform_id, channel_type, thread_id, content, process_after, recurrence, series_id, trigger, source_session_id, on_wake)
-     VALUES (@id, @seq, @kind, @timestamp, 'pending', @platformId, @channelType, @threadId, @content, @processAfter, @recurrence, @id, @trigger, @sourceSessionId, @onWake)`,
-  ).run({
-    ...message,
-    trigger: message.trigger ?? 1,
-    onWake: message.onWake ?? 0,
-    sourceSessionId: message.sourceSessionId ?? null,
-    seq: nextEvenSeq(db),
-  });
+  // Wrap the read-then-insert in a transaction so two concurrent host
+  // writers (e.g. debouncer flush colliding with scheduler recurrence at
+  // the same tick) can't both compute the same `nextEvenSeq` and race on
+  // the UNIQUE(seq) constraint. better-sqlite3's `db.transaction()` uses
+  // BEGIN IMMEDIATE under the hood, serializing writes against the same
+  // file.
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO messages_in (id, seq, kind, timestamp, status, platform_id, channel_type, thread_id, content, process_after, recurrence, series_id, trigger, source_session_id, on_wake)
+       VALUES (@id, @seq, @kind, @timestamp, 'pending', @platformId, @channelType, @threadId, @content, @processAfter, @recurrence, @id, @trigger, @sourceSessionId, @onWake)`,
+    ).run({
+      ...message,
+      trigger: message.trigger ?? 1,
+      onWake: message.onWake ?? 0,
+      sourceSessionId: message.sourceSessionId ?? null,
+      seq: nextEvenSeq(db),
+    });
+  })();
 }
 
 export function countDueMessages(db: Database.Database): number {
@@ -151,9 +159,13 @@ export function markMessageFailed(db: Database.Database, messageId: string): voi
 }
 
 export function retryWithBackoff(db: Database.Database, messageId: string, backoffSec: number): void {
+  // Sanitize backoffSec — datetime modifiers are SQL strings, so a NaN or
+  // non-integer would corrupt the expression. Bind the modifier as a
+  // parameter so it can never become a SQL fragment.
+  const safe = Number.isFinite(backoffSec) ? Math.max(0, Math.floor(backoffSec)) : 0;
   db.prepare(
-    `UPDATE messages_in SET tries = tries + 1, process_after = datetime('now', '+${backoffSec} seconds') WHERE id = ?`,
-  ).run(messageId);
+    `UPDATE messages_in SET tries = tries + 1, process_after = datetime('now', ?) WHERE id = ?`,
+  ).run(`+${safe} seconds`, messageId);
 }
 
 export function getMessageForRetry(
@@ -256,11 +268,15 @@ export interface OutboundMessage {
 }
 
 export function getDueOutboundMessages(db: Database.Database): OutboundMessage[] {
+  // Order by seq, not timestamp. Two messages emitted in the same second
+  // share a timestamp string (ISO seconds resolution); seq is the
+  // authoritative ordering primitive (host-even / container-odd) and
+  // also the target id for edit_message / add_reaction.
   return db
     .prepare(
       `SELECT * FROM messages_out
        WHERE (deliver_after IS NULL OR deliver_after <= datetime('now'))
-       ORDER BY timestamp ASC`,
+       ORDER BY seq ASC`,
     )
     .all() as OutboundMessage[];
 }

@@ -71,6 +71,8 @@ export function getRunningSessions(): Session[] {
   return getDb().prepare("SELECT * FROM sessions WHERE container_status IN ('running', 'idle')").all() as Session[];
 }
 
+const SESSION_UPDATABLE = new Set(['status', 'container_status', 'last_active', 'agent_provider']);
+
 export function updateSession(
   id: string,
   updates: Partial<Pick<Session, 'status' | 'container_status' | 'last_active' | 'agent_provider'>>,
@@ -80,6 +82,8 @@ export function updateSession(
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
+      // Whitelist column names — TS types are erased at runtime.
+      if (!SESSION_UPDATABLE.has(key)) throw new Error(`Invalid updatable column: ${key}`);
       fields.push(`${key} = @${key}`);
       values[key] = value;
     }

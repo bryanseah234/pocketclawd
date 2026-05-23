@@ -76,6 +76,8 @@ export function getMessagingGroupsByChannel(channelType: string): MessagingGroup
   return getDb().prepare('SELECT * FROM messaging_groups WHERE channel_type = ?').all(channelType) as MessagingGroup[];
 }
 
+const MESSAGING_GROUP_UPDATABLE = new Set(['name', 'is_group', 'unknown_sender_policy']);
+
 export function updateMessagingGroup(
   id: string,
   updates: Partial<Pick<MessagingGroup, 'name' | 'is_group' | 'unknown_sender_policy'>>,
@@ -85,6 +87,8 @@ export function updateMessagingGroup(
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
+      // Whitelist column names — TS types are erased at runtime.
+      if (!MESSAGING_GROUP_UPDATABLE.has(key)) throw new Error(`Invalid updatable column: ${key}`);
       fields.push(`${key} = @${key}`);
       values[key] = value;
     }
@@ -211,6 +215,15 @@ export function getMessagingGroupAgent(id: string): MessagingGroupAgent | undefi
     | undefined;
 }
 
+const MESSAGING_GROUP_AGENT_UPDATABLE = new Set([
+  'engage_mode',
+  'engage_pattern',
+  'sender_scope',
+  'ignored_message_policy',
+  'session_mode',
+  'priority',
+]);
+
 export function updateMessagingGroupAgent(
   id: string,
   updates: Partial<
@@ -225,6 +238,8 @@ export function updateMessagingGroupAgent(
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
+      // Whitelist column names — TS types are erased at runtime.
+      if (!MESSAGING_GROUP_AGENT_UPDATABLE.has(key)) throw new Error(`Invalid updatable column: ${key}`);
       fields.push(`${key} = @${key}`);
       values[key] = value;
     }
