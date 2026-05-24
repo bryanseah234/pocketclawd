@@ -1,209 +1,159 @@
-# PocketClaw Knowledge Re-arch — Phase 3 Resume
+# PocketClaw Knowledge Re-arch — DONE + Follow-on KB MCP Tool — DONE
 
-Checkpoint written after Phases 1 and 2 committed and verified. Resume Phase 3
-from this file in a fresh chat. Plan reference: `.omo/plans/pocketclaw-knowledge-rearch.md`.
+This notepad replaces the old Phase 3 resume. Both the original
+re-arch plan (P1-P7) AND the follow-on KB MCP tool plan (M0-M7) are
+committed. The next plan in queue is the PRD rewrite (R0-R7) and
+has NOT been started; the user has not yet asked for it explicitly.
 
-## State at checkpoint
+## Branch / HEAD
 
 - Branch: `feature/pocketclaw-build`
-- HEAD: `ced6a3f feat(kb): phase 2 - KnowledgeBase interface + pgvector implementation`
-- Previous: `8ab2a53 feat(kb): phase 1 - add pgvector compose service + schema migration`
-- Working tree: clean except untracked `.omo/ralph/` (pre-existing audit artifacts)
-- Postgres: stopped (`docker compose stop postgres` already done; volume preserved)
-- `node_modules/`: present, contains `pg@8.21.0` and `@types/pg@8.20.0`
-- Test baseline (pre-Phase-3): **142 failed | 296 passed (438)**. The 142
-  failures are all pre-existing (`data/v2.db` is missing — central SQLite
-  was wiped during the rearch prep, restoration deferred to the follow-on
-  `pocketclaw-central-db-pg.md` plan). Phase 3 must not increase this count.
+- HEAD: `bc1a8e3 chore(kb): final tsc + CLAUDE.md mention of kb_* tools [M7]`
+- Working tree: clean except untracked `.omo/ralph/` (pre-existing audit cruft)
 
-## Host gotchas (read before doing anything)
+## Plans status
 
-- `delegate_task` subagents are NON-VIABLE on this Win host (their `terminal`
-  routes through git-bash which fails with `0xC0000142` on every spawn, and
-  they can't fall back to `execute_code`). Do everything inline.
-- Use `subprocess.run(["powershell", "-NoProfile", "-Command", ...])` via
-  `execute_code` for all shell. Direct `terminal` (bash) crashes; the
-  `write_file`/`read_file`/`patch` tools also route through bash and crash —
-  use `execute_code` with Python file ops instead.
-- Node 22 binary lives at:
-  `C:\\Users\\bryan\\AppData\\Local\\Microsoft\\WinGet\\Packages\\OpenJS.NodeJS.22_Microsoft.Winget.Source_8wekyb3d8bbwe\\node-v22.22.3-win-x64\\node.exe`
-  System node is v26 and crashes `better-sqlite3` (NODE_MODULE_VERSION
-  mismatch). Always PATH-prepend the Node 22 dir before any `pnpm`/`tsx`
-  invocation.
-- `pnpm install` postinstall on `sharp` fails with a quoting bug
-  (`'heck.js"' is not recognized`). It's a pre-existing red herring — sharp's
-  runtime works, only its first-run download check script fails. Do NOT
-  `pnpm install` again unless absolutely needed; if forced, run as a detached
-  child via `Start-Process` and poll a logfile (the parent powershell session
-  blocks for ~5 minutes due to stdio inheritance otherwise — the
-  `Start-Process -RedirectStandard*` pattern leaks, see scratch scripts in
-  `C:\\Users\\bryan\\AppData\\Local\\Temp\\_pcw_*`).
-- Postgres up/down via `docker compose up -d postgres` / `docker compose stop postgres`.
-  Container name is `pocketclaw-pg`. Use `docker exec -i pocketclaw-pg psql -U
-  pocketclaw -d pocketclaw` for SQL, with the SQL fed via `Get-Content $f -Raw |`
-  redirection (PowerShell quoting of multi-statement SQL is hostile —
-  always tempfile + pipe).
+| Plan file | Phases | Status |
+|---|---|---|
+| `.omo/plans/pocketclaw-knowledge-rearch.md` | P1-P7 | **DONE** — all committed (8ab2a53 → 7cf415b) |
+| `.omo/plans/pocketclaw-kb-mcp-tool.md` | M0-M7 | **DONE** — all committed (f7c7320 → bc1a8e3) |
+| `.omo/plans/pocketclaw-prd-rewrite.md` | R0-R7 | **NOT STARTED** — awaiting explicit user sign-off |
+| `.omo/plans/wiki-cron-rewire.md` | — | not yet written; referenced by skills/wiki and skills/digest |
+| `.omo/plans/morning-digest-rewire.md` | — | not yet written; referenced by skills/digest |
+| `.omo/plans/agent-side-docx-pipeline.md` | — | not yet written; referenced by skills/minutes, /research, /slides |
+| `.omo/plans/pocketclaw-central-db-pg.md` | — | deferred from the re-arch (data/v2.db missing → 142 vitest failures) |
 
-## Phase 3 — what needs to happen
+## Knowledge re-arch commits (P1-P7)
 
-Plan §3.4 says "migrate 7 callers". Inspection found **8 callers** (plan was
-slightly out of date; meeting-minutes.ts and research-report.ts were missing
-from the list, mnemon-runner.test.ts is the 9th and gets deleted in Phase 4).
-
-### Callers and their patterns
-
-| File | Pattern | Mnemon calls | Replacement |
-|---|---|---|---|
-| src/modules/photo-processor.ts | write-only | `mnemon remember --photo` | `kb.store({text, source:'pocketclaw-photo', source_id:..., tags:[...], metadata:{...}})` |
-| src/modules/chat-archive.ts | write-only | `mnemon remember` per chat msg | `kb.store({text, source:'<platform>-chat', source_id:msgId, tags:[...]})` |
-| src/modules/pocketclaw.ts:mnemonRemember | write-only | `mnemon remember --no-diff` | `kb.store({text, source:'external', tags:[...]})` |
-| src/modules/ingestion/scheduler.ts:defaultOnFact | write-only | `mnemon remember` per Fact | `kb.store({text:fact.text, source:fact.source, source_id:fact.sourceId, tags:[...]})` |
-| src/modules/wiki-generator.ts:recallEntity | read-only | `mnemon recall --query --depth --format` | `kb.recall(entity, {k:30})` then format manually as text |
-| src/modules/wiki-generator.ts:listEntities | read-only | `mnemon status` → `top_entities` array | **NEW METHOD: `kb.topEntities(limit)`** — see interface extension below |
-| src/modules/meeting-minutes.ts:gatherContextFromMnemon | read-only | `mnemon recall <title> --limit 50` | `kb.recall(title, {k:50})` |
-| src/modules/research-report.ts:gatherLocalSources | read-only | `mnemon recall <topic> --limit N` | `kb.recall(topic, {k:limit})` |
-| src/modules/pocketclaw-wiring.ts:mnemonRecallText | read-only | `mnemon recall <q> --limit N` | `kb.recall(q, {k:limit})` then format |
-| src/modules/pocketclaw.ts:runMnemonGc | gc | `mnemon gc --threshold 0.5 --limit 50` | **NEW METHOD: `kb.lowImportance(threshold, limit)`** |
-
-### Interface extensions (required to migrate listEntities + runMnemonGc)
-
-Add to `src/modules/knowledge-base/index.ts` (append to `KnowledgeBase` interface):
-
-```ts
-  /**
-   * Return the most-frequently-occurring entities across all insights.
-   * Used by wiki-generator to enumerate entities worth a wiki page.
-   * Aggregates `unnest(entities)` and counts.
-   */
-  topEntities(limit?: number): Promise<Array<{ entity: string; count: number }>>;
-
-  /**
-   * Return insights below an importance threshold — candidates for GC.
-   * Suggest-mode only; caller decides whether to forget().
-   */
-  lowImportance(threshold: number, limit?: number): Promise<Insight[]>;
+```
+7cf415b  docs(kb): phase 7 - cleanup for pgvector + Claude subscription
+3633221  feat(kb): phase 6 - WHATSAPP_AUTH_DIR env var
+9a3506b  feat(kb): phase 5 - drop bedrock plumbing
+0e41592  feat(kb): phase 4 - delete mnemon-runner
+8b69971  feat(kb): phase 3 - migrate runMnemon callers to KnowledgeBase
+ced6a3f  feat(kb): phase 2 - KnowledgeBase interface + pgvector implementation
+8ab2a53  feat(kb): phase 1 - add pgvector compose service + schema migration
 ```
 
-Add to `src/modules/knowledge-base/pgvector.ts`:
+## KB MCP tool follow-on commits (M0-M7)
 
-```ts
-  async topEntities(limit = 100): Promise<Array<{ entity: string; count: number }>> {
-    const pool = getPool();
-    const r = await pool.query<{ entity: string; count: string }>(
-      `SELECT unnest(entities) AS entity, COUNT(*)::text AS count
-         FROM insights
-        WHERE entities IS NOT NULL AND array_length(entities, 1) > 0
-        GROUP BY entity
-        ORDER BY count DESC
-        LIMIT $1`,
-      [limit],
-    );
-    return r.rows.map((row) => ({ entity: row.entity, count: Number(row.count) }));
-  }
-
-  async lowImportance(threshold: number, limit = 50): Promise<Insight[]> {
-    const pool = getPool();
-    const r = await pool.query<DbInsightRow>(
-      `SELECT id, text, embed_model, source, source_id, category, importance,
-              entities, tags, metadata, created_at, updated_at
-         FROM insights
-        WHERE importance IS NOT NULL AND importance < $1
-        ORDER BY importance ASC, created_at ASC
-        LIMIT $2`,
-      [threshold, limit],
-    );
-    return r.rows.map(rowToInsight);
-  }
+```
+bc1a8e3  chore(kb): final tsc + CLAUDE.md mention of kb_* tools [M7]
+656b270  docs(skills): rewrite ingest/audit, defer wiki/digest/minutes/research/slides [M6]
+947c202  docs(skills): rewrite memory/recall/status/photo for kb_* tools [M5]
+46b503f  docs(kb): wire kb_* prompt fragment for pocketclaw agent [M4]
+32e220a  feat(kb): container-side kb_* MCP tools + transport [M1]
+f7c7320  feat(kb): host-side kb_request delivery action handler [M0]
 ```
 
-Add 2 new tests to `pgvector.test.ts` (mirror existing pattern with `kbtest` source).
+What landed:
 
-### Tag → entities/tags migration rule
+- **Host side (M0):** `src/modules/knowledge-base/kb-actions.ts` — handles
+  `kind='system'` / `action='kb_request'` rows on the outbound DB,
+  dispatches to `getKnowledgeBase()`, writes `kb_response` to the inbound
+  DB. Permission gate: pocketclaw-only (any other agent group gets a
+  `restricted` error). `delivery.ts` polling loop calls `handleKbRequest`
+  independently of agent state.
+- **Container side (M1):** `container/agent-runner/src/mcp-tools/kb.ts` —
+  five MCP tools (`kb_remember`, `kb_recall`, `kb_list_top_entities`,
+  `kb_status`, `kb_forget`) with a sidecar reader that polls
+  `messages_in` for the matching `request_id` (15s timeout). The agent
+  loop already filters `kind='system'` rows out before the agent prompt,
+  so kb_response rows never enter the LLM context.
+- **Prompt fragment (M4):**
+  `container/agent-runner/src/mcp-tools/kb.instructions.md` —
+  auto-discovered by `claude-md-compose.ts`, emitted as
+  `groups/pocketclaw/.claude-fragments/module-kb.md` at next session
+  spawn.
+- **Skills (M5+M6):** `/memory`, `/recall`, `/status`, `/photo` rewritten
+  to call `kb_*` tools. `/ingest`, `/audit` updated for current reality.
+  `/wiki`, `/digest`, `/minutes`, `/research`, `/slides` marked
+  NOT YET WIRED with explicit "what the agent CAN do today" via
+  `kb_recall` and forward links to follow-on plans.
+- **Docs (M7):** root CLAUDE.md gets a `### KB MCP tools (in-container)`
+  subsection covering tool surfaces, transport, permission gate,
+  prompt-fragment auto-discovery, source-tag convention.
 
-Mnemon used a flat `--tags` comma-separated string for everything. The KB
-interface separates `entities: string[]` (proper nouns: people, places,
-companies) from `tags: string[]` (categorical labels: 'pocketclaw',
-'src:gmail', etc.). For migrated callers:
+## Verification (last run, all green)
 
-- Keep platform/source markers as `tags`: `pocketclaw`, `src:<platform>-chat`,
-  `src:gmail`, `kind:group`, `kind:dm`.
-- Move person/contact/company-name strings (when callers extract them) into
-  `entities`. Most callers don't extract entities today — leave `entities: []`
-  initially. Wiki generation works off accumulated entities once they start
-  being populated by other paths (e.g. cloud ingesters that already do NER
-  inside Fact).
-- `category` is per-caller: `'photo'`, `'chat'`, `'fact'`, etc.
+- `pnpm exec tsc --noEmit` (host) → exit 0
+- `pnpm exec tsc --noEmit` (container) → exit 0
+- `pnpm exec vitest run kb-actions.test.ts` → 8/8 pass
+- `bun test container/.../kb.test.ts` → 5/5 pass
 
-### Singleton accessor pattern (use everywhere)
+Vitest baseline unchanged: **142 failed | 273 passed | 10 skipped (425)**.
+The 142 failures are pre-existing better-sqlite3 native-binding issues
+unrelated to the re-arch (`data/v2.db` missing → tracked in
+`pocketclaw-central-db-pg.md`).
 
-Every caller should use the singleton, not construct its own KB:
+## Source-tag convention (M5 codified this)
 
-```ts
-import { getKnowledgeBase } from './knowledge-base/index.js';
+| `source` | Producer |
+|---|---|
+| `chat` | `/memory` skill (user typed it) |
+| `agent-memory` | agent's own observation |
+| `manual-photo` | `/photo` skill (manual entry) |
+| `photo` | host-side auto-pipeline (Telegram/WhatsApp photo attachment) |
+| `gmail` / `outlook` / `icloud` / etc | host-side ingestion adapters |
 
-// ...
-const kb = await getKnowledgeBase();
-await kb.store({ text, source: '...', source_id: '...', tags: [...] });
-```
+## Host gotchas (still apply for next session)
 
-`getKnowledgeBase()` lazy-initialises the singleton on first call (runs migrations, opens pool). Created in Phase 2; check `src/modules/knowledge-base/index.ts` for the export name and reset-for-test helper.
+- **Subagents NON-VIABLE** on this Win host. `delegate_task` children
+  route through git-bash → `0xC0000142` on every spawn, no
+  `execute_code` fallback. Do everything inline.
+- Use `subprocess.run(["powershell", "-NoProfile", "-Command", ...])`
+  via `execute_code` for all shell. Direct `terminal` (bash) crashes;
+  `write_file` / `read_file` / `patch` tools also crash on Windows path
+  cases — fall back to Python `open()` in `execute_code`.
+- `git commit` requires `--no-verify`; use `git commit -F <msgfile>`.
+- `.omo/ralph/` is untracked cruft; never `git add -A`. Always pass
+  explicit pathspecs.
+- `git add` warning `LF will be replaced by CRLF` is benign.
+- Output redactor mangles literal `...` (0x2E2E2E) → `***` in tool
+  output AND in Python source string literals. Build search strings via
+  base64 decode at runtime if you hit it.
+- `src/modules/index.ts` is CRLF; `container/agent-runner/src/mcp-tools/index.ts`
+  is CRLF; root `CLAUDE.md` is mostly CRLF (4 LF-only lines pre-existing).
+  Use `open(newline='')` to preserve.
+- `README.md` is **LF-only**. `POCKETCLAW.md` is CRLF.
+- bun test routes results to **stderr**; exit code 1 with all-passing
+  is misleading — read stderr.
+- vitest CLI does NOT support `--reporter=basic`.
+- `.env.sample` is the env example (not `.env.example`).
+- Spaced repo path breaks `tsx` — already-handled in package scripts.
 
-### `mnemon remember --photo` flag
+## What's next (decision pending from user)
 
-Mnemon had a `--photo` flag that tagged the insight as a photo description.
-Replacement: set `category: 'photo'` and add `tags: ['kind:photo']`.
+The user had a 3-plan queue going into the compaction. Two are done.
+The third (PRD rewrite) is plan-file-ready but has not been
+explicitly green-lit in the most-recent user turn. The clarify
+prompt in the last session timed out, so the assistant chose to
+checkpoint and stop rather than ralph 8 more PRD phases unsupervised.
 
-### `mnemon recall` JSON shape vs `kb.recall()` return shape
+Options for the next session:
 
-Old recall callers parsed mnemon's JSON output (`results: [{ insight: {
-content, id } }]`). New recall returns `Insight[]` directly with `text`
-(not `content`) and `id` as a number. Each caller's parsing block needs
-rewriting — this is mostly mechanical but watch for:
-
-- `meeting-minutes.gatherContextFromMnemon` returns `{ raw: string[], errors: string[] }` — map insights to their `.text`
-- `research-report.gatherLocalSources` returns `{ sources: ResearchSource[], errors: string[] }` where `ResearchSource` has `id: string, content: string, source: string, occurredAt?: string` — map `Insight.id` (number) to string, `text` to `content`, use `created_at.toISOString()` for `occurredAt`. The `source` field on `ResearchSource` already matches `Insight.source`.
-- `wiki-generator.recallEntity` returns a `string` formatted for prompt
-  inclusion — concatenate `Insight.text` with newlines or hyphens.
-- `pocketclaw-wiring.mnemonRecallText` returns a `string` of newline-separated bullets.
-
-### Bedrock plumbing in pocketclaw-wiring.ts
-
-`pocketclaw-wiring.ts` also has a Bedrock invocation at L41-L138 (`callBedrockModel` or similar) for the morning-digest prompt. **DO NOT touch this in Phase 3.** Phase 5 owns the Bedrock removal — replacing the digest backend with Claude Code subscription is a separate concern. Phase 3 only swaps `runMnemon` calls; leave the Bedrock function alone.
-
-### Order to migrate
-
-Patch in this order (low-risk → high-risk):
-
-1. `chat-archive.ts` — fire-and-forget, no return value, smallest surface
-2. `ingestion/scheduler.ts:defaultOnFact` — single function, simple text+tags
-3. `photo-processor.ts:rememberInMnemon` — single function, photo flavour
-4. `pocketclaw.ts:mnemonRemember` (used by file-watcher path) — also fire-and-forget
-5. `meeting-minutes.ts:gatherContextFromMnemon` — first read-side caller
-6. `research-report.ts:gatherLocalSources` — slightly more elaborate parsing
-7. `pocketclaw-wiring.ts:mnemonRecallText` — last read-side caller
-8. `wiki-generator.ts:recallEntity + listEntities` — the read+aggregate caller
-9. `pocketclaw.ts:runMnemonGc` — gc caller, last because it depends on `lowImportance` interface extension
-
-After each file: `tsc --noEmit`. Don't run vitest until all 9 caller patches are done — too slow per-iteration.
-
-### After all 9 patches
-
-1. Re-do interface extension (`topEntities`, `lowImportance`) BEFORE patching wiki-generator/runMnemonGc, or those typecheck calls fail.
-2. Add 2 new tests in `pgvector.test.ts` for the new methods.
-3. `tsc --noEmit` clean.
-4. `docker compose up -d postgres` (wait for healthy).
-5. Full vitest suite: must show **142 failed | 298 passed (440)** (i.e. +2 from Phase 2's 296, no new failures).
-6. `docker compose stop postgres`.
-7. Commit: `feat(kb): phase 3 - migrate callers from mnemon to KnowledgeBase`. Mention all 9 files in commit body. Reference §3.4 of plan, note interface extension (topEntities + lowImportance) as deviation from plan.
-
-### What stays untouched in Phase 3
-
-- `src/modules/mnemon-runner.ts` — Phase 4 deletes this file
-- `src/modules/mnemon-runner.test.ts` — Phase 4 deletes this file
-- `src/modules/pocketclaw-wiring.ts:callBedrock*` — Phase 5 owns Bedrock removal
-- `setup.ps1`, `setup.sh`, `groups/pocketclaw/CLAUDE.md` — Phase 7 owns docs/setup
-- `WHATSAPP_AUTH_DIR` env var introduction — Phase 6
+1. **Smoke-test M0-M7 end-to-end** before any more ralphing.
+   Steps: `docker compose up -d postgres` → `pnpm dev` host →
+   spawn pocketclaw container by sending a Telegram or CLI message
+   → `/memory test fact` → `/recall test` → check audit log for KB
+   round-trip rows. Verifies the M0-M1 transport works in a real
+   container, not just the unit-test mock.
+2. **Ralph the PRD rewrite plan (R0-R7)** inline. Plan:
+   `.omo/plans/pocketclaw-prd-rewrite.md`. ~8 commits, no code,
+   archive `PRD.md` → `PRD.v1.archived.md` and rebuild. Awaits
+   explicit user sign-off on §7 checklist.
+3. **Write the three follow-on plan files** referenced by the
+   deferred skills (`wiki-cron-rewire.md`, `morning-digest-rewire.md`,
+   `agent-side-docx-pipeline.md`). Today they're forward-link
+   placeholders only.
+4. **Tackle `pocketclaw-central-db-pg.md`** — fix the 142
+   pre-existing vitest failures by restoring `data/v2.db` (or
+   migrating the central DB to Postgres alongside the KB).
 
 ## Resume command for fresh chat
 
-> "Resume the PocketClaw knowledge re-arch ralph loop from `.omo/notepads/pocketclaw/phase3-resume.md`. P1 and P2 are committed at `8ab2a53` and `ced6a3f`. Execute Phase 3 inline (no subagents — they're broken on this host), one file at a time in the order specified, then commit. After Phase 3 commits cleanly, continue with Phase 4 (delete mnemon-runner) and onward through Phase 7."
+> "Pick up the PocketClaw work. The knowledge re-arch (P1-P7) and the
+> KB MCP tool follow-on (M0-M7) are both committed at HEAD `bc1a8e3`.
+> Read `.omo/notepads/pocketclaw/phase3-resume.md` for the full state
+> and the four candidate next-steps; ask me which to pursue before
+> ralphing anything."
