@@ -348,6 +348,24 @@ Architecture follows Vivian Balakrishnan's capture-layer + curation-layer patter
 - Embeddings: **Ollama** locally; tests stub `fetch` to deterministic 768-dim FNV-hash vectors so PG-skipped envs still cover the embedding contract.
 - Source/source_id: stable, so `(source, source_id)` upserts dedup. Photo processor uses SHA256 of the resized image.
 
+### KB MCP tools (in-container)
+
+The agent container talks to the host-side `KnowledgeBase` through five MCP tools registered in `container/agent-runner/src/mcp-tools/kb.ts`:
+
+  - `kb_remember(text, source?, source_id?, tags?, entities?, category?, importance?)`
+  - `kb_recall(query, k?, source?, since?)` -> `{ insights: [...] }`
+  - `kb_list_top_entities(limit?)` -> `{ entities: [{ entity, count }, ...] }`
+  - `kb_status()` -> `{ total, topEntities }`
+  - `kb_forget(id)`
+
+**Transport.** Each tool call writes a `kind='system'` row into `outbound.db` with `content` = `{ action: 'kb_request', request_id, tool, args }`. The host's `delivery.ts` polling loop (independent of agent state) calls `handleKbRequest` (`src/modules/knowledge-base/kb-actions.ts`), executes the tool against `getKnowledgeBase()`, then writes a `kind='system'` row into `inbound.db` with `content` = `{ action: 'kb_response', request_id, ok, result }`. The container's MCP-tool sidecar polls `messages_in` for the matching `request_id` (15s timeout). The agent loop already filters `kind='system'` rows out before the agent sees them, so kb_response rows never enter the agent's prompt — only the sidecar reader picks them up.
+
+**Permission gate.** Hard-coded pocketclaw-only in `kb-actions.ts`. Any other agent group calling `kb_*` gets `{ ok: false, error: 'kb_* tools are restricted to the pocketclaw agent group.' }` and the tool surfaces that as `isError`.
+
+**Prompt fragment.** `container/agent-runner/src/mcp-tools/kb.instructions.md` is auto-discovered by `claude-md-compose.ts` and emitted as `groups/pocketclaw/.claude-fragments/module-kb.md` at next session spawn.
+
+**Source-tag convention.** `chat` (user typed it via `/memory`), `agent-memory` (agent's own observation), `manual-photo` (user typed it via `/photo`), `photo` (host auto-pipeline), `gmail`/`outlook`/`icloud`/etc (host ingestion adapters). Don't reuse the host-reserved tags from the container side.
+
 ### Claude provider
 
 PocketClaw uses the **Claude Code subscription** path (nanoclaw default). Bedrock is removed: no `CLAUDE_CODE_USE_BEDROCK`, no AWS env vars, no `aws bedrock-runtime` shell-outs. The wiki-regen and morning-digest crons are currently host-side no-ops (audit log: `SKIP | no-provider` / `SKIP | no-handler`); re-wiring them through the agent container is a follow-on project.
