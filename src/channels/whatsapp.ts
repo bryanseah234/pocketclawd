@@ -40,6 +40,7 @@ import type { GroupMetadata, WAMessageKey, WAMessage, WASocket } from '@whiskeys
 
 import { isSafeAttachmentName } from '../attachment-safety.js';
 import { ASSISTANT_HAS_OWN_NUMBER, ASSISTANT_NAME, DATA_DIR } from '../config.js';
+import { envPath } from '../modules/paths.js';
 
 /**
  * Aliases the user can prefix when summoning the bot from their own number.
@@ -106,7 +107,7 @@ async function resolveWaWebVersion(): Promise<[number, number, number]> {
   );
 }
 
-const AUTH_DIR = path.join(process.cwd(), 'store', 'auth');
+const AUTH_DIR = envPath('WHATSAPP_AUTH_DIR', 'whatsapp');
 const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const GROUP_METADATA_CACHE_TTL_MS = 60_000; // 1 min for outbound sends
 const SENT_MESSAGE_CACHE_MAX = 256;
@@ -258,7 +259,7 @@ registerChannelAdapter('whatsapp', {
     const hasAuth = fs.existsSync(path.join(authDir, 'creds.json'));
     if (!hasAuth && !phoneNumber && !env.WHATSAPP_ENABLED) return null;
 
-    fs.mkdirSync(authDir, { recursive: true });
+    fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
 
     // State
     let sock: WASocket;
