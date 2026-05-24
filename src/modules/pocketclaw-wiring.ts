@@ -61,7 +61,13 @@ async function audit(line: string): Promise<void> {
  * profile, and shells out cleanly with file-based body I/O.
  */
 export async function callBedrockClaude(prompt: string): Promise<string> {
+  // mkdtemp creates the dir with mode 0700 by default, but that's
+  // platform-dependent (POSIX yes, Windows ACLs irrelevant — only the
+  // owner has access already). Belt + braces: chmod the dir + body file
+  // explicitly. The body contains the user's full prompt + recalled
+  // mnemon context, which is treated as private.
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pc-bedrock-'));
+  await fs.chmod(tmpDir, 0o700).catch(() => undefined);
   const bodyPath = path.join(tmpDir, 'body.json');
   const outPath = path.join(tmpDir, 'out.json');
 
@@ -70,7 +76,16 @@ export async function callBedrockClaude(prompt: string): Promise<string> {
     max_tokens: BEDROCK_MAX_TOKENS,
     messages: [{ role: 'user', content: prompt }],
   };
-  await fs.writeFile(bodyPath, JSON.stringify(body), 'utf8');
+  // Open with explicit 0600 BEFORE writing — close-then-chmod has a
+  // microsecond TOCTOU window where another user could open the file.
+  // open() honors the mode arg on POSIX; on Windows it's a no-op (which
+  // is fine — single-user file ACL inherited from tmpDir).
+  const handle = await fs.open(bodyPath, 'w', 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(body), 'utf8');
+  } finally {
+    await handle.close();
+  }
 
   try {
     const args = [
@@ -197,11 +212,25 @@ export async function runDigest(): Promise<void> {
   // quiet days.
   const today = await mnemonRecallText('today', 20);
   const week = await mnemonRecallText('this week', 20);
-  const context = [today, week].filter(Boolean).join('\n- ');
+  let context = [today, week].filter(Boolean).join('\n- ');
 
   if (!context) {
     await audit('CRON | morning-digest SKIP | mnemon-empty');
     return;
+  }
+
+  // Cap the context payload to keep the digest prompt well below
+  // BEDROCK_MAX_TOKENS. A runaway mnemon (e.g. 10k facts under a popular
+  // tag) would otherwise produce a prompt the model can't process — the
+  // call fails and the user gets nothing. 12_000 chars ≈ 3000 tokens for
+  // English, leaving plenty of room for the prompt scaffolding + reply.
+  const DIGEST_CONTEXT_CHAR_CAP = 12_000;
+  if (context.length > DIGEST_CONTEXT_CHAR_CAP) {
+    const original = context.length;
+    context = context.slice(0, DIGEST_CONTEXT_CHAR_CAP) + '\n[…truncated]';
+    await audit(
+      `CRON | morning-digest TRUNCATED | mnemon context ${original} → ${context.length} chars`,
+    );
   }
 
   const date = new Date();
@@ -227,25 +256,63 @@ Write a digest that:
 
 Output the digest text only — no preamble.`;
 
-  let digestText: string;
-  try {
-    digestText = await callBedrockClaude(prompt);
-  } catch (err) {
-    await audit(`CRON | morning-digest FAIL | bedrock ${(err as Error).message}`);
-    return;
+  // Bedrock can throttle (TooManyRequestsException) or transient-fail at
+  // 07:00 when other tenants in the region are also waking up. Retry with
+  // exponential backoff: 30s, 2min, 8min. Total worst case ≈10.5min,
+  // well inside the 1-hour gap before the next driver tick.
+  const BEDROCK_RETRY_DELAYS_MS = [30_000, 120_000, 480_000];
+  let digestText: string | null = null;
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt <= BEDROCK_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      digestText = await callBedrockClaude(prompt);
+      lastErr = null;
+      break;
+    } catch (err) {
+      lastErr = err as Error;
+      const isLast = attempt === BEDROCK_RETRY_DELAYS_MS.length;
+      if (isLast) {
+        await audit(
+          `CRON | morning-digest FAIL | bedrock attempt=${attempt + 1} ${lastErr.message}`,
+        );
+        return;
+      }
+      const wait = BEDROCK_RETRY_DELAYS_MS[attempt]!;
+      await audit(
+        `CRON | morning-digest RETRY | bedrock attempt=${attempt + 1} wait=${wait}ms err=${lastErr.message.slice(0, 200)}`,
+      );
+      await new Promise((r) => setTimeout(r, wait));
+    }
   }
+  if (!digestText) return;
 
-  // Deliver. ChannelDeliveryAdapter.deliver(channelType, platformId,
-  // threadId, kind, content) — kind='chat' for a normal user-facing
-  // message, content is the JSON-encoded chat payload.
-  try {
-    const content = JSON.stringify({ text: digestText });
-    await adapter.deliver(channelType, mg.platform_id, null, 'chat', content);
-    await audit(
-      `CRON | morning-digest DELIVERED | channel=${channelType} mg=${mgId} chars=${digestText.length}`,
-    );
-  } catch (err) {
-    await audit(`CRON | morning-digest FAIL | deliver ${(err as Error).message}`);
+  // Deliver with the same retry shape — if Telegram/WhatsApp transport
+  // hiccups, don't lose the digest we just paid Bedrock for. Shorter
+  // backoff: 5s, 30s, 2min.
+  const DELIVERY_RETRY_DELAYS_MS = [5_000, 30_000, 120_000];
+  const content = JSON.stringify({ text: digestText });
+  for (let attempt = 0; attempt <= DELIVERY_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      await adapter.deliver(channelType, mg.platform_id, null, 'chat', content);
+      await audit(
+        `CRON | morning-digest DELIVERED | channel=${channelType} mg=${mgId} chars=${digestText.length} attempt=${attempt + 1}`,
+      );
+      return;
+    } catch (err) {
+      const e = err as Error;
+      const isLast = attempt === DELIVERY_RETRY_DELAYS_MS.length;
+      if (isLast) {
+        await audit(
+          `CRON | morning-digest FAIL | deliver attempt=${attempt + 1} ${e.message}`,
+        );
+        return;
+      }
+      const wait = DELIVERY_RETRY_DELAYS_MS[attempt]!;
+      await audit(
+        `CRON | morning-digest RETRY | deliver attempt=${attempt + 1} wait=${wait}ms err=${e.message.slice(0, 200)}`,
+      );
+      await new Promise((r) => setTimeout(r, wait));
+    }
   }
 }
 

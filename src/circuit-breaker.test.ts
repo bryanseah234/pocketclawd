@@ -136,7 +136,7 @@ describe('enforceStartupBackoff — backoff schedule', () => {
    * Documented schedule:
    *
    *   clean start → 1 crash → 2 crash → 3 crash → 4 crash → 5 crash → 6+ crash
-   *      0s    →    0s    →   10s   →   30s   →   2min  →   5min  →   15min cap
+   *      0s    →    5s    →   10s   →   30s   →   2min  →   5min  →   15min cap
    *
    * Each row is [priorAttempt seeded in the file, expected delay this run
    * produces in seconds]. priorAttempt=null = no file = very first start.
@@ -147,7 +147,7 @@ describe('enforceStartupBackoff — backoff schedule', () => {
    */
   const cases: Array<{ label: string; priorAttempt: number | null; expectedDelaySec: number }> = [
     { label: 'clean first start (no file)', priorAttempt: null, expectedDelaySec: 0 },
-    { label: 'first crash (attempt=2)', priorAttempt: 1, expectedDelaySec: 0 },
+    { label: 'first crash (attempt=2)', priorAttempt: 1, expectedDelaySec: 5 },
     { label: 'second crash (attempt=3)', priorAttempt: 2, expectedDelaySec: 10 },
     { label: 'third crash (attempt=4)', priorAttempt: 3, expectedDelaySec: 30 },
     { label: 'fourth crash (attempt=5)', priorAttempt: 4, expectedDelaySec: 120 },

@@ -8,7 +8,12 @@ const CB_PATH = path.join(DATA_DIR, 'circuit-breaker.json');
 const RESET_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 // Index = number of consecutive crashes (0 = clean start, attempt 1).
 // 6+ crashes capped at 15min.
-const BACKOFF_SCHEDULE_S = [0, 0, 10, 30, 120, 300, 900];
+// Index = number of consecutive crashes (0-indexed in the array, but the
+// `attempt` arg is 1-indexed: attempt=1 is a clean start = idx 0 = no delay).
+// attempt=2 means we already crashed once within the reset window — give it
+// a 5s pause so a true crash loop can't burn 5 restarts/sec. Capped at 15min
+// from attempt 7 onward.
+const BACKOFF_SCHEDULE_S = [0, 5, 10, 30, 120, 300, 900];
 
 interface CircuitBreakerState {
   attempt: number;
