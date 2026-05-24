@@ -112,6 +112,7 @@ const GROUP_METADATA_CACHE_TTL_MS = 60_000; // 1 min for outbound sends
 const SENT_MESSAGE_CACHE_MAX = 256;
 const RECONNECT_DELAY_MS = 5000;
 const PENDING_QUESTIONS_MAX = 64;
+const MAX_OUTGOING_QUEUE = 500;
 
 /** Normalize an option label to a slash command: "Approve" → "/approve" */
 function optionToCommand(option: string): string {
@@ -391,9 +392,23 @@ registerChannelAdapter('whatsapp', {
         log.info('Flushing outgoing message queue', { count: outgoingQueue.length });
         while (outgoingQueue.length > 0) {
           const item = outgoingQueue.shift()!;
-          const sent = await sock.sendMessage(item.jid, { text: item.text });
-          if (sent?.key?.id && sent.message) {
-            sentMessageCache.set(sent.key.id, sent.message);
+          try {
+            const sent = await sock.sendMessage(item.jid, { text: item.text });
+            if (sent?.key?.id && sent.message) {
+              sentMessageCache.set(sent.key.id, sent.message);
+            }
+          } catch (err) {
+            // Re-queue at the head and stop flushing; subsequent messages
+            // will likely fail too against a still-broken connection.
+            // The connection.update 'open' handler retriggers flush on
+            // reconnect.
+            outgoingQueue.unshift(item);
+            log.warn('Flush failed mid-queue, re-queued and stopping', {
+              jid: item.jid,
+              err,
+              remaining: outgoingQueue.length,
+            });
+            break;
           }
         }
       } finally {
@@ -444,10 +459,15 @@ registerChannelAdapter('whatsapp', {
           }
           const attachDir = path.join(DATA_DIR, 'attachments');
           fs.mkdirSync(attachDir, { recursive: true });
-          const filePath = path.join(attachDir, filename);
+          // Prefix with WA message id to prevent collisions: two messages
+          // with the same fileName ('image.jpg', 'photo.jpg' from camera)
+          // would otherwise overwrite each other.
+          const msgId = msg.key.id ? msg.key.id.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 32) : `wa-${Date.now()}`;
+          const uniqueFilename = `${msgId}-${filename}`;
+          const filePath = path.join(attachDir, uniqueFilename);
           fs.writeFileSync(filePath, buffer);
-          results.push({ type, name: filename, localPath: `attachments/${filename}` });
-          log.info('Media downloaded', { type, filename });
+          results.push({ type, name: filename, localPath: `attachments/${uniqueFilename}` });
+          log.info('Media downloaded', { type, filename: uniqueFilename });
         } catch (err) {
           log.warn('Failed to download media', { type, err });
         }
@@ -457,6 +477,14 @@ registerChannelAdapter('whatsapp', {
 
     async function sendRawMessage(jid: string, text: string): Promise<string | undefined> {
       if (!connected) {
+        if (outgoingQueue.length >= MAX_OUTGOING_QUEUE) {
+          // Shed oldest to keep memory bounded during long disconnects.
+          const dropped = outgoingQueue.shift();
+          log.warn('WA outgoing queue full, dropping oldest', {
+            droppedJid: dropped?.jid,
+            queueSize: outgoingQueue.length,
+          });
+        }
         outgoingQueue.push({ jid, text });
         log.info('WA disconnected, message queued', { jid, queueSize: outgoingQueue.length });
         return;
@@ -472,6 +500,13 @@ registerChannelAdapter('whatsapp', {
         }
         return sent?.key?.id ?? undefined;
       } catch (err) {
+        if (outgoingQueue.length >= MAX_OUTGOING_QUEUE) {
+          const dropped = outgoingQueue.shift();
+          log.warn('WA outgoing queue full, dropping oldest', {
+            droppedJid: dropped?.jid,
+            queueSize: outgoingQueue.length,
+          });
+        }
         outgoingQueue.push({ jid, text });
         log.warn('Failed to send, message queued', { jid, err, queueSize: outgoingQueue.length });
         return undefined;

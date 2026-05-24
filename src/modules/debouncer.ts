@@ -79,7 +79,20 @@ export class MessageDebouncer {
     this.timers.set(sessionId, timer);
   }
 
-  /** Flush a session immediately, bypassing the window. Useful for shutdown. */
+  /**
+   * Flush a session immediately, bypassing the window. Useful for shutdown.
+   *
+   * Errors from \`onBatch\` are caught and logged via \`console.error\` —
+   * letting them propagate from the timer callback would crash the host
+   * process (unhandledRejection). Callers that need to react to failures
+   * should pass an \`onBatch\` that handles its own errors.
+   *
+   * Note: a thrown \`onBatch\` means the batch IS LOST (queue already
+   * cleared above). This is intentional: re-queuing risks infinite retry
+   * loops on permanent failures (e.g. malformed photo path). Production
+   * callers should make \`onBatch\` resilient — wrap in try/catch and write
+   * to inbound.db, which itself has WAL/durability guarantees.
+   */
   async flush(sessionId: string): Promise<void> {
     const messages = this.queues.get(sessionId);
     this.queues.delete(sessionId);
@@ -88,7 +101,16 @@ export class MessageDebouncer {
     this.timers.delete(sessionId);
 
     if (messages && messages.length > 0) {
-      await this.onBatch(sessionId, messages);
+      try {
+        await this.onBatch(sessionId, messages);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[debouncer] onBatch threw, batch lost', {
+          sessionId,
+          batchSize: messages.length,
+          err,
+        });
+      }
     }
   }
 

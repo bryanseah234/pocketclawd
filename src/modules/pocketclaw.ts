@@ -153,11 +153,16 @@ function nextRunFromCron(cron: string, now = new Date()): Date | null {
   return next;
 }
 
+const inflight = new Map<string, Promise<void>>();
+
 async function tick(): Promise<void> {
   const now = Date.now();
   for (const job of SCHEDULES) {
     const next = nextRunFromCron(job.cron, new Date(now));
     if (!next) continue;
+    // Guard against concurrent execution: a long-running cloud-ingest can
+    // outlast its tick and we must NOT spawn a duplicate.
+    if (inflight.has(job.name)) continue;
     const last = lastRun.get(job.name) ?? 0;
     // Run if the scheduled time is within the last minute and we haven't
     // already run within the last 5 minutes.
@@ -167,16 +172,39 @@ async function tick(): Promise<void> {
       sched.setDate(sched.getDate() - 1); // most recent past occurrence
     }
     if (sched.getTime() > now - 60 * 1000 && now - last > 5 * 60 * 1000) {
+      // Record dispatch time so a retry within 5 minutes is skipped.
+      // lastRun is updated again on completion (not strictly necessary but
+      // keeps the timestamp accurate for catch-up logic).
       lastRun.set(job.name, now);
-      void job.handler();
+      const p = job.handler().finally(() => {
+        inflight.delete(job.name);
+        lastRun.set(job.name, Date.now());
+      });
+      inflight.set(job.name, p);
+      void p;
     }
   }
 }
 
 export function startPocketClawCron(): void {
   if (driverTimer) return;
+  // Validate every cron pattern before starting — nextRunFromCron only
+  // supports `M H * * *`, so any other pattern would silently never fire.
+  // Audit-log unsupported patterns so operators see them instead of waiting
+  // forever for a job that can't run.
+  for (const job of SCHEDULES) {
+    if (nextRunFromCron(job.cron) === null) {
+      void audit(
+        `POCKETCLAW_CRON_UNPARSEABLE | job=${job.name} cron=${job.cron} ` +
+          `(supported pattern: 'M H * * *'). Job will NOT fire.`,
+      );
+    }
+  }
   void audit('POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, mnemon-gc@04:00, morning-digest@07:00');
   driverTimer = setInterval(() => void tick(), driverInterval);
+  // Don't keep the event loop alive on shutdown — stopPocketClawCron clears
+  // explicitly, but unref guards against forgetting to call it on SIGTERM.
+  if (typeof driverTimer.unref === 'function') driverTimer.unref();
   // Kick off file-watcher in background; failure here must not prevent
   // the cron driver from running.
   void startFileWatcher().catch((err) => {

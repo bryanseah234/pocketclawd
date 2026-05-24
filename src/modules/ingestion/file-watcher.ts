@@ -47,6 +47,8 @@ export class ProcessedRegistry {
   private seenStmt: any = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private markStmt: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private claimStmt: any = null;
 
   async ensure(): Promise<void> {
     if (this.db) return;
@@ -85,6 +87,29 @@ export class ProcessedRegistry {
   async mark(file: string, hash: string): Promise<void> {
     await this.ensure();
     this.markStmt.run(file, hash, Date.now());
+  }
+
+  /**
+   * Atomically claim a (file, hash) for processing. Returns true if THIS
+   * caller is the one that gets to process the file; false if another
+   * caller already claimed it.
+   *
+   * Rationale: chokidar can fire multiple `add`/`change` events for the
+   * same path in quick succession (e.g. when a file is rewritten by
+   * Office). Without atomic claim, two concurrent processFile() calls
+   * both see seen()=false, both compute embeddings, both write to mnemon
+   * → duplicate facts. INSERT OR IGNORE on the (path, sha256) primary
+   * key resolves the race in SQLite's writer lock.
+   */
+  async claim(file: string, hash: string): Promise<boolean> {
+    await this.ensure();
+    if (!this.claimStmt) {
+      this.claimStmt = this.db.prepare(
+        `INSERT OR IGNORE INTO processed (path, sha256, processed_at) VALUES (?, ?, ?)`,
+      );
+    }
+    const result = this.claimStmt.run(file, hash, Date.now());
+    return result.changes > 0;
   }
 }
 
@@ -189,21 +214,42 @@ export async function processFile(
   registry: ProcessedRegistry,
 ): Promise<{ facts: Fact[] } | null> {
   const hash = await sha256(file);
-  if (await registry.seen(file, hash)) return null;
+  // Atomic: only one caller processes this (file, hash). The row is
+  // inserted up-front so concurrent chokidar fires for the same path
+  // collapse into one processed batch.
+  const won = await registry.claim(file, hash);
+  if (!won) return null;
 
-  const text = await extractText(file);
-  const chunks = chunkText(text);
+  try {
+    const text = await extractText(file);
+    const chunks = chunkText(text);
 
-  const facts: Fact[] = chunks.map((chunk, i) => ({
-    text: chunk,
-    source: `file:${path.relative(WATCH_ROOT, file).replace(/\\/g, '/')}`,
-    sourceId: `${hash}#${i}`,
-    occurredAt: new Date(),
-    meta: { chunkIndex: i, fileExt: path.extname(file).toLowerCase() },
-  }));
+    const facts: Fact[] = chunks.map((chunk, i) => ({
+      text: chunk,
+      source: `file:${path.relative(WATCH_ROOT, file).replace(/\\/g, '/')}`,
+      sourceId: `${hash}#${i}`,
+      occurredAt: new Date(),
+      meta: { chunkIndex: i, fileExt: path.extname(file).toLowerCase() },
+    }));
 
-  await registry.mark(file, hash);
-  return { facts };
+    return { facts };
+  } catch (err) {
+    // Extraction failed (corrupt PDF, missing optional dep, etc.). Leaving
+    // the claim in place would make the file effectively un-ingestable
+    // until its bytes change. Roll back so the next watch event retries.
+    // We tolerate the small duplicate-work window in exchange for not
+    // permanently shadowing legitimate content.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = (registry as any).db;
+      if (db) {
+        db.prepare('DELETE FROM processed WHERE path = ? AND sha256 = ?').run(file, hash);
+      }
+    } catch {
+      /* best-effort rollback */
+    }
+    throw err;
+  }
 }
 
 /**

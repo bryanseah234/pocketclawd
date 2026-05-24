@@ -54,10 +54,25 @@ function extractReplyContext(raw: Record<string, any>): ReplyContext | null {
   };
 }
 
+/**
+ * Telegram API fetch with a 10s timeout. Bare \`fetch\` has no default
+ * timeout in Node, so a hung TLS connection or network blackhole would stall
+ * the inbound polling loop / pairing flow indefinitely.
+ */
+async function tgFetch(url: string, init?: RequestInit, timeoutMs = 10_000): Promise<Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...(init ?? {}), signal: ctl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Look up the bot username via Telegram getMe. Cached after first call. */
 async function fetchBotUsername(token: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const res = await tgFetch(`https://api.telegram.org/bot${token}/getMe`);
     const json = (await res.json()) as { ok: boolean; result?: { username?: string } };
     return json.ok ? (json.result?.username ?? null) : null;
   } catch (err) {
@@ -100,7 +115,7 @@ async function sendPairingConfirmation(token: string, platformId: string): Promi
   const chatId = platformId.split(':').slice(1).join(':');
   if (!chatId) return;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await tgFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -124,7 +139,7 @@ async function sendBotMessage(token: string, platformId: string, text: string): 
   const chatId = platformId.split(':').slice(1).join(':');
   if (!chatId) return;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await tgFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text }),
@@ -365,7 +380,7 @@ registerChannelAdapter('telegram', {
         const chatId = platformId.split(':').slice(1).join(':');
         if (!chatId) return null;
         try {
-          const res = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
+          const res = await tgFetch(`https://api.telegram.org/bot${token}/getChat`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId }),

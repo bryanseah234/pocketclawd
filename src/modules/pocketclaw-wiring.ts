@@ -139,7 +139,7 @@ async function mnemonRecallText(query: string, limit = 30): Promise<string> {
       .map((row) => row.insight?.content?.trim())
       .filter((s): s is string => !!s)
       .slice(0, limit)
-      .join('\\n- ');
+      .join('\n- ');
   } catch {
     return '';
   }
@@ -197,7 +197,7 @@ export async function runDigest(): Promise<void> {
   // quiet days.
   const today = await mnemonRecallText('today', 20);
   const week = await mnemonRecallText('this week', 20);
-  const context = [today, week].filter(Boolean).join('\\n- ');
+  const context = [today, week].filter(Boolean).join('\n- ');
 
   if (!context) {
     await audit('CRON | morning-digest SKIP | mnemon-empty');

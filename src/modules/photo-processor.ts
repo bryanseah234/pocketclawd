@@ -230,13 +230,17 @@ export async function processPhoto(
   userMessage: string,
   platform: string,
 ): Promise<ProcessPhotoResult> {
+  // Track the resized path so we can clean it up on failure paths too.
+  // Without this, a vision-describe failure leaks \`${base}.resized${ext}\`
+  // forever (resizePhoto already deleted the original).
+  let resizedPath: string | undefined;
   try {
     const validation = await validatePhoto(cachedPhotoPath);
     if (!validation.valid) {
       return { ok: false, error: validation.error };
     }
 
-    const resizedPath = await resizePhoto(cachedPhotoPath);
+    resizedPath = await resizePhoto(cachedPhotoPath);
     const description = await generateDescription(resizedPath, userMessage, platform);
     await rememberInMnemon(description, platform);
 
@@ -245,6 +249,12 @@ export async function processPhoto(
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: msg };
   } finally {
+    // Original is usually already gone (resizePhoto unlinks it on success),
+    // but if validate threw or resize failed before its unlink, this is the
+    // safety net. Both ignore-on-miss.
     await fs.unlink(cachedPhotoPath).catch(() => undefined);
+    if (resizedPath && resizedPath !== cachedPhotoPath) {
+      await fs.unlink(resizedPath).catch(() => undefined);
+    }
   }
 }
