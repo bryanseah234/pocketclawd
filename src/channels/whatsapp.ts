@@ -731,9 +731,18 @@ registerChannelAdapter('whatsapp', {
             if (fromMe) {
               const isSelfChat = botPhoneJid && chatJid === botPhoneJid;
               const trimmed = content.trim().toLowerCase();
-              const isOwnerAliasMention = OWNER_ALIASES.some((alias) =>
-                trimmed.startsWith(alias)
-              );
+              // Require the alias to be followed by a word boundary (space,
+              // punctuation, newline) or end-of-string. Plain startsWith()
+              // would let `@pocketclawing the cat` masquerade as a summon —
+              // a real concern when the bot shares the user's number and
+              // an accidental wake costs round-trip latency + token spend.
+              const isOwnerAliasMention = OWNER_ALIASES.some((alias) => {
+                if (!trimmed.startsWith(alias)) return false;
+                if (trimmed.length === alias.length) return true;
+                const next = trimmed.charAt(alias.length);
+                // anything that isn't a letter/digit/underscore terminates the alias
+                return !/[a-z0-9_]/i.test(next);
+              });
               const allow = isSelfChat || isOwnerAliasMention;
               if (!allow) continue;
               if (sentMessageCache.has(msg.key.id || '')) continue;
