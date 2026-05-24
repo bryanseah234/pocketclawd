@@ -1039,15 +1039,241 @@ All three are scoped, sized, and ready to ralph in priority order.
 
 ## 14. Risks and Mitigations
 
-*(R6.)*
+Single-user product → most "risk" is operational, not strategic.
+The list below is what could plausibly stop PocketClaw from doing
+its job for a week.
+
+### 14.1 Host machine dies / OS reinstall
+
+**Impact:** Total loss of channel session state (Baileys auth,
+Telegram session) and the KB if the disk is not separately backed
+up. The user has to re-pair WhatsApp, re-bootstrap Telegram, and
+re-ingest cloud sources.
+
+**Mitigation:**
+- Channel session state under `~/.pocketclaw/<channel>/` is small
+  (KB) and worth including in the user's regular backup rotation.
+- Postgres data volume is the load-bearing thing. Recommend
+  scheduled `pg_dump` to a path that gets backed up. (Not
+  implemented today; tracked under §16.)
+- Repo + plans + skills are in git; recoverable from origin.
+
+### 14.2 Better-sqlite3 native binding breaks
+
+**Impact:** Host won't start. `data/v2.db` (central DB) cannot be
+opened. All channel adapters refuse to wake.
+
+**Trigger:** Node version drift past 22.x; rebuilds against newer
+ABI. Already happened once (Node 26 default install).
+
+**Mitigation:**
+- `.nvmrc` pinned to 22; pre-commit hook can grow a version check.
+- `pnpm install` rebuilds the binary; if rebuild fails, the user
+  has to drop back to Node 22 (winget-installable).
+- Restoring the central DB itself is a separate plan
+  (`pocketclaw-central-db-pg.md`); migrating to Postgres would
+  remove this risk altogether.
+
+### 14.3 OneCLI auth expires silently
+
+**Impact:** Cloud ingestion silently stops. Recall is unaffected
+because it reads only from the KB, but the KB stops getting fresh
+rows. The morning digest goes stale.
+
+**Detection:** Audit log per ingester emits `OK | <count> rows`
+on success; absence of the count is the signal. Could grow into a
+weekly check.
+
+**Mitigation:**
+- OneCLI has a re-auth UI at `http://127.0.0.1:10254`.
+- The `/auth` skill triggers a re-auth from the bot.
+- The morning digest will surface "no new email in 36h" as a
+  weak signal once the digest cron is wired
+  (`pocketclaw-morning-digest-rewire.md`).
+
+### 14.4 Ollama model swap breaks embedding compatibility
+
+**Impact:** Old KB rows can no longer be searched by their
+embeddings if the model dimensionality changes. Existing rows
+remain inserted (they have `embed_model` recorded) but recall
+returns near-empty.
+
+**Mitigation:**
+- The `embed_model` column is the hook for a re-embed pass; it
+  exists today but no re-embed job is wired.
+- Avoid swapping models unless re-embed is wired. Tracked in §16.
+
+### 14.5 Postgres + Docker stack drift
+
+**Impact:** docker-compose pull pulls a newer pgvector or
+Postgres image; existing data volume becomes incompatible.
+
+**Mitigation:**
+- `docker-compose.yml` pins the image tag.
+- Backup volume before pulling.
+- The KB schema is one table; recovery is "pg_restore the dump
+  into a fresh container".
+
+### 14.6 Photo pipeline OOM on large image
+
+**Impact:** Container OOMs on a multi-megabyte upload before
+resize.
+
+**Mitigation:**
+- `photo-processor.ts` validates size before holding bytes in
+  memory; oversized uploads are rejected with a chat reply
+  rather than processed.
+
+### 14.7 Cross-channel context confusion
+
+**Impact:** If the agent gets a message from Telegram and a
+contradicting message from WhatsApp 30 seconds later (same user,
+same intent), it sees both in one session and may reply twice or
+combine them.
+
+**Mitigation:**
+- Single agent group, single session by design. The agent's
+  reply is delivered through the channel that wrote inbound.db
+  most recently. Cross-channel weirdness is a known sharp edge,
+  not a bug — single-user product, low frequency.
+
+### 14.8 Container restart loses unfinished MCP round-trips
+
+**Impact:** A `kb_request` in flight when the container is killed
+gets no `kb_response`; the tool call surfaces as a 15s timeout to
+the agent.
+
+**Mitigation:**
+- Restart is rare (only via `ncl groups restart` or a self-mod
+  approval).
+- 15s timeout surfaces a clean error rather than hanging.
+- The agent retries from scratch on the next user message.
 
 ## 15. Non-Functional Requirements
 
-*(R6.)*
+### 15.1 Reliability
+
+- Host process MUST recover from a crash without manual
+  intervention (Scheduled Task auto-restart).
+- Container MUST respawn within 30s of a kill via the `onExit`
+  callback in `src/container-runner.ts`.
+- A `kb_request` round-trip MUST complete within 15s under
+  normal load (Postgres on `127.0.0.1`, Ollama on
+  `127.0.0.1:11434`).
+
+### 15.2 Performance
+
+- Inbound chat latency target: 7-11s end-to-end (debouncer 5s +
+  Claude 2-6s).
+- KB query: <100ms p95 for `kb.recall(query, k=5)` against a KB
+  of <100k rows. HNSW index in the migration.
+- Ollama embedding: <200ms per row; batched in the ingester.
+- Ollama llava description: <30s p95 per photo.
+
+### 15.3 Capacity
+
+Single user, lifetime usage. KB sizing target: 1M rows over
+~10 years. Postgres on a single SSD handles this trivially; the
+bottleneck (if any) is HNSW build time during migrations.
+
+### 15.4 Maintainability
+
+- Every module exports through `index.ts`; no ad-hoc deep imports
+  outside the module group.
+- Tests next to modules; vitest for host, bun test for container.
+- One commit per phase (P1-P7, M0-M7, R0-R7). Reverting a phase
+  is a single revert, not a multi-file picking exercise.
+- Plan files live under `.omo/plans/`. A plan precedes any
+  multi-phase work; opportunistic single-commit fixes can skip
+  the plan.
+
+### 15.5 Observability
+
+- Audit log per cron run, per credentialed action, per channel
+  adapter wake.
+- Heartbeat file at `/workspace/.heartbeat` per container, host
+  watches stale-detection at 60s sweep.
+- Vitest + bun test status as the build-time observability surface.
+- No external metrics endpoint. Single user, single host;
+  metrics are the audit log.
+
+### 15.6 Privacy
+
+- No telemetry leaves the host. No analytics. No phone-home.
+- The KB is on disk on the user's machine.
+- Photo bytes are deleted after description. Descriptions persist.
+- Channel content is forwarded only to the user's own chosen
+  upstreams: Claude Code (LLM), Ollama (local), and the user's
+  own configured cloud sources for ingestion.
+
+### 15.7 Portability
+
+- Host code is portable across Windows / macOS / Linux. Container
+  runtime selection is automatic via `src/container-runtime.ts`.
+- The `KnowledgeBase` interface is the swap-out hook; pgvector is
+  one implementation. A future SQLite+sqlite-vss implementation is
+  plausible without API changes.
+
+### 15.8 Security
+
+Covered in §9; restated as NFRs:
+
+- No inbound network port exposed beyond localhost.
+- All credentialed traffic via OneCLI proxy.
+- Container does not see raw credentials.
+- Photo bytes deleted post-description.
 
 ## 16. Open Items and Future Work
 
-*(R6. Consolidates today's stubbed/aspirational rows. Doubles as the project backlog.)*
+The PRD doubles as the project backlog. Items are grouped by where
+they sit on the dependency graph.
+
+### 16.1 Plan stubs (ready to ralph)
+
+- **`pocketclaw-wiki-cron-rewire.md`** — re-wire the 03:00 cron.
+  Two options sketched (host-only transform vs agent-driven prose);
+  recommend ship A first.
+- **`pocketclaw-morning-digest-rewire.md`** — re-wire the 07:00
+  cron. Host-only handler; needs a destination-config decision
+  (env var vs DM convention).
+- **`pocketclaw-agent-side-docx-pipeline.md`** — new MCP tool family
+  driving existing host renderers. Mirrors the M0 kb_request
+  transport.
+
+### 16.2 Plans not yet written (named / scoped)
+
+- **`pocketclaw-central-db-pg.md`** — migrate `data/v2.db` from
+  better-sqlite3 to Postgres (or restore from backup). Clears the
+  142 vitest failures and removes the Node-version-coupling risk
+  in §14.2.
+- **`pocketclaw-kb-reembed.md`** — stand up a re-embed pass that
+  re-processes rows whose `embed_model` differs from the current
+  configured model.
+- **`pocketclaw-pg-backup.md`** — scheduled `pg_dump` to a
+  user-chosen backup path; one cron entry plus a restore script.
+- **`pocketclaw-e2e-smoke.md`** — automated end-to-end harness
+  with mocked channel adapters.
+
+### 16.3 Aspirational (no plan yet)
+
+- Document upload from the bot back into Telegram (after
+  `agent-side-docx-pipeline` ships).
+- Per-source ingestion frequency override (today: all sources
+  share the 02:00 cron).
+- A "what changed since I last asked" recall mode that diffs
+  recent KB rows against a session-local snapshot.
+- Voice-note transcription (uses the existing `/speech` skill in
+  reverse — Whisper local, Ollama-served).
+- A CLAUDE.md generator that derives the inherited NanoClaw
+  CLAUDE.md sections automatically from the live module tree.
+
+### 16.4 Out of scope (decided no)
+
+- Multi-user / team plan.
+- Public HTTP API.
+- Web dashboard.
+- Native mobile app.
+- LLM provider that requires per-token billing (already removed).
 
 ---
 
