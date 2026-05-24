@@ -17,7 +17,7 @@ import * as path from 'node:path';
 import { CloudScheduler } from './ingestion/scheduler.js';
 import { WikiGenerator } from './wiki-generator.js';
 import { envPath } from './paths.js';
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 import {
   watchAllConfiguredRoots,
   ProcessedRegistry,
@@ -90,18 +90,16 @@ async function runWikiRegen(): Promise<void> {
 async function runMnemonGc(): Promise<void> {
   await audit('CRON | mnemon-gc START');
   try {
-    // suggest-mode: returns low-importance candidates so we have visibility
+    // Suggest-mode: surface low-importance candidates so we have visibility
     // into store growth without auto-deleting. If/when we want enforcement,
-    // we can extend this to parse the JSON output and call `mnemon forget`
-    // for items past a retention threshold (by age, by access_count, or
-    // both). For now: log the candidate count to audit so we can size the
-    // problem before designing a policy.
-    const out = await runMnemon(['gc', '--threshold', '0.5', '--limit', '50']);
-    const lines = out.stdout.split(/\r?\n/).filter((l: string) => l.trim().length);
-    // gc output is human-readable text — count non-empty lines as a rough
-    // proxy for candidate count. Header lines are noise but bounded.
+    // we can iterate this list and call `kb.forget(id)` for items past a
+    // retention threshold (by age, access_count, or both). For now: log
+    // the candidate count to audit so we can size the problem before
+    // designing a policy.
+    const kb = await getKnowledgeBase();
+    const candidates = await kb.lowImportance(0.5, 50);
     await audit(
-      `CRON | mnemon-gc END | output_lines=${lines.length}`,
+      `CRON | mnemon-gc END | candidates=${candidates.length}`,
     );
   } catch (e) {
     await audit(`CRON | mnemon-gc FAIL | ${(e as Error).message}`);
@@ -216,13 +214,21 @@ export function startPocketClawCron(): void {
   });
 }
 
-/** Pipe a single Fact to mnemon via the same pattern as scheduler.ts. */
-async function mnemonRemember(text: string, tags: string[]): Promise<void> {
+/** Pipe a single Fact into the knowledge base. */
+async function mnemonRemember(
+  text: string,
+  tags: string[],
+  source: string,
+  sourceId: string,
+): Promise<void> {
   // Errors are swallowed by design — file-watcher must not die on a single
-  // failed write. `runMnemon` already retries on SQLITE_BUSY internally.
-  await runMnemon(
-    ['remember', text, '--source', 'external', '--tags', tags.join(','), '--no-diff'],
-  ).catch(() => undefined);
+  // failed write. The KB layer handles transient pgvector retries internally.
+  try {
+    const kb = await getKnowledgeBase();
+    await kb.store({ text, source, source_id: sourceId, tags });
+  } catch {
+    /* swallow */
+  }
 }
 
 let fileWatcherStarted = false;
@@ -240,13 +246,17 @@ async function startFileWatcher(): Promise<void> {
         skipped += 1;
         return;
       }
-      // Each chunk → mnemon insight, tagged for source-attribution.
+      // Each chunk → KB insight, tagged for source-attribution. The Fact
+      // already carries a stable (source, sourceId) pair derived from the
+      // file's SHA + chunk index, so re-ingestion of unchanged files is a
+      // dedup no-op at the (source, source_id) unique constraint.
       for (const fact of result.facts) {
-        await mnemonRemember(fact.text, [
-          'pocketclaw',
-          `src:file`,
-          `path:${truncForTag(fact.source)}`,
-        ]);
+        await mnemonRemember(
+          fact.text,
+          ['pocketclaw', `src:file`, `path:${truncForTag(fact.source)}`],
+          fact.source,
+          fact.sourceId ?? fact.source,
+        );
       }
       processed += 1;
       if (processed % 100 === 0) {

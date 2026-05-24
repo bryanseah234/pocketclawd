@@ -23,7 +23,7 @@
  * `src/channels/chat-sdk-bridge.ts` (dispatch path for Telegram + others).
  */
 
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 
 export type ChatPlatform = 'telegram' | 'whatsapp' | 'discord' | 'slack' | 'matrix' | 'imessage' | 'webex' | 'gchat' | 'teams';
 
@@ -107,19 +107,29 @@ async function writeMnemon(record: ChatMessageRecord): Promise<void> {
   ];
   if (record.senderId) tags.push(`sender:${truncateForTag(record.senderId)}`);
 
-  const r = await runMnemon([
-    'remember',
-    content,
-    '--source',
-    'external',
-    '--tags',
-    tags.join(','),
-    '--no-diff', // chat is high-volume; skip dedup for speed
-  ]);
-  if (r.code !== 0) {
-    // eslint-disable-next-line no-console
-    console.error(`[chat-ingest] mnemon remember exit ${r.code} (attempts=${r.attempts}): ${r.stderr.slice(0, 200)}`);
-  }
+  const kb = await getKnowledgeBase();
+  // source_id encodes platform+chat+message so re-ingestion is idempotent
+  // via the (source, source_id) UNIQUE constraint in Postgres — replaces
+  // the old `runMnemon --no-diff` behaviour with a DB-layer dedup guard.
+  const sourceId = `${record.platform}:${record.chatId}:${record.messageId}`;
+  await kb.store({
+    text: content,
+    source: `${record.platform}-chat`,
+    source_id: sourceId,
+    category: 'chat',
+    tags,
+    metadata: {
+      chat_id: record.chatId,
+      chat_name: record.chatName ?? null,
+      sender_id: record.senderId,
+      sender_name: record.senderName ?? null,
+      from_self: record.fromSelf,
+      is_group: record.isGroup,
+      occurred_at: record.occurredAt.toISOString(),
+      reply_to: record.replyTo ?? null,
+      attachments: record.attachments ?? null,
+    },
+  });
 }
 
 function formatContent(record: ChatMessageRecord): string {

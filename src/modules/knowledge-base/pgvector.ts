@@ -225,6 +225,34 @@ export class PgVectorKB implements KnowledgeBase {
     return Number(r.rows[0]!.count);
   }
 
+  async topEntities(limit = 100): Promise<Array<{ entity: string; count: number }>> {
+    const pool = getPool();
+    const r = await pool.query<{ entity: string; count: string }>(
+      `SELECT unnest(entities) AS entity, COUNT(*)::text AS count
+         FROM insights
+        WHERE entities IS NOT NULL AND array_length(entities, 1) > 0
+        GROUP BY entity
+        ORDER BY count DESC
+        LIMIT $1`,
+      [limit],
+    );
+    return r.rows.map((row) => ({ entity: row.entity, count: Number(row.count) }));
+  }
+
+  async lowImportance(threshold: number, limit = 50): Promise<Insight[]> {
+    const pool = getPool();
+    const r = await pool.query<DbInsightRow>(
+      `SELECT id, text, embed_model, source, source_id, category, importance,
+              entities, tags, metadata, created_at, updated_at
+         FROM insights
+        WHERE importance IS NOT NULL AND importance < $1
+        ORDER BY importance ASC, created_at ASC
+        LIMIT $2`,
+      [threshold, limit],
+    );
+    return r.rows.map(rowToInsight);
+  }
+
   async close(): Promise<void> {
     await closePool();
   }

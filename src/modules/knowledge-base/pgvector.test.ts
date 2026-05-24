@@ -226,6 +226,37 @@ describe.skipIf(!postgresAvailable)('PgVectorKB', () => {
     expect(await kb.count({ source: 'kbtest-a' })).toBe(2);
     expect(await kb.count({ source: 'kbtest-b' })).toBe(1);
   });
+
+  it('topEntities aggregates and counts entity occurrences', async () => {
+    await kb.store({ text: 'i1', source: 'kbtest', source_id: 'te-1', entities: ['Alice', 'Bob'] });
+    await kb.store({ text: 'i2', source: 'kbtest', source_id: 'te-2', entities: ['Alice', 'Carol'] });
+    await kb.store({ text: 'i3', source: 'kbtest', source_id: 'te-3', entities: ['Alice'] });
+    await kb.store({ text: 'i4', source: 'kbtest', source_id: 'te-4', entities: [] });
+
+    const top = await kb.topEntities(10);
+    const alice = top.find((e) => e.entity === 'Alice');
+    const bob = top.find((e) => e.entity === 'Bob');
+    const carol = top.find((e) => e.entity === 'Carol');
+    expect(alice?.count).toBe(3);
+    expect(bob?.count).toBe(1);
+    expect(carol?.count).toBe(1);
+    // Alice is most frequent — must come first
+    expect(top[0]?.entity).toBe('Alice');
+  });
+
+  it('lowImportance returns insights below threshold', async () => {
+    await kb.store({ text: 'low-1', source: 'kbtest', source_id: 'li-1', importance: 1 });
+    await kb.store({ text: 'low-2', source: 'kbtest', source_id: 'li-2', importance: 3 });
+    await kb.store({ text: 'mid', source: 'kbtest', source_id: 'li-3', importance: 5 });
+    await kb.store({ text: 'high', source: 'kbtest', source_id: 'li-4', importance: 9 });
+
+    const low = await kb.lowImportance(5, 50);
+    const lowKbtest = low.filter((i) => i.source === 'kbtest');
+    expect(lowKbtest).toHaveLength(2);
+    // Sorted ascending by importance, so the 1-importance row comes first
+    expect(lowKbtest[0]?.importance).toBe(1);
+    expect(lowKbtest[1]?.importance).toBe(3);
+  });
 });
 
 // Always-runnable unit-level tests that don't need Postgres

@@ -10,7 +10,8 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { runMnemon } from './mnemon-runner.js';
+import { createHash } from 'node:crypto';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 
 /** Allowed image extensions (lower-case, with dot). */
 export const ALLOWED_FORMATS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -191,12 +192,15 @@ function matchLine(raw: string, label: string): string | undefined {
 }
 
 /**
- * Persist a description to mnemon. Calls `mnemon remember --photo` via
- * shell; mnemon must be on PATH (installed via `/add-mnemon`).
+ * Persist a description to the KnowledgeBase. The `sourceId` (typically
+ * SHA256 of the resized image bytes) makes re-processing the same photo
+ * idempotent via the (source, source_id) UNIQUE constraint — the old
+ * `mnemon remember --photo` had no such guard.
  */
 export async function rememberInMnemon(
   description: PhotoDescription,
   source: string,
+  sourceId?: string,
 ): Promise<void> {
   const text = [
     description.description,
@@ -206,14 +210,26 @@ export async function rememberInMnemon(
     .filter(Boolean)
     .join(' | ');
 
-  await runMnemonWrite(['remember', '--photo', text, '--source', source]);
+  const kb = await getKnowledgeBase();
+  await kb.store({
+    text,
+    source,
+    source_id: sourceId,
+    category: 'photo',
+    tags: ['pocketclaw', 'kind:photo', `src:${source}`],
+    entities: description.keyElements ?? [],
+    metadata: {
+      description: description.description,
+      extracted_text: description.extractedText ?? null,
+      key_elements: description.keyElements ?? null,
+    },
+  });
 }
 
-async function runMnemonWrite(args: string[]): Promise<void> {
-  const r = await runMnemon(args);
-  if (r.code !== 0) {
-    throw new Error(`mnemon exited with code ${r.code} (attempts=${r.attempts}): ${r.stderr}`);
-  }
+/** SHA256 of the file at `filePath`, hex-encoded. */
+async function sha256OfFile(filePath: string): Promise<string> {
+  const buf = await fs.readFile(filePath);
+  return createHash('sha256').update(buf).digest('hex');
 }
 
 /**
@@ -242,7 +258,8 @@ export async function processPhoto(
 
     resizedPath = await resizePhoto(cachedPhotoPath);
     const description = await generateDescription(resizedPath, userMessage, platform);
-    await rememberInMnemon(description, platform);
+    const sourceId = await sha256OfFile(resizedPath);
+    await rememberInMnemon(description, platform, sourceId);
 
     return { ok: true, description };
   } catch (err) {

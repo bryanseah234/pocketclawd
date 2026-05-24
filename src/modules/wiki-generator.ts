@@ -20,7 +20,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { envPath } from './paths.js';
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 const WIKI_DIR = path.join(VAULT_PATH, 'wiki');
@@ -99,19 +99,17 @@ export function sanitizeEntityFilename(name: string): string {
  * the wiki prompt as `Memory context`).
  */
 export async function recallEntity(entityName: string, depth = 3): Promise<string> {
-  const r = await runMnemon([
-    'recall',
-    '--query',
-    entityName,
-    '--depth',
-    String(depth),
-    '--format',
-    'json',
-  ]);
-  if (r.code !== 0) {
-    throw new Error(`mnemon recall failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
-  }
-  return r.stdout;
+  // The `depth` arg was a knob on the legacy mnemon CLI's graph traversal;
+  // pgvector recall is purely top-k semantic, so we map depth → k with a
+  // small multiplier to keep callers' intent ("more depth → more context").
+  const kb = await getKnowledgeBase();
+  const insights = await kb.recall(entityName, { k: Math.max(10, depth * 10) });
+  // Render as a plain bullet list for the prompt's `Memory context` slot.
+  // Each line carries the source for attribution; the LLM is told elsewhere
+  // to only use facts present in this block.
+  return insights
+    .map((i) => `- (${i.source}) ${i.text.replace(/\s+/g, ' ').trim()}`)
+    .join('\n');
 }
 
 /**
@@ -123,25 +121,19 @@ export async function recallEntity(entityName: string, depth = 3): Promise<strin
  * topics (single-letter tokens, common process names, log-level words).
  */
 export async function listEntities(limit = 100): Promise<string[]> {
-  const r = await runMnemon(['status']);
-  if (r.code !== 0) {
-    throw new Error(`mnemon status failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
-  }
-  try {
-    const parsed = JSON.parse(r.stdout) as {
-      top_entities?: Array<{ entity: string; count: number }>;
-    };
-    const NOISE = new Set([
-      'ID', 'OK', 'INFO', 'ERROR', 'DEBUG', 'WARN', 'WARNING',
-      'DB', 'API', 'PATH', 'DM', 'WSL',
-    ]);
-    return (parsed.top_entities ?? [])
-      .map((e) => e.entity)
-      .filter((e) => e && e.length > 1 && !NOISE.has(e) && !e.endsWith('.exe'))
-      .slice(0, limit);
-  } catch (e) {
-    throw new Error(`mnemon status parse: ${(e as Error).message}`);
-  }
+  // Pull top-N entities aggregated across the whole insight store. We ask
+  // the KB for more than `limit` and then trim post-filter so noise tokens
+  // don't shrink the output below what callers asked for.
+  const kb = await getKnowledgeBase();
+  const top = await kb.topEntities(Math.max(limit * 2, 100));
+  const NOISE = new Set([
+    'ID', 'OK', 'INFO', 'ERROR', 'DEBUG', 'WARN', 'WARNING',
+    'DB', 'API', 'PATH', 'DM', 'WSL',
+  ]);
+  return top
+    .map((e) => e.entity)
+    .filter((e) => e && e.length > 1 && !NOISE.has(e) && !e.endsWith('.exe'))
+    .slice(0, limit);
 }
 
 /**

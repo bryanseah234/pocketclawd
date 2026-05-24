@@ -15,7 +15,7 @@ import * as path from 'node:path';
 // pdfkit's published types are CommonJS; import as default.
 import PDFDocument from 'pdfkit';
 import { envPath } from './paths.js';
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 
@@ -69,31 +69,22 @@ export async function gatherLocalSources(
   topic: string,
   limit = 80,
 ): Promise<{ sources: ResearchSource[]; errors: string[] }> {
-  const r = await runMnemon(['recall', topic, '--limit', String(limit)]);
   try {
-    const parsed = JSON.parse(r.stdout) as {
-      results?: Array<{
-        insight?: {
-          id?: string;
-          content?: string;
-          tags?: string[];
-          created_at?: string;
-        };
-      }>;
-    };
-    const sources: ResearchSource[] = (parsed.results ?? []).map((row) => {
-      const ins = row.insight ?? {};
-      const tag = (ins.tags ?? []).find((t) => t.startsWith('src:')) ?? 'src:local';
-      return {
-        source: tag.replace(/^src:/, ''),
-        content: String(ins.content ?? ''),
-        id: String(ins.id ?? ''),
-        occurredAt: ins.created_at,
-      };
-    });
-    return { sources, errors: r.stderr ? [r.stderr.trim()] : [] };
+    const kb = await getKnowledgeBase();
+    const insights = await kb.recall(topic, { k: limit });
+    const sources: ResearchSource[] = insights.map((ins) => ({
+      // Prefer the insight's own `source` column; fall back to a `src:`
+      // tag for legacy rows that predate the column being authoritative.
+      source:
+        ins.source ||
+        ((ins.tags ?? []).find((t) => t.startsWith('src:')) ?? 'src:local').replace(/^src:/, ''),
+      content: ins.text,
+      id: String(ins.id ?? ''),
+      occurredAt: ins.created_at?.toISOString(),
+    }));
+    return { sources, errors: [] };
   } catch (e) {
-    return { sources: [], errors: [`mnemon recall parse: ${(e as Error).message}`] };
+    return { sources: [], errors: [`kb recall: ${(e as Error).message}`] };
   }
 }
 

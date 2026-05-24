@@ -46,6 +46,20 @@ export interface KnowledgeBase {
   link(fromId: number, toId: number, kind: string, weight?: number): Promise<void>;
   forget(id: number): Promise<void>;
   count(filter?: { source?: string }): Promise<number>;
+
+  /**
+   * Return the most-frequently-occurring entities across all insights.
+   * Used by wiki-generator to enumerate entities worth a wiki page.
+   * Aggregates `unnest(entities)` and counts.
+   */
+  topEntities(limit?: number): Promise<Array<{ entity: string; count: number }>>;
+
+  /**
+   * Return insights below an importance threshold — candidates for GC.
+   * Suggest-mode only; caller decides whether to forget().
+   */
+  lowImportance(threshold: number, limit?: number): Promise<Insight[]>;
+
   close(): Promise<void>;
 }
 

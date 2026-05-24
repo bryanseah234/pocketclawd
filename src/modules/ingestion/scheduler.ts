@@ -14,7 +14,7 @@ import { appleIngesters } from './apple.js';
 import { githubIngesters } from './github.js';
 import { slackIngesters } from './slack.js';
 import type { CloudIngester, Fact, IngestResult } from './types.js';
-import { runMnemon } from '../mnemon-runner.js';
+import { getKnowledgeBase } from '../knowledge-base/index.js';
 
 export interface IngestSummary {
   startedAt: Date;
@@ -112,31 +112,34 @@ async function runOne(
 }
 
 /**
- * Default fact handler: pipe to `mnemon remember`. Mnemon must be on PATH
- * (installed via `/add-mnemon`).
+ * Default fact handler: store the fact in the KnowledgeBase (pgvector).
  *
- * Mnemon's `--source` only accepts `user|agent|external`, so we tag the
- * specific ingester source (e.g. `gmail`, `outlook-mail`) so it can still
- * be queried later via `mnemon recall --tag gmail`.
+ * Each ingester sets its own `Fact.source` (`gmail`, `outlook-mail`, etc.)
+ * which becomes the Insight `source` directly — no need to remap to
+ * `external`. Idempotency comes from the (source, source_id) UNIQUE
+ * constraint: re-running an ingester is free and cannot duplicate rows.
  *
- * Mnemon writes to a single SQLite file. `runMnemon` (mnemon-runner.ts)
- * serializes writes process-wide and retries on SQLITE_BUSY, so callers
- * here just await it directly.
+ * The KB singleton handles its own connection pool, so callers just await
+ * `kb.store(...)` per fact. Concurrent calls are safe (Postgres handles
+ * locking; no SQLITE_BUSY storms like the mnemon CLI had).
  */
 async function defaultOnFact(fact: Fact): Promise<void> {
-  const tags = [`pocketclaw`, `src:${fact.source}`];
+  const tags = ['pocketclaw', `src:${fact.source}`];
   if (fact.sourceId) tags.push(`id:${truncateForTag(fact.sourceId)}`);
-  const r = await runMnemon([
-    'remember',
-    fact.text,
-    '--source',
-    'external',
-    '--tags',
-    tags.join(','),
-  ]);
-  if (r.code !== 0) {
-    throw new Error(`mnemon remember failed (${r.code}, attempts=${r.attempts}): ${r.stderr}`);
-  }
+
+  const kb = await getKnowledgeBase();
+  await kb.store({
+    text: fact.text,
+    source: fact.source,
+    source_id: fact.sourceId,
+    category: 'fact',
+    tags,
+    metadata: {
+      link: fact.link ?? null,
+      occurred_at: fact.occurredAt?.toISOString() ?? null,
+      ...(fact.meta ?? {}),
+    },
+  });
 }
 
 /** Tags can't contain spaces or commas — keep id readable but safe. */

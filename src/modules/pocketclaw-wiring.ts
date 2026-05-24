@@ -32,7 +32,7 @@ import { onDeliveryAdapterReady, getDeliveryAdapter } from '../delivery.js';
 import { getDb } from '../db/connection.js';
 import { getMessagingGroup } from '../db/messaging-groups.js';
 import { envPath} from './paths.js';
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 import { log } from '../log.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
@@ -142,16 +142,11 @@ export async function callBedrockClaude(prompt: string): Promise<string> {
  */
 async function mnemonRecallText(query: string, limit = 30): Promise<string> {
   // Errors → empty string (digest path is best-effort).
-  const r = await runMnemon(['recall', query, '--limit', String(limit)]).catch(
-    () => ({ code: -1, stdout: '', stderr: '', retried: false, attempts: 0 }),
-  );
-  if (r.code !== 0) return '';
   try {
-    const j = JSON.parse(r.stdout) as {
-      results?: Array<{ insight?: { content?: string } }>;
-    };
-    return (j.results ?? [])
-      .map((row) => row.insight?.content?.trim())
+    const kb = await getKnowledgeBase();
+    const insights = await kb.recall(query, { k: limit });
+    return insights
+      .map((i) => i.text?.trim())
       .filter((s): s is string => !!s)
       .slice(0, limit)
       .join('\n- ');

@@ -20,7 +20,7 @@ import {
   AlignmentType,
 } from 'docx';
 import { envPath } from './paths.js';
-import { runMnemon } from './mnemon-runner.js';
+import { getKnowledgeBase } from './knowledge-base/index.js';
 
 const VAULT_PATH = envPath('VAULT_PATH', 'vault');
 
@@ -48,17 +48,13 @@ export interface MinutesResult {
 export async function gatherContextFromMnemon(
   meetingTitle: string,
 ): Promise<{ raw: string[]; errors: string[] }> {
-  const r = await runMnemon(['recall', meetingTitle, '--limit', '50']);
   try {
-    const parsed = JSON.parse(r.stdout) as {
-      results?: Array<{ insight?: { content?: string } }>;
-    };
-    const raw = (parsed.results ?? [])
-      .map((x) => x.insight?.content ?? '')
-      .filter(Boolean);
-    return { raw, errors: r.stderr ? [r.stderr.trim()] : [] };
+    const kb = await getKnowledgeBase();
+    const insights = await kb.recall(meetingTitle, { k: 50 });
+    const raw = insights.map((i) => i.text).filter(Boolean);
+    return { raw, errors: [] };
   } catch (e) {
-    return { raw: [], errors: [`mnemon recall parse: ${(e as Error).message}`] };
+    return { raw: [], errors: [`kb recall: ${(e as Error).message}`] };
   }
 }
 
