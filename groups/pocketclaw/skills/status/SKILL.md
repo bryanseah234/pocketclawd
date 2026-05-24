@@ -14,39 +14,25 @@ description: Show PocketClaw runtime health. Use when the user types `/status`, 
 
 ## Behaviour
 
-Run a quick read-only health check across mnemon + the file system, then reply
-with a compact human-readable summary. No mutations, no API calls, no LLM
-involvement beyond formatting the response.
+Run a quick read-only health check across the knowledge base + the file system, then reply with a compact human-readable summary. No mutations, no LLM beyond formatting the response.
 
 ## Implementation steps
 
-The agent calls these tools in order, then formats the reply:
+### 1. `kb_status` — get total insight count + top entities
 
-### 1. `mnemon status` — get total fact count + DB size + top entities
+Call the MCP tool `kb_status({})`. It returns `{ total, topEntities: [{ entity, count }, ...] }`.
 
-```bash
-mnemon status
-```
-
-Returns JSON with `total_insights`, `edge_count`, `db_size_bytes`,
-`top_entities`. Parse and surface:
-
-- Total insights (deduped)
-- Top 5 entities by frequency
-- DB size in KB
+If you want a longer entity list (top 20 instead of top 10), use `kb_list_top_entities({ limit: 20 })` instead.
 
 ### 2. Read audit log — find last ingestion run
 
-The audit log lives at `${LOG_PATH}/audit.log` (LOG_PATH from env, defaults
-to `~/.pocketclaw/logs/`). Read the last 20 lines and pull out the most
-recent line containing `cloud-ingest` or `runAll`.
+The audit log lives at `${LOG_PATH}/audit.log` (LOG_PATH from env, defaults to `~/.pocketclaw/logs/`). Read the last 20 lines and pull out the most recent line containing `cloud-ingest` or `runAll`.
 
 ```bash
 tail -n 20 "$LOG_PATH/audit.log"
 ```
 
-If the file does not exist, say "no audit log yet — service may not have
-fired a cron yet".
+If the file does not exist, say "no audit log yet — service may not have fired a cron yet".
 
 ### 3. Count vault artifacts by category
 
@@ -74,8 +60,7 @@ Compute from the env file:
 
 ### 5. Format reply
 
-Produce a compact message that fits in one Telegram bubble (≤2000 chars).
-Use platform-native formatting:
+Produce a compact message that fits in one Telegram bubble (≤2000 chars). Use platform-native formatting:
 
 - **Telegram** (Markdown V2): `*bold*`, code blocks via triple backticks. Escape `_*[]()~>#+-=|{}.!` outside code blocks.
 - **WhatsApp** (plain): no markdown; use `-` for bullets and emoji.
@@ -84,7 +69,7 @@ Use platform-native formatting:
 
 ```
 *PocketClaw status*
-🧠 Memory: 204 insights, 2,171 edges (2.1 MB)
+🧠 Memory: 204 insights
 📂 Vault: 1 wiki · 1 minutes · 1 research · 1 slides · 0 speeches
 🕐 Last ingest: 2026-05-21 22:15 (47 min ago)
 🔝 Top entities: GitHub, gmail, PocketClaw, README, mail
@@ -97,7 +82,7 @@ Parked: Outlook ⏸ ×3 · Slack ⏸ ×1
 
 ```
 PocketClaw status
-- Memory: 204 insights, 2171 edges (2.1 MB)
+- Memory: 204 insights
 - Vault: wiki=1 minutes=1 research=1 slides=1 speeches=0
 - Last ingest: 22:15 (47 min ago)
 - Top entities: GitHub, gmail, PocketClaw, README, mail
@@ -111,7 +96,7 @@ Parked: Outlook x3, Slack x1
 - Reply within 5 seconds (it's a status check, not a search).
 - Always show memory count + last-ingest time at minimum.
 - Adapt formatting for the calling channel (Telegram Markdown V2 vs WhatsApp plain).
-- Use the parsed mnemon JSON — never hard-code numbers.
+- Use the parsed `kb_status` result — never hard-code numbers.
 
 ## Must-not-do
 
@@ -120,3 +105,4 @@ Parked: Outlook x3, Slack x1
 - Don't kick off a fresh ingestion as part of /status — that's what `/ingest` is for.
 - Don't include internal entity-count noise (top 5 only, no full list).
 - Don't list vault filenames — counts only.
+- Don't reference `mnemon` — that engine is gone, replaced by `kb_*` MCP tools backed by pgvector.
