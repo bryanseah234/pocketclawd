@@ -36,16 +36,29 @@ export function sanitizeTelegramLegacyMarkdown(input: string): string {
   text = text.replace(/\*\*([^*\n]+?)\*\*/g, '*$1*');
   text = text.replace(/__([^_\n]+?)__/g, '_$1_');
 
+  // If `*` count is odd, the legacy Markdown parser rejects the whole
+  // message. Same for `_`. Previous behaviour was to STRIP all of the
+  // offending delimiter — but that silently mangles content like
+  // `$variable_name` or `5*x` adjacent to legitimate emphasis. Escape
+  // instead: `\*` / `\_` are literal in legacy Markdown, so the message
+  // ships verbatim and the user sees the original characters. We lose
+  // emphasis on that line, but no text disappears.
   const starCount = (text.match(/\*/g) ?? []).length;
+  if (starCount % 2 !== 0) {
+    text = text.replace(/\*/g, '\\*');
+  }
   const underCount = (text.match(/_/g) ?? []).length;
-  if (starCount % 2 !== 0 || underCount % 2 !== 0) {
-    text = text.replace(/[*_]/g, '');
+  if (underCount % 2 !== 0) {
+    text = text.replace(/_/g, '\\_');
   }
 
+  // Same logic for brackets: escape rather than delete so URLs / array
+  // syntax / footnote markers survive intact when they unbalance the
+  // link parser.
   const openBrackets = (text.match(/\[/g) ?? []).length;
   const closeBrackets = (text.match(/\]/g) ?? []).length;
   if (openBrackets !== closeBrackets) {
-    text = text.replace(/[[\]]/g, '');
+    text = text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
   }
 
   return text.replace(

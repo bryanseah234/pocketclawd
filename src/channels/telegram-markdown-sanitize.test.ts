@@ -24,16 +24,21 @@ describe('sanitizeTelegramLegacyMarkdown', () => {
     expect(sanitizeTelegramLegacyMarkdown(input)).toBe(input);
   });
 
-  it('strips formatting chars on odd delimiter count (unbalanced *)', () => {
-    expect(sanitizeTelegramLegacyMarkdown('a * b *c*')).toBe('a  b c');
+  it('escapes formatting chars on odd delimiter count (unbalanced *)', () => {
+    // Escape preserves visible content; legacy Markdown renders \* as a literal *
+    expect(sanitizeTelegramLegacyMarkdown('a * b *c*')).toBe('a \\* b \\*c\\*');
   });
 
-  it('strips formatting chars on odd delimiter count (unbalanced _)', () => {
-    expect(sanitizeTelegramLegacyMarkdown('file_name has _one italic_')).toBe('filename has one italic');
+  it('escapes formatting chars on odd delimiter count (unbalanced _)', () => {
+    // file_name (1) + _one italic_ (2) = 3 underscores → all escaped, content preserved
+    expect(sanitizeTelegramLegacyMarkdown('file_name has _one italic_')).toBe(
+      'file\\_name has \\_one italic\\_',
+    );
   });
 
-  it('strips brackets when unbalanced', () => {
-    expect(sanitizeTelegramLegacyMarkdown('see [docs here')).toBe('see docs here');
+  it('escapes brackets when unbalanced', () => {
+    // Escape preserves the text the user/agent wrote — no silent character loss.
+    expect(sanitizeTelegramLegacyMarkdown('see [docs here')).toBe('see \\[docs here');
   });
 
   it('leaves matched brackets (e.g. links) alone when counts balance', () => {
