@@ -43,4 +43,4 @@ If the agent doesn't have enough local data, it should say so and stop — NOT f
 
 ## Forward link
 
-PDF export tracked in: the follow-on `.omo/plans/agent-side-docx-pipeline.md` (shared with `/minutes` and `/slides`).
+PDF export tracked in: the follow-on `.omo/plans/pocketclaw-agent-side-docx-pipeline.md` (shared with `/minutes` and `/slides`).

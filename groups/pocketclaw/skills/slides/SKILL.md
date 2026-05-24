@@ -22,4 +22,4 @@ description: Generate a .pptx deck from a topic with knowledge-base context (NOT
 
 ## Forward link
 
-Tracked in: the follow-on `.omo/plans/agent-side-docx-pipeline.md` (shared with `/minutes` and `/research`).
+Tracked in: the follow-on `.omo/plans/pocketclaw-agent-side-docx-pipeline.md` (shared with `/minutes` and `/research`).
