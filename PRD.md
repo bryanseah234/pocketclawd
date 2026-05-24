@@ -818,15 +818,224 @@ reply uses the description, not the pixels.
 
 ## 11. Testing Strategy
 
-*(R5. Cites real test files; vitest baseline + bun-test for container.)*
+Two test runners, two scopes. Single user, single host → no CI
+fleet; tests run locally before commit (or via the pre-commit hook).
+
+### 11.1 Host (vitest)
+
+`pnpm exec vitest run` from the repo root. Tests live next to the
+modules they cover (`*.test.ts`). Coverage is selective, not
+exhaustive — favour load-bearing modules (KB, debouncer, photo
+pipeline, ingestion idempotency) over UI helpers.
+
+Representative real test files in the live tree:
+
+- `src/modules/knowledge-base/kb-actions.test.ts` — 8 tests; covers
+  the host-side handler for `kb_request` system actions, including
+  the pocketclaw-only permission gate.
+- `src/modules/debouncer.test.ts` — 5s window coalesce behaviour,
+  sticker drop, multi-attachment burst.
+- `src/modules/ingestion/scheduler.test.ts` — `Promise.allSettled`
+  fault isolation; one adapter throwing does not poison the others.
+- `src/modules/photo-processor.test.ts` — happy path, validation
+  failures, cleanup.
+- `src/channels/telegram-markdown-sanitize.test.ts` — markdown
+  escaping fuzz.
+
+Vitest baseline at the time of writing (R5): 142 failures / 273
+passing / 10 skipped (425 total). The 142 failures are pre-existing
+better-sqlite3 native-binding issues against a missing
+`data/v2.db`; they trace to the central DB rather than to PocketClaw
+modules. Restoring `data/v2.db` is its own deferred plan
+(`pocketclaw-central-db-pg.md`, not yet written) and out of scope for
+the current PRD pass.
+
+### 11.2 Container (bun test)
+
+`bun test` from `container/agent-runner/`. The container TypeScript
+uses `bun:sqlite` and `bun:test`; vitest does not run inside the
+container.
+
+Representative tests:
+
+- `container/agent-runner/src/mcp-tools/kb.test.ts` — 5 tests for
+  the `kb_*` tool family: request shape, response correlation,
+  timeout behaviour, isError surfacing.
+- Container-side `core.test.ts`, `interactive.test.ts`,
+  `scheduling.test.ts` for the inherited tool families.
+
+bun routes test results to stderr; an exit code of 1 with all
+passing is misleading. Wrappers should check stderr text, not just
+the exit code.
+
+### 11.3 Integration / smoke
+
+End-to-end smoke is manual today. Inspecting the kb-mcp-tool
+transport requires:
+
+1. Postgres running: `docker compose up -d postgres`.
+2. Ollama serving locally: `ollama serve` with `nomic-embed-text` +
+   `llava` pulled.
+3. Host running: `pnpm dev` (or the Scheduled Task).
+4. A wired channel: Telegram bot token in OneCLI, messaging-group
+   row in `data/v2.db`, agent-group row, wiring row.
+5. Type `/memory test fact` in the bot; observe via `/recall test`.
+
+Automated end-to-end (with mocked channels) is `[aspirational]` for
+a future phase.
+
+### 11.4 Pre-commit gate
+
+`scripts/setup_hooks.ps1` (or `.sh`) installs the gate. The gate
+runs:
+
+- `pnpm exec tsc --noEmit` (host) — must pass.
+- `pnpm exec tsc --noEmit` in `container/agent-runner/` — must pass.
+- vitest on changed-file scope — must pass.
+
+The gate does NOT run the full vitest suite; that's manual.
 
 ## 12. Cross-Platform Environment
 
-*(R5. Windows host on Scheduled Task; pnpm/Node 22; macOS/Linux notes where applicable.)*
+PocketClaw runs on the user's Windows host today. Code is written
+to be portable; macOS and Linux are supported for development and
+for the inherited NanoClaw v2 multi-host scenario, but the
+production installation is one Windows machine.
+
+### 12.1 Windows (production host)
+
+- **Boot**: Scheduled Task at user logon, runs `pnpm start` from
+  the repo directory.
+- **Shell**: PowerShell 7+ for installation and `ncl` use; the
+  pre-commit hook is `scripts/setup_hooks.ps1`.
+- **Node**: 22.x via winget (`.nvmrc` = 22). System-installed
+  Node 26 fails on `better-sqlite3` (NODE_MODULE_VERSION mismatch
+  on `data/v2.db` open) — must be 22.
+- **Filesystem**: repo lives on an exFAT drive (X:); requires
+  `node-linker=hoisted` in `.npmrc` because exFAT does not support
+  symlinks. NTFS-only stores (e.g. better-sqlite3 native build
+  output via node-gyp) must NOT live on the exFAT drive — keep
+  caches on the system drive.
+- **Container runtime**: Docker Desktop with WSL2 backend;
+  `src/container-runtime.ts` selects Docker on Windows.
+- **Postgres**: docker-compose, single service, bound to
+  `127.0.0.1:5432`, no password.
+- **Ollama**: native Windows installer; binds `127.0.0.1:11434`.
+
+### 12.2 macOS
+
+- **Boot**: launchd plist (development convenience; not a
+  production deployment for this project).
+- **Shell**: zsh.
+- **Container runtime**: Apple `containers` framework on Apple
+  Silicon (selected by `container-runtime.ts`); Docker Desktop
+  optional.
+- **Filesystem**: APFS; no exFAT quirks.
+
+### 12.3 Linux
+
+- **Boot**: systemd unit (development convenience).
+- **Container runtime**: Docker.
+- Otherwise unremarkable.
+
+### 12.4 Dependency managers
+
+- **Node**: pnpm 9.x (`package.json` + `pnpm-lock.yaml`); Node 22.
+- **Python** (used only by ad-hoc scripts and the inherited
+  setup tooling): uv (`pyproject.toml` + `uv.lock`).
+- **Container**: bun for the agent-runner; Docker for the runtime.
+
+### 12.5 Environment variables
+
+The full reference is generated as Appendix B at R7. Highlights:
+
+- `POSTGRES_*` — KB connection.
+- `OLLAMA_BASE_URL` — embedding + vision.
+- `WHATSAPP_AUTH_DIR` — Baileys session persistence
+  (default `~/.pocketclaw/whatsapp/`).
+- `WHATSAPP_OWNER_ALIASES` — summon phrases on shared-number mode.
+- `VAULT_PATH` — Obsidian vault root.
 
 ## 13. Implementation Phases
 
-*(R5. Honest history: re-arch P1-P7, KB MCP tool M0-M7, three follow-on plan stubs.)*
+Honest history. Three plans have completed end-to-end since the
+v3 PRD was written; the remaining work is captured in three plan
+stubs and a tail of follow-ons. PRs and commit ranges cited for
+provenance.
+
+### 13.1 Knowledge re-arch (P1-P7) — DONE
+
+Plan: `.omo/plans/pocketclaw-knowledge-rearch.md`.
+
+| Phase | Commit  | Headline |
+|-------|---------|----------|
+| P1    | `8ab2a53` | pgvector docker-compose service + 001_init.sql |
+| P2    | `ced6a3f` | `KnowledgeBase` interface + pgvector implementation |
+| P3    | `8b69971` | migrate `runMnemon()` callers to `KnowledgeBase` |
+| P4    | `0e41592` | delete mnemon-runner |
+| P5    | `9a3506b` | drop Bedrock plumbing |
+| P6    | `3633221` | `WHATSAPP_AUTH_DIR` env var |
+| P7    | `7cf415b` | cleanup for pgvector + Claude subscription |
+
+Two services removed (mnemon, Bedrock). One service added
+(Postgres+pgvector). Net surface area smaller.
+
+### 13.2 KB MCP tool (M0-M7) — DONE
+
+Plan: `.omo/plans/pocketclaw-kb-mcp-tool.md`.
+
+| Phase | Commit  | Headline |
+|-------|---------|----------|
+| M0    | `f7c7320` | host-side `kb_request` delivery action handler |
+| M1    | `32e220a` | container-side `kb_*` MCP tools + transport |
+| M2    | (folded into M1) | bun:test cases for the tool family |
+| M3    | (folded into M1) | timeout + error correlation |
+| M4    | `46b503f` | `kb.instructions.md` prompt fragment auto-discovery |
+| M5    | `947c202` | rewrite memory/recall/status/photo skills |
+| M6    | `656b270` | rewrite ingest/audit; defer wiki/digest/minutes/research/slides |
+| M7    | `bc1a8e3` | final tsc + root CLAUDE.md mention |
+
+Round-trip transport: container writes
+`kind='system'`/`action='kb_request'` to outbound.db; host
+delivery loop calls `handleKbRequest` independent of agent state;
+host writes `kb_response` sentinel back to inbound.db; container
+sidecar polls for the matching `request_id` (15s timeout). Agent
+loop filters `kind='system'` rows out before the agent ever sees
+them.
+
+### 13.3 PRD rewrite (R0-R7) — IN PROGRESS
+
+Plan: `.omo/plans/pocketclaw-prd-rewrite.md`.
+
+The phase you're reading. R0 archived the v3 PRD, R1-R5 fill
+sections 1-13, R6 fills risks and NFRs, R7 finalises with
+appendices and deletes the v1 archive.
+
+### 13.4 Follow-on plan stubs
+
+Forward-linked from the M5/M6 deferred skills:
+
+- `pocketclaw-wiki-cron-rewire.md` — re-wire the 03:00 cron (today
+  parked: `wiki-regen | SKIP | no-provider`).
+- `pocketclaw-morning-digest-rewire.md` — re-wire the 07:00 cron
+  (today parked: `morning-digest | SKIP | no-handler`).
+- `pocketclaw-agent-side-docx-pipeline.md` — new MCP tool family
+  (`doc_write_minutes`, `doc_write_research`, `doc_write_slides`)
+  driving the existing host-side renderers.
+
+All three are scoped, sized, and ready to ralph in priority order.
+
+### 13.5 Future (not yet planned)
+
+- Restore `data/v2.db` (or migrate central DB to Postgres) to clear
+  the 142 vitest failures. Plan name reserved:
+  `pocketclaw-central-db-pg.md`, not yet written.
+- End-to-end smoke harness with mocked channels.
+- Document upload from the bot back into Telegram (the docx
+  pipeline writes to vault today; sending as Telegram document
+  attachment is a follow-on).
+- `kb_*` re-embed pass (re-process old rows when the embed model
+  changes; the column already exists).
 
 ## 14. Risks and Mitigations
 
