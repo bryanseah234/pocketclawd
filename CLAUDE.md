@@ -328,14 +328,29 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw   # macOS
 
 # PocketClaw
 
-This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/pocketclaw/`. PocketClaw is a personal AI assistant: Telegram + WhatsApp interfaces, shared mnemon memory, cloud ingestion (Gmail / Outlook / iCloud), photo processing, and an Obsidian wiki output layer.
+This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/pocketclaw/`. PocketClaw is a personal AI assistant: Telegram + WhatsApp interfaces, a Postgres + pgvector knowledge base for capture, cloud ingestion (Gmail / Outlook / iCloud), photo processing, and an Obsidian wiki output layer.
+
+Architecture follows Vivian Balakrishnan's capture-layer + curation-layer pattern: capture stays vendor-neutral behind the `KnowledgeBase` interface (`src/modules/knowledge-base/`), and the Obsidian wiki is the curation layer over it.
 
 ## PocketClaw Quick Reference
 
 - **Agent identity**: `groups/pocketclaw/CLAUDE.md` (PocketClaw directives)
 - **Active branch convention**: `feature/pocketclaw-build` (per `CONTRIBUTING.md`)
 - **Plan**: `.omo/plans/pocketclaw.md` (T0-T19 + F1-F4 final review)
+- **Knowledge re-arch plan**: `.omo/plans/pocketclaw-knowledge-rearch.md`
 - **Notepad**: `.omo/notepads/pocketclaw/` (learnings, blockers)
+
+### Knowledge base
+
+- Storage: **Postgres + pgvector** in `docker-compose.yml` (single container, 127.0.0.1:5432, no password).
+- Schema: `src/db/postgres-migrations/001_init.sql` — `(source, source_id)` upsert key, `vector(768)` + `embed_model` column, HNSW index.
+- Interface: `KnowledgeBase` (`src/modules/knowledge-base/index.ts`) — `remember`, `recall`, `lowImportance`, `forget`. All callers go through this seam (no direct `pg` or `mnemon` use elsewhere in `src/`).
+- Embeddings: **Ollama** locally; tests stub `fetch` to deterministic 768-dim FNV-hash vectors so PG-skipped envs still cover the embedding contract.
+- Source/source_id: stable, so `(source, source_id)` upserts dedup. Photo processor uses SHA256 of the resized image.
+
+### Claude provider
+
+PocketClaw uses the **Claude Code subscription** path (nanoclaw default). Bedrock is removed: no `CLAUDE_CODE_USE_BEDROCK`, no AWS env vars, no `aws bedrock-runtime` shell-outs. The wiki-regen and morning-digest crons are currently host-side no-ops (audit log: `SKIP | no-provider` / `SKIP | no-handler`); re-wiring them through the agent container is a follow-on project.
 
 ### Skills installed for PocketClaw
 
@@ -347,18 +362,19 @@ This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/
 
 ### PocketClaw-specific modules (under `src/modules/`)
 
+- `knowledge-base/` — `KnowledgeBase` interface + pgvector implementation + Ollama embedding client
 - `debouncer.ts` — 5s unified message batch queue (Telegram + WhatsApp)
-- `photo-processor.ts` — vision pipeline (validate → resize → describe → mnemon → cleanup)
+- `photo-processor.ts` — vision pipeline (validate → resize → describe → knowledge-base → cleanup)
 - `ingestion/google.ts`, `microsoft.ts`, `apple.ts` — cloud source adapters
 - `ingestion/file-watcher.ts` — watchdog with SHA256 idempotency
 - `ingestion/scheduler.ts` — fault-isolated cron orchestrator
-- `wiki-generator.ts` — Obsidian-compatible Markdown with WikiLinks
+- `wiki-generator.ts` — Obsidian-compatible Markdown with WikiLinks (reads via `KnowledgeBase`)
 
 ### Cron jobs
 
 - 02:00 local — cloud ingestion (Google / Microsoft / Apple)
-- 03:00 local — wiki regeneration from mnemon
-- 07:00 local — morning digest delivered to Telegram
+- 03:00 local — wiki regeneration from the knowledge base (currently SKIP | no-provider)
+- 07:00 local — morning digest (currently SKIP | no-handler)
 
 ### Repo conventions (must follow)
 
@@ -372,3 +388,4 @@ This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/
 
 - exFAT drive (`X:`) needs `node-linker=hoisted` in `.npmrc` (no symlinks)
 - `.nvmrc` = Node 22; `better-sqlite3@11` won't compile against Node 26
+- `WHATSAPP_AUTH_DIR` env var sets the Baileys session path; defaults to `~/.pocketclaw/whatsapp/`

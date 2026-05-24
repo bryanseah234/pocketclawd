@@ -13,7 +13,7 @@ This document covers **install / status / uninstall / migrate** — every script
 - Node 22 on PATH (`node --version` should report `v22.x`)
 - pnpm + a successful `pnpm run build` (so `dist/index.js` exists)
 - `.env` filled in (at minimum `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_ID`, plus any cloud credentials you've configured)
-- mnemon CLI on PATH (`go install github.com/dipampaul17/mnemon@latest`)
+- Docker Desktop running (PocketClaw's knowledge base is a Postgres + pgvector container)
 
 NSSM itself is auto-installed by `install.ps1` via Chocolatey or winget.
 
@@ -27,7 +27,7 @@ NSSM itself is auto-installed by `install.ps1` via Chocolatey or winget.
 ```
 
 That single command:
-1. Verifies prereqs (Node 22, build artifacts, .env, mnemon)
+1. Verifies prereqs (Node 22, build artifacts, .env, Docker)
 2. Auto-installs NSSM if missing
 3. Registers a service named `pocketclaw` set to auto-start on boot
 4. Pipes stdout/stderr to `~/.pocketclaw/logs/service.{stdout,stderr}.log` with 10 MB rotation
@@ -99,7 +99,7 @@ pnpm run build
 This removes the service registration but **leaves**:
 - `.env` at repo root
 - `~/.pocketclaw/` (vault, secrets, logs, watch, processed.db)
-- `~/.mnemon/` (memory graph + oplog)
+- The `pocketclaw_pgdata` Docker volume (knowledge base — managed by docker compose)
 
 You can reinstall later with `install.ps1` and pick up where you left off.
 
@@ -109,7 +109,7 @@ You can reinstall later with `install.ps1` and pick up where you left off.
 .\scripts\service\uninstall.ps1 -Purge
 ```
 
-`-Purge` deletes `~/.pocketclaw/` and `~/.mnemon/` **after a `yes` confirmation prompt**. The repo itself, your `.env` file, and any migration zips are NOT touched.
+`-Purge` deletes `~/.pocketclaw/` (the `pocketclaw_pgdata` Docker volume is left alone — drop it manually with `docker volume rm pocketclaw_pgdata` if you want it gone) **after a `yes` confirmation prompt**. The repo itself, your `.env` file, and any migration zips are NOT touched.
 
 ### Just want to see what would happen
 
@@ -130,7 +130,7 @@ This is the workflow you asked for: testing on this laptop, moving to a real mac
 ### On the source machine
 
 ```powershell
-# Optional: stop the service first so .env / secrets / mnemon aren't in flux
+# Optional: stop the service first so .env / secrets / knowledge base aren't in flux
 nssm stop pocketclaw
 
 # Bundle everything
@@ -142,8 +142,8 @@ The zip contains:
 - `.env`
 - `secrets/` (Google + Microsoft + Apple OAuth tokens)
 - `vault/` (wiki, meetings, research, slides, speeches) — pass `-SkipVault` to omit
-- `mnemon/` (entire memory graph) — pass `-SkipMnemon` to omit
-- `MANIFEST.json` (source machine, Node version, mnemon version, timestamp)
+- `pocketclaw-pgdump.sql` (pg_dump of the knowledge-base database) — pass `-SkipKnowledgeBase` to omit
+- `MANIFEST.json` (source machine, Node version, Postgres image tag, timestamp)
 - `README.txt` (restore instructions)
 
 ### Move the zip
@@ -153,7 +153,7 @@ USB drive, OneDrive, scp, whatever you prefer. The zip is fully portable.
 ### On the destination machine
 
 1. Clone the pocketclaw repo to wherever you want
-2. Install Node 22, pnpm, mnemon (same as source)
+2. Install Node 22, pnpm, Docker Desktop (same as source)
 3. `pnpm install --ignore-scripts && pnpm run build`
 4. Unzip the export somewhere (e.g. `C:\temp\pocketclaw-export\`)
 5. Restore data:
@@ -165,7 +165,7 @@ USB drive, OneDrive, scp, whatever you prefer. The zip is fully portable.
    .\scripts\service\install.ps1
    ```
 
-The new machine now has all your accumulated mnemon facts, the same OAuth tokens (no need to re-`/auth`), and the same vault.
+The new machine now has all your accumulated knowledge-base entries, the same OAuth tokens (no need to re-`/auth`), and the same vault.
 
 ### Optional: tear down the source machine
 
@@ -190,7 +190,7 @@ Common causes:
 - `.env` missing → script refuses to install, will tell you
 - `dist/index.js` missing → run `pnpm run build`
 - Node not on PATH → check `where.exe node`
-- mnemon not on PATH → ingestion will error, but the service itself still runs
+- Postgres container not running → ingestion will error, but the service itself still runs (`docker compose up -d postgres`)
 
 ### Service keeps restarting (NSSM `AppRestartDelay` keeps relaunching after crash)
 

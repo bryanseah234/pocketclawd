@@ -12,7 +12,7 @@ A step-by-step walkthrough from clean machine to your first message. Total time:
 | Ollama | `brew install ollama` | curl `https://ollama.com/install.sh` | [ollama.com](https://ollama.com) |
 | Syncthing | `brew install syncthing` | `apt install syncthing` | [syncthing.net](https://syncthing.net) |
 | Obsidian | [obsidian.md](https://obsidian.md) | same | same |
-| Claude Max subscription | $100/mo | required for the agent | https://claude.ai/upgrade |
+| Claude Code subscription | $100/mo (Max) | required for the agent | https://claude.ai/upgrade |
 
 > **Important**: PocketClaw is pinned to Node **22**. Running it on Node ≥ 26 will fail to compile `better-sqlite3@11`. Check `node --version` matches `.nvmrc`.
 
@@ -32,11 +32,30 @@ If you're on an exFAT/FAT drive (no symlinks), `.npmrc` already sets `node-linke
 ## 2. Pull Ollama models
 
 ```bash
-ollama pull nomic-embed-text   # for mnemon embeddings
+ollama pull nomic-embed-text   # for knowledge-base embeddings (768-dim)
 ollama pull llava              # for photo descriptions
 ```
 
-## 3. Configure `.env`
+## 3. Start Postgres + pgvector
+
+PocketClaw stores its knowledge base in a single Postgres container with the `pgvector` extension. The container ships in the repo's `docker-compose.yml` and listens on `127.0.0.1:5432` only.
+
+```bash
+docker compose up -d postgres
+```
+
+Schema is applied on first start from `src/db/postgres-migrations/001_init.sql` (creates the `knowledge` table, `vector(768)` column, HNSW index, and `(source, source_id)` upsert key).
+
+Sanity check:
+
+```bash
+docker compose exec postgres psql -U pocketclaw -d pocketclaw -c '\dx'
+# vector | <ver> | public | vector data type and ivfflat / hnsw access methods
+```
+
+> **Why a real database, not embedded SQLite?** Embedding-vector search needs `pgvector` HNSW indexes; SQLite has no equivalent that scales past a few thousand facts. Postgres also gives us proper indexes, transactions, and a stable backup story (`pg_dump`).
+
+## 4. Configure `.env`
 
 Copy `.env.sample` → `.env` and fill in:
 
@@ -47,47 +66,17 @@ $EDITOR .env
 
 Required at minimum:
 
-- `ANTHROPIC_API_KEY` — Claude Max API key
 - `TELEGRAM_BOT_TOKEN` (from @BotFather)
 - `TELEGRAM_ALLOWED_CHAT_ID` (from @userinfobot)
+
+Authenticate Claude Code via the subscription path the first time the host spawns an agent container (`claude /login` inside the container, or use OneCLI). No `ANTHROPIC_API_KEY` or AWS Bedrock vars are required — those are gone in the current arch.
 
 Optional but recommended (cloud ingestion):
 
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — see `groups/pocketclaw/skills/auth/SKILL.md`
 - `MS_CLIENT_ID` — see auth skill
 - `APPLE_ID_EMAIL`, `APPLE_APP_PASSWORD` — see auth skill
-
-## 4. Install mnemon
-
-> ### ⚠️ CRITICAL: mnemon DB MUST be on an NTFS / ext4 / APFS volume
->
-> **NEVER place the mnemon SQLite store on an exFAT or FAT32 drive.**
-> exFAT lacks the byte-range locking primitives SQLite WAL mode requires.
-> A mnemon store on exFAT will fail with `SQLITE_BUSY` even from an idle
-> shell with zero contention — this is a filesystem limitation, no code
-> fix can work around it. Symptoms include `mnemon status` hanging or
-> returning `open database: migrate: database is locked (5)`.
->
-> **Set `MNEMON_DATA_DIR` to a path on a true journaling filesystem**:
-> - Windows: `C:\Users\<you>\.mnemon-pocketclaw` (NTFS) — **NOT** a
->   secondary data drive if it's been formatted exFAT for cross-platform
->   compatibility. Check with `Get-Volume` in PowerShell — if the target
->   drive's `FileSystemType` is anything other than `NTFS`, pick a
->   different drive.
-> - macOS: anywhere under `~` (APFS).
-> - Linux: anywhere under `~` (ext4 / btrfs / xfs).
->
-> Other PocketClaw data (vault, photos, logs, ingestion staging) is
-> safe on exFAT — only the mnemon SQLite is sensitive. You can mix:
-> `VAULT_PATH=X:/PocketClawData/vault` on the data drive, but
-> `MNEMON_DATA_DIR=C:/Users/<you>/.mnemon-pocketclaw` on the OS drive.
-
-```bash
-brew install mnemon-dev/tap/mnemon
-# or: go install github.com/mnemon-dev/mnemon@latest
-mnemon setup --target nanoclaw --yes
-mnemon setup --embeddings ollama --model nomic-embed-text --endpoint http://localhost:11434
-```
+- `WHATSAPP_AUTH_DIR` — Baileys session path; defaults to `~/.pocketclaw/whatsapp/`
 
 ## 5. Run the host
 
@@ -112,7 +101,7 @@ syncthing
 # 5. Pair devices via Syncthing device IDs
 ```
 
-Now your wiki entries (auto-generated nightly at 03:00) sync peer-to-peer to your phone, tablet, second laptop — no cloud intermediary.
+Now your wiki entries (auto-generated nightly at 03:00, currently a host-side no-op pending re-wiring through the agent container) sync peer-to-peer to your phone, tablet, second laptop — no cloud intermediary.
 
 ## 8. Verify scheduled jobs
 
@@ -122,18 +111,19 @@ After a few minutes, check `~/.pocketclaw/logs/audit.log` for:
 2026-05-20T11:47:41Z | POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, morning-digest@07:00
 ```
 
-If that line is present, the three cron jobs are wired. They'll fire at 02:00 / 03:00 / 07:00 local time.
+If that line is present, the three cron jobs are wired. They'll fire at 02:00 / 03:00 / 07:00 local time. Cloud ingest writes facts into the knowledge base; wiki-regen and morning-digest currently log `SKIP | no-provider` / `SKIP | no-handler` until they're re-routed through the agent container (post-rearch follow-on).
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `pnpm install` hangs forever | exFAT drive without `node-linker=hoisted` | Confirm `.npmrc` has it |
-| `mnemon` returns `SQLITE_BUSY` from idle | mnemon DB is on exFAT/FAT | Move `MNEMON_DATA_DIR` to NTFS/ext4/APFS — see §4 warning |
+| `docker compose up -d postgres` exits immediately | Port 5432 already in use | Stop the conflicting Postgres or change the published port in `docker-compose.yml` |
+| `pgvector` extension missing | Wrong Postgres image | The compose file pins `pgvector/pgvector:pg16` — don't substitute vanilla `postgres:16` |
 | `better-sqlite3` compile error | Node version mismatch | Use Node 22 (`nvm use 22`) |
 | Pre-push hook rejects branch | Branch not in allowed pattern | Rename to `feature/...`, `fix/...`, etc. |
 | Telegram bot silent | Wrong `TELEGRAM_ALLOWED_CHAT_ID` | Check your chat id via @userinfobot |
 | Photo not stored | Ollama not running on host | `ollama serve` then retry |
-| Wiki entries empty | mnemon has no entities yet | Send a few `/memory <fact>` messages first |
+| Wiki entries empty | Knowledge base has no entries yet | Send a few `/memory <fact>` messages first |
 
 See `docs/ARCHITECTURE.md` for the full data flow.

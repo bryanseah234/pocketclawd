@@ -59,7 +59,6 @@ The same files conflict every time:
 | `package.json` | Take main's version + keep fork/branch-specific deps |
 | `pnpm-lock.yaml` | `git checkout main -- pnpm-lock.yaml && pnpm install` |
 | `.env.example` | Combine: main's entries + fork/branch-specific entries |
-| `repo-tokens/badge.svg` | Take main's version (auto-generated) |
 
 Source code changes (e.g. `src/types.ts`, `src/index.ts`) usually auto-merge cleanly, but can conflict if both sides modify the same lines. **Always build and test after every forward merge** — auto-merged code can be silently wrong (e.g. referencing a renamed function or using a removed parameter) even when git reports no conflicts.
 

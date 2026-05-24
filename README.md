@@ -39,8 +39,8 @@ Send these in Telegram or WhatsApp:
 
 | Command | What it does |
 |---------|--------------|
-| `/memory <fact>` | Save a fact to mnemon |
-| `/recall <query>` | Search the mnemon graph |
+| `/memory <fact>` | Save a fact to the knowledge base |
+| `/recall <query>` | Search the knowledge base (semantic + tag) |
 | `/wiki <topic>` | Regenerate Obsidian wiki entry for a topic |
 | `/ingest` | Trigger immediate cloud ingestion (don't wait for 02:00 cron) |
 | `/status` | Memory count, last ingest, vault counts, source health |
@@ -50,16 +50,16 @@ Send these in Telegram or WhatsApp:
 | `/photo <description>` | Manually save a photo description |
 | `/minutes <meeting-name>` | Generate meeting minutes `.docx` from calendar + email context (§17.3) |
 | `/research <topic>` | Generate research report PDF from local data only — no web search (§17.4) |
-| `/slides <topic> [--style minimal\|corporate\|creative]` | Generate `.pptx` deck from mnemon (§17.5) |
+| `/slides <topic> [--style minimal\|corporate\|creative]` | Generate `.pptx` deck from the knowledge base (§17.5) |
 | `/speech <topic> [--duration 5m] [--tone formal\|casual\|persuasive]` | Draft a speech as Markdown (§17.6) |
 
-Beyond commands, PocketClaw also passively archives chat messages to mnemon when `INGEST_CHAT_MODE` is set in `.env`. See the [Chat archive](#chat-archive-telegram--whatsapp-passive-ingestion) section.
+Beyond commands, PocketClaw also passively archives chat messages to the knowledge base when `INGEST_CHAT_MODE` is set in `.env`. See the [Chat archive](#chat-archive-telegram--whatsapp-passive-ingestion) section.
 
 ---
 
 ## Where data lives
 
-PocketClaw keeps **everything on disk in one folder** that you control. Configurable via `.env`. By default it's `~/.pocketclaw/`, but you should put it on a drive with space — emails, vault wikis, presentations, and the mnemon graph will grow into GBs over time.
+PocketClaw keeps **everything on disk in one folder** that you control. Configurable via `.env`. By default it's `~/.pocketclaw/`, but you should put it on a drive with space — emails, vault wikis, presentations, and the knowledge base will grow into GBs over time.
 
 This install uses **`X:\PocketClawData\`** (~580 GB free). Layout:
 
@@ -74,21 +74,17 @@ X:\PocketClawData\
 │   └── speeches\                 /speech drafts (.md)
 ├── watch\                        files dropped here are auto-ingested
 ├── logs\                         service.stdout.log / service.stderr.log / audit.log
-├── processed.db                  SHA256 fingerprints for file-watcher idempotency
-└── mnemon\
-    └── data\default\mnemon.db    the entire memory graph
+└── processed.db                  SHA256 fingerprints for file-watcher idempotency
+                                  (knowledge base lives in the local Postgres,
+                                   not in PocketClawData/)
 ```
 
 The `.env` env-vars that control these paths:
 
 ```env
 VAULT_PATH=X:/PocketClawData/vault
-# IMPORTANT: MNEMON_DATA_DIR MUST be on an NTFS / ext4 / APFS volume.
-# exFAT/FAT lacks SQLite WAL byte-range locks -> SQLITE_BUSY even when idle.
-# On Windows, keep this on the OS drive (C:) even if other PocketClaw data
-# lives on a secondary exFAT drive.
-MNEMON_DATA_DIR=C:/Users/<you>/.mnemon-pocketclaw
-MNEMON_DB_PATH=C:/Users/<you>/.mnemon-pocketclaw/data/default/mnemon.db
+# Knowledge base lives in Postgres (started via `docker compose up -d postgres`).
+# Default DSN: postgres://pocketclaw@127.0.0.1:5432/pocketclaw — override with PGHOST / PGPORT / PGDATABASE / PGUSER if needed.
 WATCH_PATHS_ROOT=X:/PocketClawData/watch
 LOG_PATH=X:/PocketClawData/logs
 POCKETCLAW_SECRETS_DIR=X:/PocketClawData/secrets
@@ -123,7 +119,7 @@ Layout details:
 - Admin rights for service registration (one-time, only for `pnpm svc:install`)
 - [Node 22](https://nodejs.org/) (`.nvmrc` enforces this)
 - [pnpm](https://pnpm.io/) (any 10.x; `package.json` pins `pnpm@10.33.0`)
-- [mnemon](https://github.com/dipampaul17/mnemon) on PATH: `go install github.com/dipampaul17/mnemon@latest`
+- Docker Desktop (for the Postgres + pgvector container)
 - [Ollama](https://ollama.com/) for local vision (`ollama pull llava`)
 - A Telegram bot token (talk to `@BotFather` in Telegram)
 
@@ -141,7 +137,7 @@ Copy-Item .env.example .env
 # then edit .env — at minimum fill in:
 #   TELEGRAM_BOT_TOKEN=...
 #   TELEGRAM_ALLOWED_CHAT_ID=...
-#   ANTHROPIC_API_KEY=... (or AWS Bedrock vars if using Claude on Bedrock)
+#   (Claude is auth'd through the Claude Code subscription path - no API key in .env)
 # and update the path env-vars to point at your data drive (see "Where data lives")
 
 # 4. Create your data root
@@ -332,7 +328,7 @@ Beyond the cron-based cloud sources above, PocketClaw can also archive **every c
 
 ### Modes
 
-| `INGEST_CHAT_MODE` | What gets archived to mnemon | Privacy |
+| `INGEST_CHAT_MODE` | What gets archived to the knowledge base | Privacy |
 |---|---|---|
 | `off` (default) | Nothing — chat-archive is a no-op | Most private |
 | `self` | Only messages YOU send | Privacy-respecting journal |
@@ -341,19 +337,19 @@ Beyond the cron-based cloud sources above, PocketClaw can also archive **every c
 
 ### What gets stored
 
-- Mnemon insight per message, tagged: `pocketclaw, src:whatsapp-chat` (or `telegram-chat`), `chat:<chatId>`, `kind:group|dm`, `from:self|other`, `sender:<id>`
+- Knowledge-base entry per message, tagged: `pocketclaw, src:whatsapp-chat` (or `telegram-chat`), `chat:<chatId>`, `kind:group|dm`, `from:self|other`, `sender:<id>`
 - Format: `WhatsApp group "Family" — Bryan: just landed at SIN`
 - Attachments are **noted but not downloaded** (just `[image]`, `[voice note]`, `[2 documents]` markers)
 - Stickers and protocol messages are skipped
 - Long bodies (>600 chars) get truncated
-- Stored locally only — `C:\Users\<you>\.mnemon-pocketclaw\data\default\mnemon.db` (NTFS — must NOT be on exFAT)
+- Stored locally only — Postgres on `127.0.0.1:5432`, no remote access
 
 ### Privacy implications of `all` mode
 
 If you set `INGEST_CHAT_MODE=all`:
 
-- Your local mnemon DB will contain other people's messages — friends, family, group chats. They didn't consent to this.
-- The mnemon DB is unencrypted SQLite. Anyone with access to your unlocked laptop can read it.
+- Your local knowledge base will contain other people's messages — friends, family, group chats. They didn't consent to this.
+- The knowledge base is unencrypted Postgres. Anyone with access to your unlocked laptop and shell can read it.
 - This is legally loaded in many jurisdictions (EU GDPR informational duties, two-party-consent laws, etc.). You're responsible for compliance.
 - Messages stay on your laptop unless you explicitly `/recall` them into a Claude prompt — at which point only the recalled facts go to the API (visible in `/audit`).
 
@@ -366,15 +362,15 @@ If any of that gives you pause, use `self` or `dms`. They're plenty useful as jo
 INGEST_CHAT_MODE=all
 ```
 
-Restart service: `nssm restart pocketclaw` (admin). Within seconds of receiving the next chat message, mnemon will have a new insight tagged `src:<platform>-chat`. Verify:
+Restart service: `nssm restart pocketclaw` (admin). Within seconds of receiving the next chat message, the knowledge base will have a new entry tagged `src:<platform>-chat`. Verify:
 
 ```powershell
-mnemon recall "<some keyword from a recent chat>" --limit 5
+/recall <some keyword from a recent chat>
 ```
 
 ### Disabling at any time
 
-Set `INGEST_CHAT_MODE=off` in `.env` and restart. Future messages stop being archived. Existing archived messages stay in mnemon — to wipe them you'd need to selectively delete via `mnemon` CLI, or `pnpm svc:uninstall:purge` for a full reset.
+Set `INGEST_CHAT_MODE=off` in `.env` and restart. Future messages stop being archived. Existing archived messages stay in the knowledge base — to wipe them you'd need to DELETE rows from the `knowledge` table directly via `psql`, or `pnpm svc:uninstall:purge` for a full reset.
 
 ---
 
@@ -386,8 +382,8 @@ Set `INGEST_CHAT_MODE=off` in `.env` and restart. Future messages stop being arc
 | `pnpm run build` | Compile TypeScript to `dist/` |
 | `pnpm run start` | Run compiled host (what the service runs) |
 | `pnpm test` | Run vitest suite |
-| `pnpm ingest:now` | Run all ingesters once, write to mnemon (24h window) |
-| `pnpm ingest:now --hours 1 --dry` | Quick smoke test, no mnemon writes |
+| `pnpm ingest:now` | Run all ingesters once, write to the knowledge base (24h window) |
+| `pnpm ingest:now --hours 1 --dry` | Quick smoke test, no knowledge-base writes |
 | `pnpm svc` | Service status snapshot |
 | `pnpm svc:tail` | Tail service logs in real time |
 | `pnpm svc:install` | Register Windows service (admin) |
@@ -412,7 +408,7 @@ Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 50
 Common issues:
 - `.env` missing → installer refuses; the error tells you exactly what's missing
 - `dist/index.js` missing → run `pnpm run build` first
-- mnemon not on PATH → cloud ingestion errors but service still runs
+- Postgres container not running → cloud ingestion errors but service still runs (start it with `docker compose up -d postgres`)
 
 ### Some sources show as `[ERR]` in `pnpm ingest:now`
 
@@ -422,7 +418,7 @@ Look at the error line:
 - `SLACK_USER_TOKEN not set` → Slack walkthrough above
 - `Invalid Credentials` → token expired, re-run `/auth <provider>` from Telegram
 
-### Mnemon recall returns nothing
+### `/recall` returns nothing
 
 Run `pnpm svc` — if `Insights` count is 0, ingestion hasn't fired yet. Trigger manually with `pnpm ingest:now`.
 
@@ -436,12 +432,12 @@ Run `pnpm svc` — if `Insights` count is 0, ingestion hasn't fired yet. Trigger
 ### Disk getting full
 
 The big consumers, in order:
-1. `X:\PocketClawData\mnemon\` — the memory graph. Grows ~1 KB per fact. 100k facts ≈ 100 MB.
+1. Postgres knowledge-base volume (`pocketclaw_pgdata`) — grows ~2 KB per entry incl. embedding. 100k entries ≈ 200 MB.
 2. `X:\PocketClawData\vault\research\` — PDFs from `/research`, ~50-200 KB each
 3. `X:\PocketClawData\vault\presentations\` — PPTX, ~50-100 KB each
 4. `X:\PocketClawData\logs\` — capped at 10 MB rotation by NSSM
 
-To reclaim space: delete unwanted vault files manually (won't affect mnemon), or `pnpm svc:uninstall:purge` for a full reset.
+To reclaim space: delete unwanted vault files manually (won't affect the knowledge base), or `pnpm svc:uninstall:purge` for a full reset.
 
 ### WhatsApp / Telegram messages arrive but get no reply
 

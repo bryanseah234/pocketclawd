@@ -43,8 +43,8 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
 │   groups/pocketclaw/CLAUDE.md → identity + directives                │
 │   groups/pocketclaw/skills/   → /memory /recall /wiki ...            │
 │   Claude Code orchestrates:                                          │
-│     - mnemon recall before answering                                 │
-│     - mnemon remember for new facts                                  │
+│     - kb.recall before answering                                    │
+│     - kb.remember for new facts                                      │
 │     - photo-processor for inbound images                             │
 │     - wiki-generator for /wiki                                       │
 │     - cloud scheduler for /ingest                                    │
@@ -52,9 +52,9 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
                                              ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │                      LOCAL SERVICES (Host)                            │
-│  Ollama :11434                ~/.pocketclaw/mnemon.db                │
-│  - nomic-embed-text           (single SQLite — shared across         │
-│  - llava (vision)              Telegram + WhatsApp)                  │
+│  Ollama :11434                Postgres :5432 (pgvector)              │
+│  - nomic-embed-text           - knowledge table (vector(768))        │
+│  - llava (vision)             - shared across Telegram + WhatsApp    │
 │                                                                      │
 │  ~/.pocketclaw/vault/  ◄────────────────────  Syncthing  ◄──── peers │
 │  ~/.pocketclaw/watch/  → file-watcher.ts (read-only mount)           │
@@ -74,22 +74,22 @@ Driven by `src/modules/pocketclaw.ts`. Runs every minute, fires when a job's sch
 
 | Time (local) | Job | Effect |
 |---|---|---|
-| 02:00 | `CloudScheduler.runAll()` | Pulls last 24h from Gmail / Outlook / iCloud → mnemon |
-| 03:00 | `WikiGenerator.generateAll()` | Regenerates every entity's `vault/wiki/<entity>.md` |
-| 07:00 | morning digest | Composes summary, sends via Telegram (primary channel) |
+| 02:00 | `CloudScheduler.runAll()` | Pulls last 24h from Gmail / Outlook / iCloud → knowledge base (pgvector) |
+| 03:00 | `WikiGenerator.generateAll()` | Regenerates every entity's `vault/wiki/<entity>.md` (currently `SKIP \| no-provider` until re-wired through the agent container) |
+| 07:00 | morning digest | Composes summary, sends via Telegram (currently `SKIP \| no-handler` until re-wired through the agent container) |
 
 Audit log line emitted per run: `<ISO> | CRON | <job> START/END/FAIL | <details>`.
 
 ## Privacy boundary
 
-Only the **assembled prompt** sent by Claude Code to `api.anthropic.com` ever leaves the machine. Everything else — emails, photos, contacts, files — is processed locally and stored in `~/.pocketclaw/mnemon.db`. The audit log records every tool call so you can verify this.
+Only the **assembled prompt** sent by Claude Code to `api.anthropic.com` ever leaves the machine. Everything else — emails, photos, contacts, files — is processed locally and stored in the local Postgres knowledge base (`127.0.0.1:5432`). The audit log records every tool call so you can verify this.
 
 ## Threat model
 
 | Threat | Mitigation |
 |--------|------------|
 | Open inbound ports | None — Telegram + WhatsApp are outbound-only (long polling / WebSocket) |
-| Prompt injection via email | `stripHtml()` + per-fact mnemon insertion |
+| Prompt injection via email | `stripHtml()` + per-fact knowledge-base insertion |
 | WhatsApp session theft | named volume `wa-session/`, gitignored |
 | Photo privacy leak | Cache deleted post-processing; only descriptions stored |
 | Sticker spam DoS | Silent drop at debouncer entry — zero processing cost |
@@ -115,7 +115,7 @@ HOST (Node process, always running)
 
 CONTAINER (Docker, stays alive)
   3. agent-runner starts, polls inbound.db every 500ms
-  4. Finds pending message -> calls Claude (Haiku on Bedrock)
+  4. Finds pending message -> calls Claude (via Claude Code subscription; OneCLI proxies the API)
   5. Writes response to outbound.db
   6. Goes back to polling... waiting for next message
   7. STAYS ALIVE until:
@@ -150,42 +150,17 @@ The container is a **stateless worker** that clocks in when needed and clocks ou
 
 ## Auth Configuration
 
-### Default: AWS Bedrock (Haiku 4.5)
+PocketClaw uses the **Claude Code subscription** path that ships with NanoClaw v2. The agent container talks to `api.anthropic.com` through the OneCLI proxy; OneCLI injects credentials at request time so no API key is passed in env vars or chat context.
 
-```env
-CLAUDE_CODE_USE_BEDROCK=1
-ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
-AWS_ACCESS_KEY_ID=...   # auto-refreshed by scripts/refresh-bedrock-creds.ps1
-AWS_SECRET_ACCESS_KEY=...
-AWS_SESSION_TOKEN=...
-AWS_REGION=us-east-1
-```
+First-time auth: when the host spawns the first agent container, run `claude /login` inside that container (or use the OneCLI web UI at `http://127.0.0.1:10254`). After that the credentials persist in the OneCLI vault and are reused on every subsequent container.
 
-- Credentials auto-refresh every 30 min via Windows Task Scheduler (`PocketClaw-RefreshBedrock`)
-- SSO session lasts ~8-16h; after that run `aws sso login --sso-session pocketclaw`
-- Cost: ~$0.001/message (Haiku is 20x cheaper than Sonnet)
+What this arch does **not** use:
 
-### Backup: Claude Pro (Haiku 4.5)
-
-If Bedrock is unavailable, restore Claude Pro auth:
-
-```powershell
-Copy-Item "data\.credentials.json.backup" "data\v2-sessions\ag-1779335520163-gzrk2c\.claude-shared\.credentials.json"
-```
-
-Model forced to Haiku via `settings.json` — won't burn your Pro token quota.
+- `ANTHROPIC_API_KEY` env var (subscription handles auth)
+- `CLAUDE_CODE_USE_BEDROCK`, `AWS_*` env vars (Bedrock removed in the knowledge re-arch)
+- `scripts/refresh-bedrock-creds.ps1` (deleted)
+- `PocketClaw-RefreshBedrock` Windows Task Scheduler entry (delete it; it has nothing to refresh)
 
 ### Switching models
 
-Edit `.env` and restart the host:
-
-```env
-# Haiku (fast, cheap — default)
-ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
-
-# Sonnet (smarter, 20x more expensive)
-ANTHROPIC_MODEL=us.anthropic.claude-sonnet-4-5-20250514-v1:0
-
-# Opus (smartest, 100x more expensive)
-ANTHROPIC_MODEL=us.anthropic.claude-opus-4-5-20251101-v1:0
-```
+Models are configured per-agent-group via `ncl groups config update --model <model>`, not via `.env`. See `nanoclaw` documentation for the supported model identifiers.
