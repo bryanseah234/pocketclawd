@@ -5,7 +5,7 @@
 //
 // Skills add a new provider by appending one import line below.
 
-// PocketClaw — register the claude provider so Bedrock env-var passthrough
-// is wired in (CLAUDE_CODE_USE_BEDROCK + AWS_*). Idempotent if no Bedrock
-// or custom base URL is set; the contribution is empty in that case.
+// PocketClaw — register the claude provider so ANTHROPIC_BASE_URL
+// passthrough is wired in. Idempotent if ANTHROPIC_BASE_URL is unset;
+// the contribution is empty in that case.
 import './claude.js';

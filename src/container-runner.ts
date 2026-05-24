@@ -455,8 +455,7 @@ async function buildContainerArgs(
   // The caller (router or host-sweep) catches the throw, leaves the inbound
   // message pending, and the next sweep tick retries.
   //
-  // PocketClaw/Bedrock: when ONECLI_URL is not configured, skip the gateway
-  // entirely — Bedrock uses SigV4 directly (env vars forwarded by the claude
+  // When ONECLI_URL is not configured, skip the gateway entirely.
   // provider), not bearer tokens through OneCLI's proxy.
   if (ONECLI_URL) {
     if (agentIdentifier) {

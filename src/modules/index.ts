@@ -25,7 +25,7 @@ import './self-mod/index.js';
 
 // PocketClaw — registers cron driver for cloud ingestion, wiki, digest.
 import './pocketclaw.js';
-// PocketClaw wiring — attaches Bedrock-backed wiki provider + digest handler
+// PocketClaw wiring — host-side cron handler stubs (no Claude provider wired)
 // to the cron driver. Must come AFTER pocketclaw.js so setWikiProvider /
 // setDigestHandler symbols are bound when this side-effect import runs.
 import './pocketclaw-wiring.js';

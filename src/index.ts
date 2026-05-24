@@ -55,7 +55,7 @@ import './channels/index.js';
 import './modules/index.js';
 
 // Providers barrel — registers provider-specific container config (env passthrough,
-// mounts). The Claude provider forwards AWS/Bedrock env vars when configured.
+// mounts).
 import './providers/index.js';
 
 // CLI command barrel — populates the `ncl` registry before the CLI server
