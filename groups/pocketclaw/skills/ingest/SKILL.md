@@ -1,9 +1,9 @@
 ---
 name: ingest
-description: Trigger an immediate cloud ingestion run (Gmail / Outlook / iCloud).
+description: Status of the cloud-ingestion pipeline (Gmail / Outlook / iCloud).
 ---
 
-# /ingest — manual cloud ingestion
+# /ingest — cloud ingestion status
 
 Usage:
 
@@ -11,14 +11,25 @@ Usage:
 /ingest
 ```
 
-Action:
+## Status
 
-1. Invoke `CloudScheduler.runAll()` from `src/modules/ingestion/scheduler.ts`.
-2. Each ingester (Google × 3, Microsoft × 3, Apple × 3) runs in parallel with fault isolation.
-3. Reply with a per-source summary: `<source>: <factsCount> facts, <errorCount> errors`.
-4. If any source has >0 errors, list the first one for diagnostic context.
+**Host-only.** Cloud ingestion runs on the host as a 02:00 local cron (see `src/modules/ingestion/scheduler.ts`). Each ingester (Google × 3, Microsoft × 3, Apple × 3) runs in parallel with fault isolation, writes results into the host-side knowledge base, and records per-source counts in the audit log.
 
-Notes:
+You — the in-container agent — **cannot trigger ingestion directly**. There is no MCP tool for it (yet); the scheduler's `runAll()` is host-side TypeScript with no transport into the container.
 
-- Default: pulls last 24 h. Pass `--since 2026-05-01` to override.
-- Auto-runs daily at 02:00 local — you usually don't need to invoke this manually.
+## What to do when the user types `/ingest`
+
+1. Acknowledge: ingestion runs automatically at 02:00 local each day; manual triggers happen on the host.
+2. Offer to check the audit log via `/status` — that surfaces the most recent ingestion's per-source counts and timestamp.
+3. If the user actually wants to fire an ingestion off-schedule, tell them the host-side incantation (it's not a chat-driven action):
+
+```
+# On the host:
+pnpm exec tsx scripts/run-ingestion.ts
+```
+
+(Or wait for the 02:00 cron.)
+
+## Why no MCP tool
+
+The kb_* MCP tools cover read/write of the knowledge base itself. Ingestion is a pipeline of cloud-API adapters that need OAuth tokens, network access, and host-side filesystem cache — none of which the container should have. A future plan may expose `kb_run_ingestion(source?)` if the friction warrants it; today the cron + audit-log inspection is the supported path.

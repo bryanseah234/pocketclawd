@@ -1,46 +1,29 @@
 ---
 name: minutes
-description: Generate meeting minutes from a calendar event + email threads, save as .docx to the Obsidian vault. Use when the user types `/minutes <meeting-name>` or asks to capture a meeting.
+description: Generate meeting minutes .docx from calendar + email context (NOT YET WIRED).
 ---
 
-# /minutes — Meeting Minutes Generator (PRD §17.3)
+# /minutes — Meeting Minutes Generator
 
-## When to invoke
+## Status
 
-- User types: `/minutes <meeting-name>` or `/minutes <name> --date 2026-05-22`
-- After a calendar event ends (auto-trigger via cron, if email threads exist)
+**Not yet wired.** Generating .docx from the in-container agent requires either:
 
-## How it works
+- Shipping a `.docx` writer (e.g. `docx` npm pkg) inside the container and exposing a `kb_write_docx(meta, blocks, path)` MCP tool, **or**
+- Adding a host-side handler that the agent triggers with a `system` action (similar to `kb_request`) carrying the structured minutes payload, and the host renders + saves the file.
 
-1. Recall context for the meeting from mnemon (calendar + email + contact facts).
-2. Ask Claude to synthesize: agenda, key discussion points, action items, decisions.
-3. Render to `.docx` via `MeetingMinutesGenerator.generate(ctx)`.
-4. Save to `${VAULT_PATH}/meetings/YYYY-MM-DD_<title>.docx`.
-5. Reply with file path; optionally attach the .docx to Telegram.
+Both are real design work — large-binary file delivery has its own concerns (streaming, vault path resolution, attachment back to chat). Out of scope for the kb_* tool family.
 
-## Implementation
+## What to do when the user types `/minutes <meeting>`
 
-```ts
-import { MeetingMinutesGenerator } from '../../../src/modules/meeting-minutes.js';
-const gen = new MeetingMinutesGenerator();
-const draft = await gen.draftFromMnemon(meetingTitle, eventDate);
-// ... agent fills in agenda / actions / decisions from mnemon recall
-const result = await gen.generate({
-  ...draft,
-  agenda: agendaFromAgent,
-  actions: actionsFromAgent,
-  decisions: decisionsFromAgent,
-});
-return `Minutes saved to ${result.filePath} (${result.bytes} bytes)`;
-```
+1. Recall context from the knowledge base:
+   - `kb_recall(query="<meeting title>", k=10)` — surfaces calendar fact + email threads + contact mentions
+2. Synthesize the minutes inline in chat: agenda, key discussion points, action items, decisions.
+3. Reply with the synthesized minutes as a regular chat message.
+4. Tell the user the .docx export is parked and you've replied with the content for now — they can paste it into a doc themselves.
 
-## Must-do
+This delivers the *content* of the skill (a structured meeting summary from local data) without the artefact (the .docx file). When the docx pipeline ships, this skill will be rewritten to emit a file path.
 
-- Pull all context from mnemon ONLY — no external APIs.
-- Save to vault, never to /tmp.
-- Reply with vault-relative path, not absolute (privacy in chat history).
+## Forward link
 
-## Must-not-do
-
-- Don't include raw email bodies in chat — only synthesized highlights.
-- Don't overwrite existing minutes file without `--force` flag from user.
+Tracked in: the follow-on `.omo/plans/agent-side-docx-pipeline.md` (to be written). Same pipeline will unblock `/research` (PDF) and `/slides` (.pptx).

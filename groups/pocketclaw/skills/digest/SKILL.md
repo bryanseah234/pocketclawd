@@ -1,25 +1,39 @@
 ---
 name: digest
-description: Manually trigger the morning digest delivered to Telegram.
+description: Manually trigger the morning digest delivered to Telegram (NOT YET WIRED).
 ---
 
 # /digest — generate and send morning digest
 
-Usage:
+## Status
 
-```
-/digest
-```
+**Not yet wired.** The morning digest is a 07:00 local host cron that:
 
-Action:
+1. Recalls yesterday's email facts from the knowledge base.
+2. Recalls today's calendar events.
+3. Recalls pending commitments.
+4. Composes a summary in the format from PRD §8.2 and sends it to the user's Telegram DM session.
 
-1. Recall yesterday's email facts from mnemon: `mnemon recall --query "email" --since 1d`
-2. Recall today's calendar events: `mnemon recall --query "calendar" --range today`
-3. Recall pending commitments: `mnemon recall --query "promised|will send|owe" --depth 2`
-4. Compose a morning summary in the format from PRD §8.2:
-   - 📧 Yesterday's emails (top 3, sender + subject + 1-line summary)
-   - 📅 Today's calendar (time + title + duration)
-   - 📋 Pending commitments (item + due-by)
-5. Send via Telegram (or current channel if not Telegram).
+Today the cron is a no-op stub: the audit log shows `morning-digest | SKIP | no-handler`. Re-wiring it needs:
 
-Auto-runs daily at 07:00 local. Manual invocation is for testing or skipping ahead.
+- A host-side handler that uses `kb_recall` (now available since M0) to gather context.
+- A `send_message` path from the host into the user's DM session.
+
+That's a separate follow-on plan.
+
+## What to do when the user types `/digest`
+
+1. Acknowledge the cron is currently parked.
+2. Offer to do a manual quick-look digest right now by chaining `kb_recall` calls:
+
+   - `kb_recall(query="yesterday email", k=5)`
+   - `kb_recall(query="today calendar", k=5)`
+   - `kb_recall(query="pending commitments owe will send", k=5)`
+
+3. Format the result like the PRD §8.2 morning summary (📧 emails, 📅 calendar, 📋 commitments) and reply.
+
+This gives the user the same shape of message they'd get from the auto-digest, just on demand. It's not a substitute for the cron — once-off manual invocation only.
+
+## Forward link
+
+Tracked in: the follow-on `.omo/plans/morning-digest-rewire.md` (to be written). Will use the M0 host-side kb_request handler as the read path.
