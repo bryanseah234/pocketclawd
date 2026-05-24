@@ -584,15 +584,237 @@ Cron registration is in the scheduler; the host startup calls
 
 ## 8. UX / Interaction Design
 
-*(R4. Slash-commands marked `wired` / `pending kb-mcp-tool` / `pending docx-pipeline` / `pending wiki-cron`.)*
+PocketClaw has no UI of its own. Every interaction surface is one of:
+
+- **Telegram bot** (`@pocketclaw_bot` or whatever the user named it)
+- **WhatsApp** (shared-number summon via `WHATSAPP_OWNER_ALIASES`)
+- **Host CLI** (`src/channels/cli.ts`)
+- **Obsidian vault** (read-only view of curation output, opened in
+  Obsidian Desktop)
+- **`ncl` admin CLI** (configuration only; not user-facing for daily
+  use)
+
+### 8.1 Default behaviour
+
+A plain message to the bot, with no slash-command, is implicit
+`/memory` plus a chat reply. The agent decides whether to respond or
+to silently archive based on whether the message looks like a
+question or a statement. Implementation: every inbound message goes
+through `chat-archive.ts` regardless; the agent's reply path runs
+unless the message is bare `.` or `..` (silence convention).
+
+### 8.2 Slash commands
+
+The skill set is in `groups/pocketclaw/skills/<name>/SKILL.md`.
+Status reflects the live tree as of R3.
+
+| Command       | What it does                                           | Status |
+|---------------|--------------------------------------------------------|--------|
+| `/memory <text>` | Tag a fact for retrieval (`source='chat'`)          | wired (pending kb-mcp-tool transport, M0-M7 in `pocketclaw-kb-mcp-tool.md`) |
+| `/recall <q>` | Semantic search over the KB                            | wired (same transport pending) |
+| `/status`     | KB row count, top entities, last ingestion             | wired (same transport pending) |
+| `/photo` (caption on image) | Manual tag for an image                  | wired |
+| `/ingest`     | On-demand cloud-source ingest                          | wired |
+| `/audit`      | Show recent system audit-log lines                     | wired |
+| `/wiki <topic>` | Inline recall + plaintext; full vault regen pending  | partially wired; cron parked, see `pocketclaw-wiki-cron-rewire.md` |
+| `/digest`     | Manual morning-digest formatting                       | aspirational; cron parked, see `pocketclaw-morning-digest-rewire.md` |
+| `/minutes <title>` | Render docx minutes                               | aspirational, see `pocketclaw-agent-side-docx-pipeline.md` |
+| `/research <topic>` | Render PDF research report                       | aspirational, same plan |
+| `/slides <topic>` | Render pptx deck                                   | aspirational, same plan |
+| `/auth`       | OneCLI auth flow (re-auth a source)                    | wired |
+| `/speech`     | Text-to-speech reply (auxiliary)                       | wired |
+
+### 8.3 Reply shape
+
+Replies stay in-channel. No file uploads from the bot today (the
+docx/pdf/pptx artefacts will land in the vault on disk; Telegram
+upload is out of scope, see `pocketclaw-agent-side-docx-pipeline.md`
+§"Out of scope"). Replies are plain text or Telegram markdown
+(sanitized via `src/channels/telegram-markdown-sanitize.ts`); no
+inline-keyboard buttons; no images back from the agent.
+
+### 8.4 Latency expectations
+
+- Plain chat: debouncer (5s) + agent turn (Claude latency,
+  ~2-6s) → 7-11s end-to-end on a typical question.
+- Photo: same plus llava inference (~12s p95 on the host GPU)
+  → 15-25s for the description to land in the KB; the agent's
+  text reply still arrives in the 7-11s window.
+- `/recall`: KB query is ~50ms; total dominated by the agent's
+  turn → 7-11s.
+
+### 8.5 Multi-channel disambiguation
+
+The user can be summoned from Telegram, WhatsApp, or CLI for the
+same intent. The agent group is one — they all land in one
+`pocketclaw` session. If the user pings on Telegram and then on
+WhatsApp 30 seconds later, the second message routes to the same
+session DB and the agent has full context. (Inherited NanoClaw
+behaviour; PocketClaw does not customise it.)
 
 ## 9. Security Architecture
 
-*(R4.)*
+Single-user product. Threat model is "the user's host gets
+compromised" and "a credential leaks into chat history". Both are
+out of scope for the agent to defend against directly; the design
+goal is to keep the blast radius small.
+
+### 9.1 Credential surface
+
+- **OneCLI is the only credential vault.** All API tokens, OAuth
+  refresh tokens, and subscription keys live in OneCLI's encrypted
+  store. The agent never sees a raw credential; it sees a proxy URL
+  pointing at OneCLI, which rewrites the auth header server-side.
+- **Per-agent secret allow-list.** Each agent group has its own
+  secret-mode setting (`selective` default, `all` opt-in). The
+  pocketclaw agent runs in `all` mode by convention — single-user,
+  one agent, one identity, all secrets relevant. See the inherited
+  CLAUDE.md "Gotcha: auto-created agents start in selective".
+- **Approvals.** Credentialed actions go through
+  `src/modules/approvals/onecli-approvals.ts`. Single-user → most
+  approvals are auto-approved by virtue of the user being the
+  owner; the framework remains for self-mod and future shared use.
+
+### 9.2 Network surface
+
+- **No HTTP listener exposed beyond localhost.** The host's
+  socket-server (`src/cli/socket-server.ts`) listens on a Unix
+  socket on macOS/Linux and on a named pipe on Windows.
+- **Channel adapters connect outward.** Telegram bot polling and
+  WhatsApp Baileys are outbound connections; no inbound port.
+- **Postgres at `127.0.0.1:5432`.** No password (single-user host;
+  `pg_hba.conf` is `trust` for `127.0.0.1`). docker-compose binds
+  to localhost only.
+- **Ollama at `127.0.0.1:11434`.** Same shape.
+
+### 9.3 Data at rest
+
+- **Postgres KB** is unencrypted on disk. The host disk is the
+  trust boundary. (User runs Bitlocker or equivalent on the host
+  drive — out of scope for PocketClaw to enforce.)
+- **Photo bytes** are deleted after the description is committed to
+  the KB. The description text is what persists.
+- **Channel session state** (Baileys auth, Telegram session) lives
+  under `~/.pocketclaw/<channel>/`. Treated as credentials.
+- **Obsidian vault** is plaintext Markdown — by design, since it's
+  meant to be read with Obsidian Desktop.
+
+### 9.4 Container isolation
+
+Inherited from NanoClaw v2: per-agent-group container, per-session
+DB mounts. The pocketclaw container has access to its own session
+DBs and the OneCLI proxy URL. It does NOT have access to the host
+filesystem outside the workspace mount, the central `data/v2.db`,
+or Postgres directly (KB access goes through the `kb_*` MCP tool
+which the host gates).
+
+### 9.5 Self-modification limits
+
+The agent can request `install_packages` or `add_mcp_server` via
+the `self-mod` MCP tool. Each request is one approval; the host
+rebuilds the image and respawns the container. Direct source-level
+edits are not implemented (per inherited CLAUDE.md). The `cli_scope`
+on the pocketclaw agent group is `global` (single-user owner agent);
+this allows broad `ncl` use from inside the container.
 
 ## 10. Data Flow
 
-*(R4. Two flows: inbound message → debouncer → archive → KB → recall → response. Cloud ingestion → KB → wiki/digest crons.)*
+Two flows describe the system end-to-end. Everything else is a
+variant of one of these.
+
+### 10.1 Inbound message → archive → recall
+
+```
+   user types in Telegram (or WhatsApp, CLI)
+            │
+            ▼
+   channels/<ch>.ts  ──▶  channel-registry  ──▶  router.ts
+                                                   │
+                                                   ▼
+                                          messaging-group lookup,
+                                          user resolution,
+                                          session resolution
+                                                   │
+                                                   ▼
+                                          debouncer (5s window)
+                                                   │
+                            ┌──────────────────────┤
+                            ▼                      ▼
+                  chat-archive.ts             session-manager:
+                  (KB.remember,                write to inbound.db
+                   source='chat')              (host writer)
+                                                   │
+                                                   ▼ (container picks up)
+                                          agent-runner poll loop
+                                                   │
+                                                   ▼
+                                          Claude turn (kb_recall
+                                          if the message is a
+                                          question; or just reply)
+                                                   │
+                                                   ▼
+                                          write to outbound.db
+                                                   │
+                                                   ▼ (host picks up)
+                                          delivery.ts
+                                                   │
+                                                   ▼
+                                          channels/<ch>.ts.send
+                                                   │
+                                                   ▼
+                                          user receives reply
+```
+
+Notable: archive happens once per inbound, regardless of whether
+the agent replies. Recall happens during the agent's turn, on
+demand, via the `kb_recall` MCP tool which round-trips back to the
+host through `outbound.db` → `kb-actions.handleKbRequest` →
+`inbound.db` (sentinel system row).
+
+### 10.2 Cloud ingestion → KB → curation
+
+```
+   cron 02:00  ──▶  ingestion/scheduler.ts (Promise.allSettled)
+                       │
+              ┌────────┼────────┬────────┬────────┬────────┐
+              ▼        ▼        ▼        ▼        ▼        ▼
+           google.  microsoft. apple.  slack.   github.   file-
+            ts        ts        ts      ts        ts     watcher.ts
+              │        │        │        │        │        │
+              └────────┴────────┴────────┴────────┴────────┘
+                                  │
+                                  ▼
+                          KB.remember per row,
+                          source='gmail'/'gcal'/'outlook'/...
+                          source_id = stable per-row key
+                          (upsert idempotency)
+                                  │
+                                  ▼
+                       ┌──────────┴──────────┐
+                       │                     │
+                       ▼                     ▼
+              cron 03:00 wiki-regen   cron 07:00 morning-digest
+              (parked: SKIP)           (parked: SKIP)
+                       │                     │
+                       ▼                     ▼
+              wiki-generator.ts        morning-digest module
+              (writes vault MD)        (writes one DM message
+                                        per day)
+```
+
+The `(source, source_id)` upsert is the load-bearing detail. Re-running
+the 02:00 cron mid-day produces zero duplicates because every adapter
+emits stable `source_id`s (Gmail message-id, Calendar event-id,
+file SHA256, etc).
+
+### 10.3 Photo flow (variant of 10.1)
+
+Difference from 10.1: between channel adapter and chat-archive,
+the message routes to `photo-processor.ts` if the inbound has an
+attachment of mimetype `image/*`. Photo-processor runs the llava
+description, emits a `KB.remember` row tagged `source='photo'` with
+the description as content, then deletes the bytes. The agent's
+reply uses the description, not the pixels.
 
 ## 11. Testing Strategy
 
