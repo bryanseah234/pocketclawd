@@ -1309,11 +1309,10 @@ they sit on the dependency graph.
 
 ## Appendix B — Environment Variable Reference
 
-Pulled from `.env.sample` and the host module imports as of R7.
-**`.env.sample` itself is stale** — still references `MNEMON_DB_PATH`
-(mnemon was deleted in P4) and frames `ANTHROPIC_API_KEY` as a raw
-API key (the project uses Claude Code subscription via OneCLI). A
-cleanup pass on `.env.sample` is filed under §16.3.
+Pulled from `.env.sample` and the host module imports as of R7. The
+`.env.sample` cleanup landed at commit `3c9bca4` — `MNEMON_DB_PATH` is
+gone and the Claude auth block is reframed OAuth-first with
+`ANTHROPIC_API_KEY` documented as a pay-per-use fallback.
 
 ### B.1 LLM / inference
 
@@ -1324,9 +1323,11 @@ cleanup pass on `.env.sample` is filed under §16.3.
 | `VISION_MODEL` | `llava` | Photo-description model. |
 | `GPU_ENABLED` | `false` | Hint for Ollama runtime; does not auto-toggle Docker GPU passthrough. |
 
-The Claude provider is configured via OneCLI, not via env. The
-`ANTHROPIC_API_KEY` line in `.env.sample` is legacy and ignored
-on the Claude Code subscription path. (See §16.3 cleanup.)
+The Claude provider is normally configured via OneCLI. `.env.sample`
+also ships `CLAUDE_CODE_OAUTH_TOKEN` (preferred — written by
+`claude /login` inside the container) and `ANTHROPIC_API_KEY` as a
+pay-per-use fallback; both are extracted by the host into
+`data/env/env` and sourced at container entrypoint.
 
 ### B.2 Channels
 
@@ -1366,12 +1367,15 @@ on the Claude Code subscription path. (See §16.3 cleanup.)
 | `WATCH_PATHS_ROOT` | `~/.pocketclaw/watch` | File-watcher ingest root. |
 | `LOG_PATH` | `~/.pocketclaw/logs` | Audit log destination. |
 
-### B.6 Stale (cleanup pending)
+### B.6 Cleaned up
 
-| Var | Why stale |
-|-----|-----------|
-| `MNEMON_DB_PATH` | `mnemon` deleted in P4. The variable is a no-op; remove from `.env.sample`. |
-| `ANTHROPIC_API_KEY` (raw key form) | Path is now Claude Code subscription via OneCLI; raw API-key fallback is not wired. The variable exists in `.env.sample` but is ignored. |
+The stale `.env.sample` entries flagged through R7 were addressed at
+commit `3c9bca4`:
+
+- `MNEMON_DB_PATH` removed (mnemon was deleted in P4; variable was a no-op).
+- The Anthropic auth block is reframed OAuth-first; `ANTHROPIC_API_KEY`
+  is retained as a documented pay-per-use fallback alongside
+  `CLAUDE_CODE_OAUTH_TOKEN`.
 
 ## Appendix C — File Structure
 
