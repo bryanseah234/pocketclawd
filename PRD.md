@@ -3,8 +3,8 @@
 ## Product Requirements Document v2.0
 
 **Date:** 2026-05-24
-**Status:** Draft (R0 scaffold; sections fill in via R1-R7)
-**Replaces:** PRD v3.0 (now archived at `PRD.v1.archived.md`; preserved through R6, deleted at R7)
+**Status:** Active (v2.0 — R0-R7 complete)
+**Replaces:** PRD v3.0 (deleted at R7; content preserved in git history at commit `c76d488` and recoverable via `git show c76d488:PRD.v1.archived.md`)
 **Branch of record:** `feature/pocketclaw-build`
 **Single user:** Bryan Tan
 
@@ -1279,12 +1279,158 @@ they sit on the dependency graph.
 
 ## Appendix A — Glossary
 
-*(R7.)*
+| Term | Meaning |
+|------|---------|
+| Agent group | A logical agent identity (workspace, skills, container config). PocketClaw has one (`pocketclaw`). |
+| Capture layer | Vivian Balakrishnan's term for the "ingest everything, lossy-on-the-side-of-keep" half of a personal AI. PocketClaw capture = the `KnowledgeBase` and its writers. |
+| Curation layer | The on-demand half. PocketClaw curation = the agent's recall behaviour + the Obsidian vault + the morning digest (when wired). |
+| Central DB | `data/v2.db` — SQLite via better-sqlite3, holds users / agent-groups / messaging-groups / wirings / approvals / schema-version. Inherited from NanoClaw v2. |
+| Channel adapter | Code that translates a platform-specific protocol (Telegram bot polling, WhatsApp Baileys, CLI stdin) into the internal `Message` shape. Lives in `src/channels/`. |
+| Debouncer | 5s message-batch queue (`src/modules/debouncer.ts`) that coalesces rapid bursts before downstream modules act. |
+| Inbound DB | `data/v2-sessions/<id>/inbound.db` — host writes, container reads. |
+| KB / KnowledgeBase | The interface in `src/modules/knowledge-base/index.ts`. The pgvector implementation is one impl of that interface. |
+| MCP tool | Model Context Protocol tool exposed to the agent inside its container. PocketClaw adds the `kb_*` family. |
+| Messaging group | A single chat / channel on one platform (e.g. one Telegram chat, one WhatsApp DM). |
+| mnemon | The previous (now-deleted) Python memory service. Replaced by `KnowledgeBase` over pgvector in P3-P4. |
+| ncl | Admin CLI for the central DB. Host: Unix socket. Container: session-DB transport. |
+| OneCLI | Credential gateway / proxy that holds raw secrets and rewrites auth headers per request. Inherited from NanoClaw. |
+| Outbound DB | `data/v2-sessions/<id>/outbound.db` — container writes, host reads. |
+| Phase | A unit of work in a plan, with one commit per phase. P1-P7 = re-arch; M0-M7 = KB MCP tool; R0-R7 = PRD rewrite. |
+| Plan | Markdown spec under `.omo/plans/` that precedes any multi-phase work. |
+| Pocketclaw agent | The single always-on agent group on this host, named `pocketclaw`. |
+| Ralph | Shorthand for the user's "execute a plan phase by phase, one commit per phase" workflow. |
+| Sentinel row | A `kind='system'` row in inbound.db / outbound.db used as MCP transport. Filtered out of the agent's view. |
+| Session | A per-(agent-group, messaging-group, thread) container instance with its own inbound/outbound DBs. |
+| Skill | Markdown file under `groups/<group>/skills/<name>/SKILL.md` that names a capability and tells the agent how to invoke it. |
+| Slash command | A user-typed `/<name>` in the bot. Resolves to a skill of the same name. |
+| Two-DB split | NanoClaw v2's IPC pattern — one DB per direction, one writer per file, per-session. |
+| Vault | Obsidian vault on disk at `${VAULT_PATH}`. The curation surface. |
+| Wiring | A row in `messaging_group_agents` linking a messaging group to an agent group with a session mode and trigger rules. |
 
 ## Appendix B — Environment Variable Reference
 
-*(R7. Generated from `.env.sample` + `src/env.ts`.)*
+Pulled from `.env.sample` and the host module imports as of R7.
+**`.env.sample` itself is stale** — still references `MNEMON_DB_PATH`
+(mnemon was deleted in P4) and frames `ANTHROPIC_API_KEY` as a raw
+API key (the project uses Claude Code subscription via OneCLI). A
+cleanup pass on `.env.sample` is filed under §16.3.
+
+### B.1 LLM / inference
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `OLLAMA_HOST` | `http://host.docker.internal:11434` | Ollama service URL (host-side and container-side both resolve via docker host). |
+| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | 768-dim embedding model name. |
+| `VISION_MODEL` | `llava` | Photo-description model. |
+| `GPU_ENABLED` | `false` | Hint for Ollama runtime; does not auto-toggle Docker GPU passthrough. |
+
+The Claude provider is configured via OneCLI, not via env. The
+`ANTHROPIC_API_KEY` line in `.env.sample` is legacy and ignored
+on the Claude Code subscription path. (See §16.3 cleanup.)
+
+### B.2 Channels
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `TELEGRAM_BOT_TOKEN` | (unset) | Bot token from @BotFather. Stored in OneCLI in production; env is the development convenience. |
+| `WHATSAPP_AUTH_DIR` | `~/.pocketclaw/whatsapp/` | Baileys session directory. |
+| `WHATSAPP_OWNER_ALIASES` | (unset) | Comma-separated summon phrases for shared-number mode. |
+| `ASSISTANT_HAS_OWN_NUMBER` | `false` | Whether the WA bot has a dedicated number (false on this host). |
+
+### B.3 Ingestion (cloud sources)
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | (unset) | Google OAuth (Gmail / Calendar / Contacts). Tokens stored in OneCLI after first auth. |
+| `MS_CLIENT_ID` | (unset) | Microsoft Graph desktop app id. |
+| `APPLE_ID_EMAIL`, `APPLE_APP_PASSWORD` | (unset) | iCloud app-specific password. |
+| `AZURE_STORAGE_ACCOUNT`, `AZURE_KEY_VAULT`, `AZURE_URL`, `SECRET_NAME` | (unset) | Optional Azure storage path for cloud-dataset ingestion (legacy template; not load-bearing). |
+
+### B.4 Postgres / KB
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `POSTGRES_HOST` | `127.0.0.1` | KB host. docker-compose binds to localhost. |
+| `POSTGRES_PORT` | `5432` | |
+| `POSTGRES_DB` | `pocketclaw` | |
+| `POSTGRES_USER` | `pocketclaw` | |
+| `POSTGRES_PASSWORD` | (unset) | Single-user → empty / trust auth on `127.0.0.1`. |
+
+### B.5 Runtime config
+
+| Var | Default | Purpose |
+|-----|---------|---------|
+| `BATCH_WINDOW_MS` | `5000` | Debouncer window. |
+| `CONTAINER_MEMORY_LIMIT` | `2g` | Per-session container memory cap. |
+| `VAULT_PATH` | `~/.pocketclaw/vault` | Obsidian vault root. |
+| `WATCH_PATHS_ROOT` | `~/.pocketclaw/watch` | File-watcher ingest root. |
+| `LOG_PATH` | `~/.pocketclaw/logs` | Audit log destination. |
+
+### B.6 Stale (cleanup pending)
+
+| Var | Why stale |
+|-----|-----------|
+| `MNEMON_DB_PATH` | `mnemon` deleted in P4. The variable is a no-op; remove from `.env.sample`. |
+| `ANTHROPIC_API_KEY` (raw key form) | Path is now Claude Code subscription via OneCLI; raw API-key fallback is not wired. The variable exists in `.env.sample` but is ignored. |
 
 ## Appendix C — File Structure
 
-*(R7. Generated from the live `src/` tree.)*
+Top-level layout as of R7:
+
+```
+pocketclaw/
+├── .githooks/                  pre-commit hooks (PowerShell + bash)
+├── .github/                    workflows (CI placeholder)
+├── .husky/                     husky hook adapter
+├── .omo/                       plans, notepads, ralph state (gitignored cruft trimmed)
+├── app/                        legacy app shell (mostly empty post-rearch)
+├── assets/                     static assets
+├── bin/                        wrapper scripts
+├── config-examples/            sample config templates
+├── container/
+│   └── agent-runner/           per-container agent runtime
+│       ├── scripts/            container entrypoints
+│       └── src/
+│           ├── cli/            in-container ncl shim
+│           ├── db/             session DB access (bun:sqlite)
+│           ├── mcp-tools/      core, kb, agents, cli, interactive,
+│           │                    scheduling, self-mod tool families
+│           ├── providers/      claude provider config
+│           └── scheduling/     schedule-future-message helpers
+│   └── skills/                 container-mounted skills
+│       (agent-browser, frontend-engineer, onecli-gateway,
+│        self-customize, slack-formatting, vercel-cli, welcome)
+├── docs/                       inherited NanoClaw architecture docs
+├── groups/
+│   └── pocketclaw/             single agent-group filesystem
+│       ├── CLAUDE.md           agent's per-group prompt
+│       └── skills/             13 skills (memory, recall, status, photo,
+│                                ingest, audit, wiki, digest, minutes,
+│                                research, slides, auth, speech)
+├── infra/                      docker-compose etc.
+├── launchd/                    macOS launchd plists (dev convenience)
+├── logs/                       runtime log destination
+├── media/                      static media for skills
+├── notebooks/                  ad-hoc analysis notebooks
+├── scripts/                    setup, hooks, ad-hoc maintenance
+├── setup/                      first-install flows
+├── src/
+│   ├── channels/               adapter.ts, channel-registry.ts,
+│   │                           cli.ts, telegram.ts (+helpers),
+│   │                           whatsapp.ts, chat-sdk-bridge.ts
+│   ├── cli/                    ncl resources/dispatch
+│   ├── db/                     central DB schema + migrations
+│   ├── modules/                see §7 for the full inventory
+│   └── providers/              host-side provider container-config
+├── store/                      runtime data (gitignored)
+├── tests/                      cross-module integration scaffolds
+├── docker-compose.yml          single Postgres service, 127.0.0.1:5432
+├── package.json                pnpm workspaces, Node 22
+├── pnpm-lock.yaml
+├── pyproject.toml              uv-managed Python tooling (ad-hoc scripts only)
+├── uv.lock
+└── PRD.md                      this document
+```
+
+The deleted `PRD.v1.archived.md` was the previous v3.0 PRD; its
+content is preserved in git history at commit `c76d488`.
