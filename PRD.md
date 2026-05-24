@@ -211,11 +211,217 @@ are about reliability, not scale.
 
 ## 5. Competitive Analysis
 
-*(R2.)*
+PocketClaw is single-user personal infra; "competitive" here means
+"prior art the design borrows from or deliberately diverges from".
+Five reference points:
+
+### 5.1 NanoClaw v2 (parent)
+
+PocketClaw is a fork. Inherits the host/container/two-DB session
+split, the OneCLI credential gateway, the agent-runner sidecar, the
+`ncl` admin CLI, and the channel adapter pattern. See `CLAUDE.md`
+for the inherited architecture.
+
+Diverges in:
+
+- **Workspace topology.** NanoClaw is many-agent-groups, many-DMs,
+  many-users. PocketClaw is one always-on `pocketclaw` agent group,
+  one user (`telegram:bryanb_t`, `whatsapp:6592348112`, etc), one
+  Obsidian vault.
+- **Provider.** NanoClaw default ships Claude Code subscription;
+  PocketClaw locks that in (no Bedrock fallback, no AWS env vars).
+- **KnowledgeBase.** NanoClaw has no persistent cross-session memory
+  beyond per-session DBs. PocketClaw adds the `KnowledgeBase` module
+  family and its Postgres+pgvector backing store as first-class.
+- **Ingestion.** NanoClaw has no scheduled ingestion. PocketClaw
+  adds `src/modules/ingestion/` with five adapter families and a
+  fault-isolated scheduler.
+- **Photo pipeline.** Same.
+
+### 5.2 ChatGPT memory
+
+ChatGPT's "memory" feature is the closest mass-market analogue.
+Rejected as the substrate because:
+
+- **Cloud-only.** PocketClaw stores in local Postgres; the user owns
+  the bytes.
+- **No source attribution.** ChatGPT memory does not preserve
+  "where did I learn this". The `KnowledgeBase` row schema preserves
+  `source` and `source_id` so a recall can cite Gmail / a specific
+  message-id / a photo file.
+- **No structured ingestion.** ChatGPT cannot watch a Gmail account
+  on a 24h cadence and fold the bodies into the same memory.
+
+### 5.3 Obsidian (curation reference)
+
+PocketClaw uses Obsidian-format Markdown as its curation surface,
+not as the source of truth. `src/modules/wiki-generator.ts` writes
+WikiLinks; the user reads with Obsidian Desktop.
+
+Why not store IN Obsidian: SHA-keyed semantic search over a vault
+of unstructured notes is slower and lossier than a real vector DB
+with row-level metadata. The KB is the truth; the vault is a view.
+
+### 5.4 Hippocampus / Letta / mem0 (memory-frameworks)
+
+Considered for the capture layer. Rejected for adding a layer of
+opinions (entity extraction strategy, reflection cadence, prompt
+shape) that should belong to the curation half. The
+`KnowledgeBase` interface in `src/modules/knowledge-base/index.ts`
+is intentionally bare: insert with optional tags, recall by query
+or entity. Higher-level memory operations (prioritisation, decay,
+synthesis) are jobs for the curation layer or for future skills,
+not for the substrate.
+
+### 5.5 Bedrock + mnemon (predecessor stack)
+
+The previous PocketClaw stack used AWS Bedrock for inference and a
+custom Python service ("mnemon") for memory. Both removed during
+the knowledge re-arch (`.omo/plans/pocketclaw-knowledge-rearch.md`,
+phases P1–P7). Reasons:
+
+- Bedrock added per-token billing and AWS auth ceremony for a
+  single-user product. Claude Code subscription is a flat fee.
+- mnemon was a separate Python process with its own auth, its own
+  schema migrations, and its own failure modes. Replacing it with
+  pgvector behind the `KnowledgeBase` interface eliminated a whole
+  service and its IPC.
+
+The mnemon experience taught the durable lesson: the substrate
+should be boring. Postgres + pgvector + a 50-line Ollama embed
+client is boring enough.
 
 ## 6. System Architecture
 
-*(R2. Includes one host/container/two-DB diagram and one capture/curation diagram.)*
+Two diagrams — one for the inherited host/container/two-DB pattern,
+one for the PocketClaw-specific capture+curation overlay.
+
+### 6.1 Host / container / two-DB (inherited from NanoClaw v2)
+
+```
+                      ┌─────────────────────────────────┐
+                      │  Host (Node, single process)    │
+                      │                                 │
+  Telegram ──┐        │  channels/  ──▶ router.ts       │
+  WhatsApp ──┼──msg──▶│                  │              │
+  CLI       ─┘        │                  ▼              │
+                      │  session-manager.ts             │
+                      │       │                         │
+                      │       ▼                         │
+                      │  data/v2-sessions/<id>/         │
+                      │   ├── inbound.db   (host write) │
+                      │   └── outbound.db  (host read)  │
+                      │       ▲           │             │
+                      │       │           │             │
+                      │  delivery.ts ◀────┘             │
+                      └───────│─────────────────────────┘
+                              │ (DB files mounted)
+                      ┌───────▼─────────────────────────┐
+                      │  Container (per agent group)    │
+                      │                                 │
+                      │   agent-runner/  ──▶ Claude     │
+                      │     poll inbound.db             │
+                      │     write outbound.db           │
+                      │     MCP tools (kb_*, onecli)    │
+                      └─────────────────────────────────┘
+```
+
+Key invariants (inherited; restated for completeness):
+
+- **Two DB files per session.** Host writes only `inbound.db`,
+  container writes only `outbound.db`. Exactly one writer per file
+  → no cross-mount lock contention.
+- **No IPC besides DB rows.** No stdin piping, no HTTP socket, no
+  file watcher. A heartbeat is a `touch /workspace/.heartbeat`.
+- **Even/odd `seq`.** Host even, container odd. Trivial conflict
+  detection.
+- **Container = Docker** on this Windows host (Apple containers
+  selected on macOS via `src/container-runtime.ts`).
+
+### 6.2 Capture + Curation (PocketClaw overlay)
+
+```
+        ┌─── Telegram ────┐
+        │                 │
+        ├─── WhatsApp ────┤  channel adapters (debouncer 5s)
+        │                 │       │
+        ├─── CLI ─────────┤       ▼
+        │                 │   chat-archive.ts  ──┐
+        │                 │                      │
+   inbound (chat) ────────┘                      │
+                                                 │
+   inbound (photo) ────▶ photo-processor.ts ─────┤
+                          (validate, resize,     │
+                           describe via llava,   │
+                           cleanup bytes)        │
+                                                 │
+   ingestion crons ────▶ ingestion/*.ts ─────────┤
+   (02:00 local)         google, microsoft,      │
+                         apple, file-watcher,    │
+                         telegram-mtproto        │
+                                                 ▼
+                              ┌──────────────────────────────┐
+                              │   KnowledgeBase interface    │
+                              │   src/modules/knowledge-base │
+                              │   pgvector implementation    │
+                              │   ↓                          │
+                              │   Postgres (docker-compose)  │
+                              │   127.0.0.1:5432 vector(768) │
+                              │   HNSW index, embed_model    │
+                              └──────────────────────────────┘
+                                       │
+                  ┌────────────────────┼─────────────────────┐
+                  │                    │                     │
+                  ▼                    ▼                     ▼
+        agent recall                wiki-generator.ts    morning-digest
+        (kb_recall MCP)             (03:00 cron,         (07:00 cron,
+        in-chat reply               currently parked)    currently parked)
+        over Telegram/WA                       │
+                                               ▼
+                                   Obsidian vault on disk
+                                   (curation-layer view)
+```
+
+### 6.3 Component boundaries
+
+Five layers, each with one job:
+
+1. **Channel adapters** (`src/channels/`). Translate platform-specific
+   protocol to the internal `Message` shape. Plug into the registry;
+   skill-installed from the `channels` branch.
+2. **Routing + entity model** (`src/router.ts`, `src/db/`).
+   Resolve `(platform, chat_id, sender)` → user → messaging-group →
+   agent-group → session.
+3. **Capture** (`src/modules/{chat-archive, photo-processor,
+   ingestion/*}.ts`). Anything that lands new bytes in the KB.
+4. **Substrate** (`src/modules/knowledge-base/*`, Postgres). Store,
+   embed, retrieve. Vendor-neutral via the `KnowledgeBase` interface.
+5. **Curation** (`src/modules/wiki-generator.ts`, agent recall via
+   `kb_*` MCP tools, planned cron handlers for digest and wiki).
+   Read-only over the substrate; outputs are regenerable views.
+
+### 6.4 The OneCLI credential boundary
+
+OneCLI is the only thing on the host that holds raw credentials.
+Every credentialed action a tool wants to take goes through the
+OneCLI proxy, with secrets injected at request time. The agent
+never sees the credential value. Agent-side: container skill
+`container/skills/onecli-gateway/SKILL.md` teaches the agent how
+the proxy works and what auth-error shapes mean. Host-side:
+`src/onecli-approvals.ts` bridges the OneCLI approval path into
+the existing `pending_approvals` flow. See the inherited
+`CLAUDE.md` section "Secrets / Credentials / OneCLI" for the
+gotcha around new agents starting in `selective` secret mode.
+
+### 6.5 Provider boundary
+
+The agent provider is Claude Code subscription, accessed via
+`ANTHROPIC_BASE_URL` pointing at the OneCLI proxy. OneCLI rewrites
+the auth header so the container never sees the raw subscription
+token. There is no Bedrock fallback (removed in P5). A future
+provider swap (e.g. local model via `add-opencode`) is mechanical:
+install the provider skill, change `container_configs.provider`
+in the central DB.
 
 ## 7. Component Specifications
 
