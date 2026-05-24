@@ -15,7 +15,6 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
 | `src/modules/pocketclaw.ts` | PocketClaw | Cron driver — self-registers at import |
 | `src/channels/telegram.ts` | NanoClaw skill (`/add-telegram`) | Telegram Chat SDK adapter |
 | `src/channels/whatsapp.ts` | NanoClaw skill (`/add-whatsapp`) | Baileys adapter |
-| `.claude/skills/add-mnemon/` | NanoClaw skill (`/add-mnemon`) | mnemon installer |
 | `.claude/skills/add-karpathy-llm-wiki/` | NanoClaw skill | wiki support |
 
 ## Component diagram

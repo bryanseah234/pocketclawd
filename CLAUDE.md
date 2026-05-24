@@ -341,7 +341,6 @@ This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/
 
 - `/add-telegram` — Telegram Chat SDK channel adapter
 - `/add-whatsapp` — WhatsApp Baileys channel adapter
-- `/add-mnemon` — local cross-session memory engine (Mnemon)
 - `/add-karpathy-llm-wiki` — Obsidian wiki generator
 - `/add-gmail-tool`, `/add-gcal-tool` — Google ingestion
 - `/add-ollama-provider` — local Ollama for embeddings + vision (llava)
