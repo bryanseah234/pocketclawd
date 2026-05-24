@@ -425,7 +425,162 @@ in the central DB.
 
 ## 7. Component Specifications
 
-*(R3. One paragraph per module + path. Sourced from the §2.x inventory in `.omo/plans/pocketclaw-prd-rewrite.md`.)*
+One paragraph per module group, with the real file paths under it.
+Where a module is unwired or stubbed, that's stated explicitly with
+a forward-link to the relevant plan.
+
+### 7.1 Knowledge base substrate
+
+`src/modules/knowledge-base/`
+
+- `index.ts` — `KnowledgeBase` interface (the vendor-neutral seam).
+  `remember`, `recall`, `topEntities`, `status`, `forget`. All other
+  modules talk to this interface, never to pgvector directly.
+- `pgvector.ts` — Postgres+pgvector implementation. Connection via
+  `pg-client.ts`; embeddings via `embed.ts`. HNSW index on the
+  vector column; `embed_model` recorded per row for re-embed passes.
+- `embed.ts` — Ollama HTTP client, model = `nomic-embed-text`
+  (768-dim). Fails closed: a row with no embedding is not inserted.
+- `kb-actions.ts` — host-side handler for the `kb_request` /
+  `kb_response` system actions from the container. Permission gate:
+  pocketclaw agent group only. Returns `{ ok: false, error }` for
+  any other group.
+- `register.ts` — wires the KB instance into the host's module
+  registry so `delivery.ts` can resolve it.
+- `pg-client.ts` — `pg.Pool` factory; reads `POSTGRES_*` env.
+
+Migrations: `src/db/postgres-migrations/001_init.sql`. Single table
+`kb_rows`; `(source, source_id)` unique key for cloud-source
+idempotency.
+
+### 7.2 Capture pipeline
+
+- `src/modules/chat-archive.ts` — every inbound message archived
+  into the KB tagged `source='chat'`. Runs after the debouncer
+  flush. Stickers / reactions silently dropped.
+- `src/modules/debouncer.ts` — 5s unified message-batch queue across
+  all channels. Coalesces rapid bursts (multi-photo album, paste
+  bomb) into a single inbound event. The "wait 5 seconds before
+  acting" is the only knob.
+- `src/modules/photo-processor.ts` — vision pipeline: validate
+  (size, mimetype) → resize → describe via Ollama llava → write
+  description into KB tagged `source='photo'` → cleanup the bytes.
+  Bytes never persist past the description.
+
+### 7.3 Ingestion
+
+`src/modules/ingestion/`
+
+- `scheduler.ts` — `Promise.allSettled` parallel run with per-adapter
+  fault isolation. One adapter throwing does not poison the other
+  four. Audit log per adapter run.
+- `google.ts` — Gmail / Calendar / Contacts. Auth via OneCLI.
+- `microsoft.ts` — Outlook mail / calendar.
+- `apple.ts` — iCloud (mail, calendar; auth path is fragile and
+  source of most flakes).
+- `slack.ts` — Slack workspace ingest.
+- `github.ts` — issues / discussions ingest for projects the user
+  owns.
+- `file-watcher.ts` — watchdog with SHA256 idempotency. Watches a
+  configured directory; new files are dispatched to a content-typed
+  handler. Re-running on the same file is a no-op.
+- `telegram-mtproto.ts` — Telegram personal-account scrape, distinct
+  from the bot adapter in `src/channels/telegram.ts`.
+- `types.ts` — shared adapter types.
+
+Cron registration is in the scheduler; the host startup calls
+`scheduler.start()` once.
+
+### 7.4 Curation
+
+- `src/modules/wiki-generator.ts` — pure transform from KB rows to
+  Obsidian-format Markdown. `generateEntry({ entityName })` reads
+  via `kb.recall(entity, k=30)` + `kb.topEntities()`, writes to
+  `${VAULT_PATH}/wiki/<sanitized>.md`. WikiLinks rendered for
+  cross-references. No LLM call.
+- The 03:00 cron handler that drives `wiki-generator.ts` is parked
+  (audit log: `wiki-regen | SKIP | no-provider`). Re-wire spec:
+  `.omo/plans/pocketclaw-wiki-cron-rewire.md`.
+- `src/modules/meeting-minutes.ts`, `research-report.ts`,
+  `slide-generator.ts` — host-side document renderers. Built and
+  type-correct, but no transport drives them yet. The transport spec
+  is in `.omo/plans/pocketclaw-agent-side-docx-pipeline.md`.
+
+### 7.5 Channel adapters
+
+`src/channels/`
+
+- `cli.ts` — terminal channel. Always available, no auth.
+- `telegram.ts` — Chat SDK adapter; bot polling.
+  `telegram-markdown-sanitize.ts` and `telegram-pairing.ts` are
+  helpers.
+- `whatsapp.ts` — Baileys; shared-number mode (bot=#6592348112,
+  `ASSISTANT_HAS_OWN_NUMBER=false`); summon phrases via
+  `WHATSAPP_OWNER_ALIASES`. Auth dir = `WHATSAPP_AUTH_DIR`,
+  default `~/.pocketclaw/whatsapp/`.
+- `chat-sdk-bridge.ts` — generic Chat SDK bridge for skill-installed
+  channels (Discord, Slack, etc); not used by Telegram-bot or
+  WhatsApp-Baileys paths today.
+- `channel-registry.ts` — runtime registry of installed adapters.
+- `ask-question.ts` — generic per-channel question/response helper.
+- `adapter.ts`, `index.ts` — types and barrel.
+
+### 7.6 PocketClaw module glue
+
+- `src/modules/pocketclaw.ts` — startup wiring: KB instance, photo
+  processor, debouncer, ingestion scheduler.
+- `src/modules/pocketclaw-wiring.ts` — agent group + messaging group
+  wiring shortcuts, used by setup scripts.
+
+### 7.7 Container-side MCP tools
+
+`container/agent-runner/src/mcp-tools/`
+
+- `core.ts` — built-in tools every agent gets.
+- `kb.ts` — `kb_remember`, `kb_recall`, `kb_list_top_entities`,
+  `kb_status`, `kb_forget`. Talks to the host via
+  `kb_request` / `kb_response` system actions on the two-DB
+  transport. Permission-gated to pocketclaw at the host side.
+- `agents.ts` — agent-to-agent messaging tools.
+- `cli.ts` — in-container `ncl` shim.
+- `interactive.ts` — `ask_question` family.
+- `scheduling.ts` — schedule a future message back to the user.
+- `self-mod.ts` — `install_packages`, `add_mcp_server`. Single
+  approval per request.
+- `*.instructions.md` — prompt fragments auto-discovered by
+  `src/claude-md-compose.ts` and emitted as
+  `groups/<group>/.claude-fragments/module-<name>.md`.
+
+### 7.8 Approvals + permissions
+
+- `src/modules/approvals/` — generic approval primitive. Single-user
+  product → most approvals are auto-approved by virtue of the user
+  being the owner, but the framework remains for credential-touching
+  actions and self-mod.
+- `src/modules/permissions/` — owner / admin / member resolution,
+  user-DM cache, sender-approval and channel-approval flows.
+
+### 7.9 Scheduling, mount-security, self-mod
+
+- `src/modules/scheduling/` — durable scheduled-message store +
+  recurrence logic. Drives the 02:00 / 03:00 / 07:00 crons.
+- `src/modules/mount-security/` — sandboxing for the per-group
+  filesystem mount (workspace, skills, agent-runner overlay).
+- `src/modules/self-mod/` — `request.ts` + `apply.ts`. Implements
+  the package-install / MCP-server-add path with single-admin
+  approval, image rebuild on `install_packages`, on-wake message
+  for the respawned container.
+
+### 7.10 Module conventions
+
+- Every module exports through its directory's `index.ts`.
+- Path resolution goes through `src/modules/paths.ts` (`envPath`),
+  defaulting under `~/.pocketclaw/<subdir>`.
+- Tests live next to the module (`*.test.ts`), run via vitest on
+  the host and bun test in the container.
+- Modules that hold I/O (DB pools, sockets, file watchers) expose a
+  `start()` / `stop()` so the host's shutdown path can drain them
+  cleanly.
 
 ## 8. UX / Interaction Design
 
