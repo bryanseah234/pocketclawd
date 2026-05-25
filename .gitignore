@@ -221,3 +221,7 @@ scripts/service/.run-install-task-once.ps1
 .omo/
 _q*.cjs
 
+# --- Claude Code runtime state ---
+.claude/settings.json
+.claude/scheduled_tasks.lock
+
