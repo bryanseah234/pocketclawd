@@ -182,6 +182,9 @@ gyp.tmp.txt
 x.tmp.txt
 *.tmp.txt
 
+# npm lockfile (project uses pnpm)
+package-lock.json
+
 
 # --- PocketClaw additions ---
 .env
