@@ -22,9 +22,12 @@ jobs:
             feat
             fix
             docs
-            styles
+            style
             refactor
             test
             chore
+            perf
+            ci
+            build
           validateSingleCommit: false # set to true if you want single-commit validation
           subjectPattern: "^[a-z].+$"

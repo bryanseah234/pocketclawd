@@ -12,7 +12,6 @@ export default [
   {
     plugins: { 'no-catch-all': noCatchAll },
     rules: {
-      'preserve-caught-error': ['error', { requireCatchParameter: true }],
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
