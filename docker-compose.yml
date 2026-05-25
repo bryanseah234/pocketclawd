@@ -8,7 +8,10 @@ services:
     environment:
       POSTGRES_USER: pocketclaw
       POSTGRES_DB: pocketclaw
-      POSTGRES_HOST_AUTH_METHOD: trust   # localhost-only, no password
+      POSTGRES_HOST_AUTH_METHOD: trust # localhost-only, no password
+      # PRODUCTION: replace the line above with:
+      #   POSTGRES_PASSWORD: <strong-random-password>
+      # and remove POSTGRES_HOST_AUTH_METHOD entirely.
     volumes:
       - pocketclaw-pg-data:/var/lib/postgresql/data
     healthcheck:
