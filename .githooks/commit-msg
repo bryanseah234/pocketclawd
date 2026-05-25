@@ -1,66 +1,15 @@
-#!/usr/bin/env bash
-set -e
+#!/usr/bin/env node
+import { readFileSync } from 'node:fs';
 
-# Read commit message from file
-COMMIT_MSG_FILE="$1"
-COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
-
-# Enhanced commit message validation
-echo "🔍 Validating commit message..."
-
-# Check if commitlint is available and use it if present
-if command -v commitlint &> /dev/null; then
-    if ! commitlint --edit "$1"; then
-        echo "❌ Error: Commit message does not follow Conventional Commits format."
-        echo ""
-        echo "Please use one of the following patterns:"
-        echo "  - feat: add new feature"
-        echo "  - fix: fix a bug"
-        echo "  - docs: update documentation"
-        echo "  - style: format code (no functional changes)"
-        echo "  - refactor: refactor code"
-        echo "  - test: add or update tests"
-        echo "  - chore: update dependencies or tooling"
-        echo "  - perf: improve performance"
-        echo "  - ci: update CI/CD configuration"
-        echo "  - build: update build configuration"
-        echo ""
-        echo "Examples:"
-        echo "  - feat: add user authentication"
-        echo "  - fix: resolve login validation issue"
-        echo "  - docs: update API documentation"
-        exit 1
-    fi
-else
-    # Fallback validation without commitlint
-    CONVENTIONAL_COMMIT_REGEX="^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\(.+\))?: .{1,50}"
-
-    if [[ ! $COMMIT_MSG =~ $CONVENTIONAL_COMMIT_REGEX ]]; then
-        echo "❌ Error: Commit message does not follow Conventional Commits format."
-        echo ""
-        echo "Format: <type>[optional scope]: <description>"
-        echo ""
-        echo "Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build"
-        echo ""
-        echo "Examples:"
-        echo "  - feat: add user authentication"
-        echo "  - fix: resolve login validation issue"
-        echo "  - docs: update API documentation"
-        echo ""
-        echo "Your message: $COMMIT_MSG"
-        exit 1
-    fi
-fi
-
-# Check commit message length
-if [ ${#COMMIT_MSG} -gt 72 ]; then
-    echo "⚠️  Warning: Commit message is longer than 72 characters. Consider making it more concise."
-fi
-
-# Check for common issues
-if [[ $COMMIT_MSG =~ ^(wip|WIP|temp|TEMP|TODO|FIXME) ]]; then
-    echo "❌ Error: Commit message indicates work in progress. Please complete the work before committing."
-    exit 1
-fi
-
-echo "✅ Commit message is valid!"
+const file = process.argv[2];
+const msg = readFileSync(file, 'utf8').split('\n')[0].trim();
+const ok = /^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\([^)]+\))?: .+/.test(msg);
+if (!ok) {
+  process.stderr.write(
+    `\nERROR: commit message does not follow Conventional Commits format.\n` +
+    `  Got: "${msg}"\n` +
+    `  Format: <type>[(scope)]: <description>\n` +
+    `  Types: feat fix docs style refactor test chore perf ci build\n\n`,
+  );
+  process.exit(1);
+}
