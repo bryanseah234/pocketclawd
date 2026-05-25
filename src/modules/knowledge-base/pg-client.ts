@@ -114,27 +114,30 @@ export async function runMigrations(): Promise<{ applied: string[]; skipped: str
 }
 
 /**
- * Locate the migrations directory. From compiled output (`dist/...`) the path
- * relative to this file changes; from `tsx` (running source directly) it's the
- * source tree. Walk up looking for `src/db/postgres-migrations`.
+ * Locate the migrations directory.
+ *
+ * Works from both `tsx` (source tree) and compiled output (`dist/...`):
+ * walks up from __dirname until it finds a directory containing
+ * `src/db/postgres-migrations`, which is the repo root.
+ * Falls back to process.cwd() if the walk exhausts without a match.
+ * Override via PG_MIGRATIONS_DIR env var for tests.
  */
 function resolveMigrationsDir(): string {
-  // Allow override for tests
   if (process.env.PG_MIGRATIONS_DIR) {
     return process.env.PG_MIGRATIONS_DIR;
   }
-  // Walk up from __dirname looking for src/db/postgres-migrations
+  // Walk up looking for the repo root (contains src/db/postgres-migrations)
+  const { existsSync } = require('node:fs') as typeof import('node:fs');
   let cur = __dirname;
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 8; i++) {
     const candidate = join(cur, 'src', 'db', 'postgres-migrations');
-    try {
-      // Sync existence check via require would be cleaner but we already use async fs
-      // Fall back to a hard-coded relative — the tree is stable.
-    } catch {}
-    cur = dirname(cur);
+    if (existsSync(candidate)) return candidate;
+    const next = dirname(cur);
+    if (next === cur) break; // reached filesystem root
+    cur = next;
   }
-  // Repo-relative fallback (works for tsx + compiled output equally)
-  return resolve(__dirname, '..', '..', 'db', 'postgres-migrations');
+  // Last resort: repo root relative to cwd (works when running from the repo root)
+  return resolve(process.cwd(), 'src', 'db', 'postgres-migrations');
 }
 
 export type { PoolClient };

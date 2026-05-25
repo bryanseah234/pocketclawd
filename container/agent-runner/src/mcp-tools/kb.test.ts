@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { initTestSessionDb, closeSessionDb, getInboundDb } from '../db/connection.js';
 import { getUndeliveredMessages } from '../db/messages-out.js';
-import { kbRecall, kbRemember, kbStatus, requestHostKb } from './kb.js';
+import { kbForget, kbListTopEntities, kbRecall, kbRemember, kbStatus, requestHostKb } from './kb.js';
 
 beforeEach(() => {
   initTestSessionDb();
@@ -117,6 +117,49 @@ describe('kb MCP tools transport', () => {
 
     expect(toolResult.isError).toBe(true);
     expect((toolResult.content[0] as { text: string }).text).toContain('PG down');
+  });
+
+  it('kb_forget: sends request and returns forgotten id', async () => {
+    const seedPromise = seedKbResponseWhenRequestArrives({ ok: true, result: { id: 7, forgotten: true } });
+    const [, toolResult] = await Promise.all([
+      seedPromise,
+      kbForget.handler({ id: 7 }),
+    ]);
+
+    expect(toolResult.isError).toBeUndefined();
+    const parsed = JSON.parse((toolResult.content[0] as { text: string }).text);
+    expect(parsed).toEqual({ id: 7, forgotten: true });
+
+    const reqBody = JSON.parse(getUndeliveredMessages()[0].content);
+    expect(reqBody.tool).toBe('kb_forget');
+    expect(reqBody.args).toEqual({ id: 7 });
+  });
+
+  it('kb_list_top_entities: forwards args and returns entity list', async () => {
+    const seedPromise = seedKbResponseWhenRequestArrives({
+      ok: true,
+      result: { entities: [{ entity: 'alice', count: 5 }] },
+    });
+    const [, toolResult] = await Promise.all([
+      seedPromise,
+      kbListTopEntities.handler({ limit: 5 }),
+    ]);
+
+    expect(toolResult.isError).toBeUndefined();
+    const parsed = JSON.parse((toolResult.content[0] as { text: string }).text);
+    expect(parsed.entities[0].entity).toBe('alice');
+
+    const reqBody = JSON.parse(getUndeliveredMessages()[0].content);
+    expect(reqBody.tool).toBe('kb_list_top_entities');
+    expect(reqBody.args).toEqual({ limit: 5 });
+  });
+
+  it('pollForResponse timeout: returns isError when host never responds', async () => {
+    // Don't seed any response — the poll must expire and surface as isError
+    const toolResult = await requestHostKb('kb_status', {}, 80).catch((e) => e as Error);
+    expect(toolResult).toBeInstanceOf(Error);
+    expect((toolResult as Error).message).toContain('timed out');
+    expect((toolResult as Error).message).toContain('80ms');
   });
 
   it('requestHostKb correlates by request_id even with stale rows in inbound', async () => {

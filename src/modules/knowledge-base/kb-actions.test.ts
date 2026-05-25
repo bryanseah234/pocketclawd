@@ -192,6 +192,38 @@ describe('handleKbRequest', () => {
     expect(stub.store).not.toHaveBeenCalled();
   });
 
+  it('responds ok:false when tool is missing (avoids 15s container hang)', async () => {
+    const stub = makeStubKb();
+    _setKbResolverForTest(async () => stub);
+
+    await handleKbRequest({ request_id: 'r-notool', args: {} }, makeSession(), fakeDb);
+
+    expect(stub.store).not.toHaveBeenCalled();
+    expect(writeSessionMessageMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(writeSessionMessageMock.mock.calls[0][2].content);
+    expect(body.action).toBe('kb_response');
+    expect(body.request_id).toBe('r-notool');
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/missing.*tool/i);
+  });
+
+  it('does not throw when writeSessionMessage fails', async () => {
+    writeSessionMessageMock.mockImplementationOnce(() => {
+      throw new Error('DB write failure');
+    });
+    const stub = makeStubKb({ store: vi.fn().mockResolvedValue({ id: 1, created: true }) });
+    _setKbResolverForTest(async () => stub);
+
+    // Should resolve without throwing even though writeSessionMessage threw
+    await expect(
+      handleKbRequest(
+        { request_id: 'r-write-fail', tool: 'kb_remember', args: { text: 'x' } },
+        makeSession(),
+        fakeDb,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('rejects unknown kb tools with ok:false', async () => {
     const stub = makeStubKb();
     _setKbResolverForTest(async () => stub);

@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS insights (
   metadata      JSONB DEFAULT '{}',
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   updated_at    TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (source, source_id)                     -- idempotency guard
+  UNIQUE (source, source_id)                     -- dedup for rows WITH a stable source_id (NULL bypasses — intentional for agent-memory)
 );
 
 CREATE INDEX IF NOT EXISTS insights_embedding_idx ON insights

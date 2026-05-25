@@ -138,6 +138,21 @@ export async function handleKbRequest(
 
   if (!requestId || !tool) {
     log.warn('kb_request missing request_id or tool', { sessionId: session.id, requestId, tool });
+    if (requestId) {
+      // Write a structured error back so the container doesn't hang for 15s
+      writeSessionMessage(session.agent_group_id, session.id, {
+        id: generateResponseId(),
+        kind: 'system',
+        timestamp: new Date().toISOString(),
+        content: JSON.stringify({
+          action: 'kb_response',
+          request_id: requestId,
+          ok: false,
+          error: 'kb_request missing required `tool` field',
+        } satisfies KbResponseBody),
+        trigger: 0,
+      });
+    }
     return;
   }
 
@@ -184,11 +199,21 @@ export async function handleKbRequest(
     }
   }
 
-  writeSessionMessage(session.agent_group_id, session.id, {
-    id: generateResponseId(),
-    kind: 'system',
-    timestamp: new Date().toISOString(),
-    content: JSON.stringify(response),
-    trigger: 0,
-  });
+  try {
+    writeSessionMessage(session.agent_group_id, session.id, {
+      id: generateResponseId(),
+      kind: 'system',
+      timestamp: new Date().toISOString(),
+      content: JSON.stringify(response),
+      trigger: 0,
+    });
+  } catch (writeErr) {
+    log.error('kb_request: failed to write response to inbound.db', {
+      sessionId: session.id,
+      requestId,
+      err: writeErr,
+    });
+    // Container will time out — nothing more we can do here.
+    // Don't re-throw: retrying the outbound row won't fix a DB write failure.
+  }
 }

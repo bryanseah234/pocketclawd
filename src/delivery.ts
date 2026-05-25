@@ -170,8 +170,12 @@ async function drainSession(session: Session): Promise<void> {
   try {
     outDb = openOutboundDb(agentGroup.id, session.id);
     inDb = openInboundDb(agentGroup.id, session.id);
-  } catch {
-    return; // DBs might not exist yet
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      log.warn('Failed to open session DBs', { sessionId: session.id, err });
+    }
+    return;
   }
 
   try {

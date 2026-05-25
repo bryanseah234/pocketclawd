@@ -95,12 +95,12 @@ async function runOne(
         await onFact(f);
         factsCount += 1;
       } catch (e) {
-        errors.push(`onFact ${f.sourceId ?? f.source}: ${(e as Error).message}`);
+        errors.push(`onFact ${f.sourceId ?? f.source}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
   } catch (e) {
     // configuration error — surfaces as a single ingester failure
-    errors.push((e as Error).message);
+    errors.push(e instanceof Error ? e.message : String(e));
   }
 
   return {

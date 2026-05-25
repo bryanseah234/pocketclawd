@@ -44,38 +44,33 @@ interface KbResponseBody {
   error?: string;
 }
 
-/**
- * Test seam: the prod transport polls openInboundDb() in a loop, but tests
- * inject an in-memory DB via initTestSessionDb() and need a way to force
- * the poll to use that singleton. Setting __KB_TEST_DB to true makes the
- * loop call openInboundDb() each iteration (which already returns the test
- * singleton when _testMode is on). No-op in production.
- */
 async function pollForResponse(requestId: string, timeoutMs: number): Promise<KbResponseBody> {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const db = openInboundDb();
-    try {
-      const rows = db
-        .prepare(
-          `SELECT content FROM messages_in
-           WHERE kind = 'system'
-             AND content LIKE ?
-             AND content LIKE ?
-           ORDER BY rowid DESC
-           LIMIT 1`,
-        )
-        .all(`%"action":"kb_response"%`, `%"request_id":"${requestId}"%`) as Array<{ content: string }>;
-      if (rows.length > 0) {
-        const body = JSON.parse(rows[0].content) as KbResponseBody;
-        if (body.action === 'kb_response' && body.request_id === requestId) {
-          return body;
+  // Open once — journal_mode=DELETE guarantees cross-mount visibility on each read.
+  const db = openInboundDb();
+  try {
+    const stmt = db.prepare(
+      `SELECT content FROM messages_in
+       WHERE kind = 'system'
+         AND json_extract(content, '$.action') = 'kb_response'
+         AND json_extract(content, '$.request_id') = ?
+       ORDER BY rowid DESC
+       LIMIT 1`,
+    );
+    while (Date.now() < deadline) {
+      try {
+        const rows = stmt.all(requestId) as Array<{ content: string }>;
+        if (rows.length > 0) {
+          return JSON.parse(rows[0].content) as KbResponseBody;
         }
+      } catch (pollErr) {
+        // Transient read error — log and retry on next tick rather than aborting
+        console.warn('[kb] pollForResponse read error, retrying:', pollErr);
       }
-    } finally {
-      db.close();
+      await new Promise((r) => setTimeout(r, KB_POLL_INTERVAL_MS));
     }
-    await new Promise((r) => setTimeout(r, KB_POLL_INTERVAL_MS));
+  } finally {
+    db.close();
   }
   throw new Error(`kb tool timed out after ${timeoutMs}ms waiting for host response (request_id=${requestId})`);
 }
@@ -85,8 +80,9 @@ async function pollForResponse(requestId: string, timeoutMs: number): Promise<Kb
  * five kb_* tool handlers.
  *
  * Throws if the host returns ok:false (caller catches and converts to err()).
+ * `timeoutMs` overrides KB_TIMEOUT_MS — only for tests.
  */
-export async function requestHostKb(tool: string, args: Record<string, unknown>): Promise<unknown> {
+export async function requestHostKb(tool: string, args: Record<string, unknown>, timeoutMs = KB_TIMEOUT_MS): Promise<unknown> {
   const requestId = generateRequestId();
   const r = getSessionRouting();
   writeMessageOut({
@@ -97,7 +93,7 @@ export async function requestHostKb(tool: string, args: Record<string, unknown>)
     thread_id: r.thread_id,
     content: JSON.stringify({ action: 'kb_request', tool, args, request_id: requestId }),
   });
-  const response = await pollForResponse(requestId, KB_TIMEOUT_MS);
+  const response = await pollForResponse(requestId, timeoutMs);
   if (!response.ok) {
     throw new Error(response.error ?? 'kb tool failed (no error message)');
   }
