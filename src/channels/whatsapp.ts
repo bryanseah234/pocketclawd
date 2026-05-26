@@ -731,6 +731,77 @@ registerChannelAdapter('whatsapp', {
               attachments: attachments.length > 0 ? summarizeAttachments(attachments) : undefined,
             });
 
+            // Cloud mode: upload document attachments to S3 for processing pipeline
+            if (process.env.NANOCLAW_ENV === 'cloud' && attachments.length > 0) {
+              void (async () => {
+                try {
+                  const { getCloudServices } = await import('../cloud/bootstrap.js');
+                  const services = getCloudServices();
+                  if (!services) return;
+
+                  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+                  const bucket = process.env.DATA_BUCKET;
+                  if (!bucket) return;
+
+                  const region = process.env.AWS_REGION || 'ap-southeast-1';
+                  const s3 = new S3Client({ region });
+                  const userId = sender.split('@')[0]; // phone number as userId
+
+                  for (const att of attachments) {
+                    if (att.type !== 'document' && att.type !== 'image') continue;
+                    const filePath = path.join(DATA_DIR, att.localPath);
+                    if (!fs.existsSync(filePath)) continue;
+
+                    const fileBuffer = fs.readFileSync(filePath);
+                    const uploadId = `wa-${msg.key.id || Date.now()}`;
+                    const s3Key = `staging/uploads/${uploadId}/${att.name}`;
+
+                    await s3.send(new PutObjectCommand({
+                      Bucket: bucket,
+                      Key: s3Key,
+                      Body: fileBuffer,
+                      Metadata: { uploadId, originalFilename: att.name, userId },
+                    }));
+
+                    // Determine content type
+                    const ext = path.extname(att.name).toLowerCase();
+                    const mimeMap: Record<string, string> = {
+                      '.pdf': 'application/pdf',
+                      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                      '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                      '.csv': 'text/csv',
+                      '.txt': 'text/plain',
+                      '.md': 'text/plain',
+                      '.jpg': 'image/jpeg',
+                      '.jpeg': 'image/jpeg',
+                      '.png': 'image/png',
+                    };
+                    const contentType = mimeMap[ext] || 'application/octet-stream';
+
+                    await services.redis.lpush('nanoclaw:uploads:pending', JSON.stringify({
+                      uploadId,
+                      filename: att.name,
+                      contentType,
+                      s3Key,
+                      bucket,
+                      userId,
+                      timestamp: new Date().toISOString(),
+                    }));
+
+                    log.info('WhatsApp document uploaded to S3 for processing', {
+                      uploadId, filename: att.name, userId, s3Key,
+                    });
+
+                    // Cleanup local file after S3 upload
+                    try { fs.unlinkSync(filePath); } catch { /* best effort */ }
+                  }
+                } catch (err) {
+                  log.error('Failed to upload WhatsApp attachment to S3', { err });
+                }
+              })();
+            }
+
             // Filter bot's own messages to prevent echo loops.
             // In self-chat (user messaging their own number), all messages have
             // fromMe=true — use sentMessageCache to distinguish bot echoes from

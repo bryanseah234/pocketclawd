@@ -102,6 +102,14 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
     });
     log.info('Cloud bootstrap: Data Gateway ready');
 
+    // Ensure OpenSearch index exists with proper mappings
+    try {
+        await dataGateway.ensureIndex();
+        log.info('Cloud bootstrap: OpenSearch index verified');
+    } catch (err) {
+        log.error('Cloud bootstrap: OpenSearch index creation failed (non-critical)', { err });
+    }
+
     // 3. Redis connection (shared between queue and rate limiter)
     log.info('Cloud bootstrap: connecting to Redis');
     const redis = new Redis({

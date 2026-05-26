@@ -121,6 +121,10 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
                 await handleDeleteUserDocuments(services, userId, request);
                 break;
 
+            case 'hybrid_search':
+                await handleHybridSearch(services, userId, requestId, request);
+                break;
+
             case 'get_file':
                 await handleGetFile(services, userId, requestId, request);
                 break;
@@ -135,6 +139,14 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
 
             case 'get_user_preference':
                 await handleGetUserPreference(services, userId, requestId);
+                break;
+
+            case 'get_chat_history':
+                await handleGetChatHistory(services, userId, requestId, request);
+                break;
+
+            case 'put_chat_message':
+                await handlePutChatMessage(services, userId, request);
                 break;
 
             default:
@@ -350,4 +362,73 @@ async function handleGetUserPreference(
         preferences: prefs,
     }));
     await services.redis.expire(responseKey, 60);
+}
+
+async function handleHybridSearch(
+    services: CloudServices,
+    userId: string,
+    requestId: string | undefined,
+    request: Record<string, unknown>,
+): Promise<void> {
+    if (!requestId || !userId) return;
+
+    const query = request.query as string;
+    const vector = request.vector as number[];
+    const topK = (request.top_k as number) || 5;
+
+    if (!query || !vector) {
+        const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+        await services.redis.lpush(responseKey, JSON.stringify({
+            success: false,
+            error: 'Missing query or vector',
+        }));
+        await services.redis.expire(responseKey, 60);
+        return;
+    }
+
+    const results = await services.dataGateway.hybridSearch(userId, query, vector, topK);
+
+    const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+    await services.redis.lpush(responseKey, JSON.stringify({
+        success: true,
+        results,
+    }));
+    await services.redis.expire(responseKey, 60);
+}
+
+async function handleGetChatHistory(
+    services: CloudServices,
+    userId: string,
+    requestId: string | undefined,
+    request: Record<string, unknown>,
+): Promise<void> {
+    if (!requestId || !userId) return;
+
+    const limit = (request.limit as number) || 30;
+    const messages = await services.dataGateway.getChatHistory(userId, limit);
+
+    const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+    await services.redis.lpush(responseKey, JSON.stringify({
+        success: true,
+        messages,
+    }));
+    await services.redis.expire(responseKey, 60);
+}
+
+async function handlePutChatMessage(
+    services: CloudServices,
+    userId: string,
+    request: Record<string, unknown>,
+): Promise<void> {
+    if (!userId) return;
+
+    const message = request.message as { messageId: string; role: string; content: string; timestamp: string } | undefined;
+    if (!message) return;
+
+    await services.dataGateway.putChatMessage(userId, {
+        messageId: message.messageId,
+        role: message.role as 'user' | 'assistant',
+        content: message.content,
+        timestamp: message.timestamp,
+    });
 }
