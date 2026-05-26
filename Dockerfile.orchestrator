@@ -60,9 +60,11 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 
-# Create non-root user and switch to it
+# Create non-root user, data directory, and switch to it
 RUN addgroup -g 1001 -S nanoclaw && \
-    adduser -u 1001 -S nanoclaw -G nanoclaw
+    adduser -u 1001 -S nanoclaw -G nanoclaw && \
+    mkdir -p /app/data && \
+    chown -R nanoclaw:nanoclaw /app
 
 USER nanoclaw
 
