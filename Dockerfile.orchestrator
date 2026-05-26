@@ -60,6 +60,11 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 
+# Rebuild native modules for glibc (better-sqlite3 was compiled for musl in build stage)
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
+    npm rebuild better-sqlite3 --build-from-source && \
+    apt-get remove -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user, data directory, and switch to it
 RUN groupadd -g 1001 nanoclaw && \
     useradd -u 1001 -g nanoclaw -s /bin/sh -M nanoclaw && \
