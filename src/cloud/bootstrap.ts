@@ -244,6 +244,15 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         log.error('Cloud bootstrap: DataGateway worker failed (non-critical)', { err });
     }
 
+    // Initialize container manager (spawns/kills per-user Docker containers)
+    try {
+        const { initContainerManager } = await import('./container-manager/lifecycle.js');
+        initContainerManager(_services);
+        log.info('Cloud bootstrap: container manager initialized');
+    } catch (err) {
+        log.error('Cloud bootstrap: container manager failed (non-critical)', { err });
+    }
+
     // Initialize container manager (per-user Docker containers)
     try {
         const { CloudContainerManager } = await import('./container-manager/index.js');
@@ -344,6 +353,12 @@ export async function shutdownCloudServices(): Promise<void> {
         const { stopDataGatewayWorker } = await import('./data-gateway-worker/index.js');
         stopDataGatewayWorker();
     } catch { /* worker may not have been started */ }
+
+    // Stop container manager
+    try {
+        const { stopContainerManager } = await import('./container-manager/lifecycle.js');
+        stopContainerManager();
+    } catch { /* may not have been started */ }
 
     _services.scheduler.stop();
     _services.healthCheck.stop();
