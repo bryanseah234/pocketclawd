@@ -102,8 +102,8 @@ async function resolveWaWebVersion(): Promise<[number, number, number]> {
 
   throw new Error(
     'Could not fetch current WhatsApp Web version from any source. ' +
-      'Baileys hardcodes a stale version that WhatsApp rejects (405). ' +
-      'Check network connectivity to wppconnect.io and web.whatsapp.com.',
+    'Baileys hardcodes a stale version that WhatsApp rejects (405). ' +
+    'Check network connectivity to wppconnect.io and web.whatsapp.com.',
   );
 }
 
@@ -558,7 +558,7 @@ registerChannelAdapter('whatsapp', {
         const { connection, lastDisconnect, qr } = update;
 
         if (qr && !phoneNumber) {
-          // QR code auth — print to terminal
+          // QR code auth — print to terminal + push to admin dashboard bridge
           (async () => {
             try {
               const QRCode = await import('qrcode');
@@ -567,11 +567,21 @@ registerChannelAdapter('whatsapp', {
             } catch {
               log.info('WhatsApp QR code (raw)', { qr });
             }
+            // Push QR to admin dashboard bridge (if available in cloud mode)
+            try {
+              const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+              if (bridge?.setQrCode) await bridge.setQrCode(qr);
+            } catch { /* bridge not available */ }
           })();
         }
 
         if (connection === 'close') {
           connected = false;
+          // Notify admin dashboard bridge
+          try {
+            const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+            if (bridge?.setWhatsAppDisconnected) bridge.setWhatsAppDisconnected();
+          } catch { /* bridge not available */ }
           const reason = (lastDisconnect?.error as { output?: { statusCode?: number } })?.output?.statusCode;
           const shouldReconnect = reason !== DisconnectReason.loggedOut;
 
@@ -598,6 +608,11 @@ registerChannelAdapter('whatsapp', {
         } else if (connection === 'open') {
           connected = true;
           log.info('Connected to WhatsApp');
+          // Notify admin dashboard bridge
+          try {
+            const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+            if (bridge?.setWhatsAppConnected) bridge.setWhatsAppConnected(sock.user?.id || 'unknown');
+          } catch { /* bridge not available */ }
 
           // Clean up pairing code file after successful connection
           try {
