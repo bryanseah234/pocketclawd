@@ -101,6 +101,21 @@ export function getDashboardHtml(): string {
             50% { opacity: 0.5; }
         }
 
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 8px;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
@@ -173,6 +188,19 @@ export function getDashboardHtml(): string {
             margin-bottom: 4px;
         }
 
+        .qr-countdown {
+            color: var(--warning);
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+
+        .connected-check {
+            color: var(--success);
+            font-size: 3rem;
+            text-align: center;
+        }
+
         /* Health Services */
         .service-list {
             display: flex;
@@ -215,9 +243,7 @@ export function getDashboardHtml(): string {
         .badge-unknown { background: rgba(100, 116, 139, 0.15); color: var(--text-muted); }
 
         /* Containers Table */
-        .table-wrapper {
-            overflow-x: auto;
-        }
+        .table-wrapper { overflow-x: auto; }
 
         table {
             width: 100%;
@@ -325,6 +351,83 @@ export function getDashboardHtml(): string {
         .action-btn .action-label { font-weight: 500; }
         .action-btn .action-desc { color: var(--text-muted); font-size: 0.7rem; margin-top: 2px; }
 
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+        .upload-zone .upload-text { color: var(--text-secondary); font-size: 0.85rem; }
+        .upload-zone .upload-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; }
+
+        .upload-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-list {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .upload-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .upload-item-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .upload-item-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .upload-item-status.processing { color: var(--warning); }
+        .upload-item-status.completed { color: var(--success); }
+        .upload-item-status.failed { color: var(--danger); }
+        .upload-item-status.uploading { color: var(--accent); }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -391,6 +494,7 @@ export function getDashboardHtml(): string {
                         <div class="qr-detail" id="wa-phone"></div>
                         <div class="qr-detail" id="wa-uptime"></div>
                         <div class="qr-detail" id="wa-activity"></div>
+                        <div class="qr-countdown" id="wa-countdown"></div>
                     </div>
                 </div>
             </div>
@@ -464,26 +568,42 @@ export function getDashboardHtml(): string {
                 </div>
                 <div class="actions-grid">
                     <button class="action-btn" onclick="doAction('reconnect')">
-                        <div class="action-icon">🔄</div>
+                        <div class="action-icon">&#x1f504;</div>
                         <div class="action-label">Reconnect WhatsApp</div>
                         <div class="action-desc">Generate new QR code</div>
                     </button>
                     <button class="action-btn" onclick="doAction('disconnect')">
-                        <div class="action-icon">⛔</div>
+                        <div class="action-icon">&#x26d4;</div>
                         <div class="action-label">Force Disconnect</div>
                         <div class="action-desc">Kill WhatsApp session</div>
                     </button>
                     <button class="action-btn" onclick="doAction('clear-limits')">
-                        <div class="action-icon">🧹</div>
+                        <div class="action-icon">&#x1f9f9;</div>
                         <div class="action-label">Clear Rate Limits</div>
                         <div class="action-desc">Reset all user counters</div>
                     </button>
                     <button class="action-btn" onclick="doAction('refresh')">
-                        <div class="action-icon">📊</div>
+                        <div class="action-icon">&#x1f4ca;</div>
                         <div class="action-label">Force Refresh</div>
                         <div class="action-desc">Reload all data now</div>
                     </button>
                 </div>
+            </div>
+
+            <!-- Document Upload -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Document Upload</span>
+                    <span id="upload-count" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+                </div>
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" multiple
+                        accept=".pdf,.docx,.csv,.txt,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,text/plain,image/png,image/jpeg">
+                    <div class="upload-icon">&#x1f4c1;</div>
+                    <div class="upload-text">Drag &amp; drop files here, or click to select</div>
+                    <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
+                </div>
+                <div class="upload-list" id="upload-list"></div>
             </div>
         </div>
     </div>
@@ -493,13 +613,12 @@ export function getDashboardHtml(): string {
     <script>
         // ── State ──
         let eventSource = null;
-        const token = new URLSearchParams(window.location.search).get('token') || '';
+        let qrState = null;
+        let qrCountdownInterval = null;
 
         // ── SSE Connection ──
         function connectSSE() {
-            const url = '/admin/sse' + (token ? '?token=' + encodeURIComponent(token) : '');
-
-            eventSource = new EventSource(url);
+            eventSource = new EventSource('/admin/sse');
 
             eventSource.addEventListener('connected', () => {
                 setSseBadge('connected', 'Live');
@@ -536,181 +655,317 @@ export function getDashboardHtml(): string {
         // ── Update Functions ──
         function updateHealth(data) {
             const el = document.getElementById('overall-status');
-            el.textContent = data.overallStatus;
-            el.className = 'badge badge-' + data.overallStatus;
+            el.textContent = data.overallStatus || 'unknown';
+            el.className = 'badge badge-' + (data.overallStatus || 'unknown');
 
             const list = document.getElementById('services-list');
-            if (data.services && data.services.length > 0) {
-                list.innerHTML = data.services.map(s => \`
-                    <div class="service-item">
-                        <span class="service-name">\${s.name}</span>
-                        <div class="service-status">
-                            \${s.latencyMs ? '<span style="color:var(--text-muted)">' + s.latencyMs + 'ms</span>' : ''}
-                            <span class="badge badge-\${s.status}">\${s.status}</span>
-                        </div>
-                    </div>
-                \`).join('');
+            if (!data.services || data.services.length === 0) {
+                list.innerHTML = '<div class="empty-state">No services reporting</div>';
+                return;
             }
+            list.innerHTML = data.services.map(s => \`
+                <div class="service-item">
+                    <span class="service-name">\${esc(s.name)}</span>
+                    <div class="service-status">
+                        \${s.latencyMs != null ? '<span>' + s.latencyMs + 'ms</span>' : ''}
+                        <span class="badge badge-\${s.status}">\${s.status}</span>
+                    </div>
+                </div>
+            \`).join('');
         }
 
         function updateWhatsApp(data) {
+            const qrBox = document.getElementById('qr-box');
             const statusEl = document.getElementById('wa-status');
             const phoneEl = document.getElementById('wa-phone');
             const uptimeEl = document.getElementById('wa-uptime');
-            const activityEl = document.getElementById('wa-activity');
-            const qrBox = document.getElementById('qr-box');
+            const countdownEl = document.getElementById('wa-countdown');
 
-            const stateLabels = {
-                connected: '✅ Connected',
-                disconnected: '❌ Disconnected',
-                connecting: '🔄 Connecting...',
-                qr_pending: '📱 Scan QR Code'
-            };
-
-            statusEl.textContent = stateLabels[data.state] || data.state;
-
-            if (data.phoneNumber) {
-                phoneEl.textContent = 'Phone: ' + data.phoneNumber;
-            } else {
-                phoneEl.textContent = '';
-            }
-
-            if (data.uptime) {
-                uptimeEl.textContent = 'Uptime: ' + formatDuration(data.uptime);
-            } else {
-                uptimeEl.textContent = '';
-            }
-
-            if (data.lastActivity) {
-                activityEl.textContent = 'Last activity: ' + new Date(data.lastActivity).toLocaleTimeString();
-            } else {
-                activityEl.textContent = '';
-            }
-
-            // QR Code display
-            if (data.qr && data.qr.available && data.qr.qrDataUrl) {
+            if (data.connected || data.state === 'connected') {
+                qrBox.innerHTML = '<div class="connected-check">&#x2705;</div>';
+                statusEl.textContent = 'Connected';
+                statusEl.style.color = 'var(--success)';
+                phoneEl.textContent = data.phoneNumber ? 'Phone: ' + data.phoneNumber : '';
+                uptimeEl.textContent = data.uptime ? 'Uptime: ' + formatUptime(data.uptime) : '';
+                countdownEl.textContent = '';
+            } else if (data.qr && data.qr.available && data.qr.qrDataUrl) {
                 qrBox.innerHTML = '<img src="' + data.qr.qrDataUrl + '" alt="WhatsApp QR Code">';
-            } else if (data.state === 'connected') {
-                qrBox.innerHTML = '<span style="color:var(--success);font-size:2rem;">✓</span>';
-            } else if (data.state === 'qr_pending') {
-                qrBox.innerHTML = '<span style="color:var(--text-muted);font-size:0.8rem;">Waiting for QR...</span>';
+                statusEl.textContent = 'Scan QR Code';
+                statusEl.style.color = 'var(--warning)';
+                phoneEl.textContent = '';
+                uptimeEl.textContent = '';
+                // QR countdown (refreshes every ~20s)
+                if (data.qr.qrGeneratedAt) {
+                    startQrCountdown(data.qr.qrGeneratedAt);
+                }
             } else {
-                qrBox.innerHTML = '<span style="color:var(--text-muted);font-size:0.8rem;">No session</span>';
+                qrBox.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">Disconnected</span>';
+                statusEl.textContent = data.state || 'Disconnected';
+                statusEl.style.color = 'var(--danger)';
+                phoneEl.textContent = '';
+                uptimeEl.textContent = '';
+                countdownEl.textContent = '';
             }
         }
 
-        function updateContainers(data) {
-            document.getElementById('container-count').textContent = data.total + ' running';
+        function startQrCountdown(generatedAt) {
+            if (qrCountdownInterval) clearInterval(qrCountdownInterval);
+            const countdownEl = document.getElementById('wa-countdown');
+            qrCountdownInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - generatedAt) / 1000);
+                const remaining = Math.max(0, 20 - elapsed);
+                if (remaining > 0) {
+                    countdownEl.textContent = 'QR refreshes in ' + remaining + 's';
+                } else {
+                    countdownEl.textContent = 'Waiting for new QR...';
+                }
+            }, 1000);
+        }
 
-            const tbody = document.getElementById('containers-body');
+        function updateContainers(data) {
+            const body = document.getElementById('containers-body');
+            const count = document.getElementById('container-count');
+            count.textContent = (data.total || 0) + ' running';
+
             if (!data.containers || data.containers.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No containers running</td></tr>';
+                body.innerHTML = '<tr><td colspan="7" class="empty-state">No containers running</td></tr>';
                 return;
             }
-
-            tbody.innerHTML = data.containers.map(c => \`
+            body.innerHTML = data.containers.map(c => \`
                 <tr>
-                    <td>\${c.userId.slice(0, 12)}...</td>
-                    <td style="font-family:monospace;font-size:0.75rem;">\${c.containerId.slice(0, 12)}</td>
+                    <td>\${esc(c.userHash || c.userId || '—')}</td>
+                    <td><code>\${esc((c.containerId || '').slice(0, 12))}</code></td>
                     <td><span class="badge badge-\${c.status === 'running' ? 'healthy' : 'unhealthy'}">\${c.status}</span></td>
-                    <td>\${formatDuration(c.uptime)}</td>
-                    <td>\${c.memoryUsageMb.toFixed(1)} MB</td>
-                    <td>\${c.cpuPercent.toFixed(1)}%</td>
-                    <td>\${new Date(c.lastActivity).toLocaleTimeString()}</td>
+                    <td>\${formatUptime(c.uptime)}</td>
+                    <td>\${c.memoryUsageMb ? c.memoryUsageMb.toFixed(1) + ' MB' : '—'}</td>
+                    <td>\${c.cpuPercent != null ? c.cpuPercent.toFixed(1) + '%' : '—'}</td>
+                    <td>\${c.lastActivity ? timeAgo(c.lastActivity) : '—'}</td>
                 </tr>
             \`).join('');
         }
 
         function updateStats(data) {
-            document.getElementById('stat-rpm').textContent = data.globalMessagesPerMinute;
-            document.getElementById('stat-rph').textContent = data.globalMessagesPerHour;
-            document.getElementById('stat-users').textContent = data.activeUsers;
-            document.getElementById('stat-hits').textContent = data.rateLimitHits24h;
+            document.getElementById('stat-rpm').textContent = data.globalMessagesPerMinute || 0;
+            document.getElementById('stat-rph').textContent = data.globalMessagesPerHour || 0;
+            document.getElementById('stat-users').textContent = data.activeUsers || 0;
+            document.getElementById('stat-hits').textContent = data.rateLimitHits24h || 0;
         }
 
-        // ── Actions ──
-        function getHeaders() {
-            const h = { 'Content-Type': 'application/json' };
-            if (token) h['Authorization'] = 'Bearer ' + token;
-            return h;
-        }
-
-        async function doAction(action) {
+        // ── WhatsApp Actions ──
+        async function reconnectWhatsApp() {
             try {
-                let url, method = 'POST';
-                switch (action) {
-                    case 'reconnect':
-                        url = '/admin/api/whatsapp/reconnect';
-                        break;
-                    case 'disconnect':
-                        url = '/admin/api/whatsapp/disconnect';
-                        break;
-                    case 'clear-limits':
-                        url = '/admin/api/actions/clear-rate-limits';
-                        break;
-                    case 'refresh':
-                        loadInitialData();
-                        showToast('Data refreshed', 'success');
-                        return;
-                    default:
-                        return;
-                }
-
-                const res = await fetch(url, { method, headers: getHeaders() });
+                const res = await fetch('/admin/api/whatsapp/reconnect', { method: 'POST' });
                 const data = await res.json();
-
-                if (data.success !== false) {
-                    showToast(data.message || 'Action completed', 'success');
-                } else {
-                    showToast(data.message || 'Action failed', 'error');
-                }
-            } catch (err) {
-                showToast('Request failed: ' + err.message, 'error');
+                showToast(data.message || 'Reconnecting...', data.success ? 'success' : 'error');
+            } catch (e) {
+                showToast('Failed to reconnect', 'error');
             }
         }
 
-        async function disconnectWhatsApp() { await doAction('disconnect'); }
-        async function reconnectWhatsApp() { await doAction('reconnect'); }
-
-        // ── Initial Data Load ──
-        async function loadInitialData() {
+        async function disconnectWhatsApp() {
             try {
-                const headers = getHeaders();
-                const [health, wa, containers, stats] = await Promise.all([
-                    fetch('/admin/api/health', { headers }).then(r => r.json()),
-                    fetch('/admin/api/whatsapp/status', { headers }).then(r => r.json()),
-                    fetch('/admin/api/containers', { headers }).then(r => r.json()),
-                    fetch('/admin/api/stats', { headers }).then(r => r.json()),
-                ]);
-
-                updateHealth(health);
-                updateWhatsApp(wa);
-                updateContainers(containers);
-                updateStats(stats);
-            } catch (err) {
-                console.error('Failed to load initial data:', err);
+                const res = await fetch('/admin/api/whatsapp/disconnect', { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message || 'Disconnected', data.success ? 'success' : 'error');
+            } catch (e) {
+                showToast('Failed to disconnect', 'error');
             }
+        }
+
+        // ── Quick Actions ──
+        async function doAction(action) {
+            if (action === 'reconnect') return reconnectWhatsApp();
+            if (action === 'disconnect') return disconnectWhatsApp();
+            if (action === 'refresh') {
+                showToast('Refreshing...', 'success');
+                return;
+            }
+            if (action === 'clear-limits') {
+                try {
+                    const res = await fetch('/admin/api/actions/clear-rate-limits', { method: 'POST' });
+                    const data = await res.json();
+                    showToast(data.message || 'Done', 'success');
+                } catch (e) {
+                    showToast('Failed', 'error');
+                }
+            }
+        }
+
+        // ── File Upload ──
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadList = document.getElementById('upload-list');
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                handleFiles(fileInput.files);
+            }
+        });
+
+        function handleFiles(files) {
+            for (const file of files) {
+                uploadFile(file);
+            }
+            fileInput.value = '';
+        }
+
+        async function uploadFile(file) {
+            const id = Math.random().toString(36).slice(2, 10);
+            const item = document.createElement('div');
+            item.className = 'upload-item';
+            item.id = 'upload-' + id;
+            item.innerHTML = \`
+                <span class="upload-item-name">\${esc(file.name)}</span>
+                <span class="upload-item-status uploading">Uploading...</span>
+                <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%"></div></div>
+            \`;
+            uploadList.prepend(item);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/admin/api/upload');
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        const fill = item.querySelector('.progress-bar-fill');
+                        if (fill) fill.style.width = pct + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    const statusEl = item.querySelector('.upload-item-status');
+                    const progressBar = item.querySelector('.progress-bar');
+                    if (xhr.status === 200) {
+                        statusEl.textContent = 'Processing';
+                        statusEl.className = 'upload-item-status processing';
+                        if (progressBar) progressBar.remove();
+                        // Poll for completion
+                        pollUploadStatus(id, item);
+                    } else {
+                        statusEl.textContent = 'Failed';
+                        statusEl.className = 'upload-item-status failed';
+                        if (progressBar) progressBar.remove();
+                    }
+                };
+
+                xhr.onerror = () => {
+                    const statusEl = item.querySelector('.upload-item-status');
+                    statusEl.textContent = 'Failed';
+                    statusEl.className = 'upload-item-status failed';
+                    const progressBar = item.querySelector('.progress-bar');
+                    if (progressBar) progressBar.remove();
+                };
+
+                xhr.send(formData);
+            } catch (e) {
+                const statusEl = item.querySelector('.upload-item-status');
+                statusEl.textContent = 'Failed';
+                statusEl.className = 'upload-item-status failed';
+            }
+
+            updateUploadCount();
+        }
+
+        function pollUploadStatus(id, item) {
+            let attempts = 0;
+            const interval = setInterval(async () => {
+                attempts++;
+                if (attempts > 30) {
+                    clearInterval(interval);
+                    return;
+                }
+                try {
+                    const res = await fetch('/admin/api/uploads');
+                    const data = await res.json();
+                    const upload = data.uploads && data.uploads.find(u => u.status === 'completed' || u.status === 'failed');
+                    if (upload) {
+                        const statusEl = item.querySelector('.upload-item-status');
+                        if (upload.status === 'completed') {
+                            statusEl.textContent = 'Indexed';
+                            statusEl.className = 'upload-item-status completed';
+                        } else if (upload.status === 'failed') {
+                            statusEl.textContent = 'Failed';
+                            statusEl.className = 'upload-item-status failed';
+                        }
+                        clearInterval(interval);
+                    }
+                } catch { /* ignore */ }
+            }, 2000);
+        }
+
+        function updateUploadCount() {
+            const items = uploadList.querySelectorAll('.upload-item');
+            document.getElementById('upload-count').textContent = items.length > 0 ? items.length + ' file(s)' : '';
         }
 
         // ── Utilities ──
-        function formatDuration(seconds) {
+        function formatUptime(seconds) {
+            if (!seconds || seconds < 0) return '—';
             if (seconds < 60) return seconds + 's';
-            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
-            const h = Math.floor(seconds / 3600);
-            const m = Math.floor((seconds % 3600) / 60);
-            return h + 'h ' + m + 'm';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+            return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
+        }
+
+        function timeAgo(isoStr) {
+            const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+            if (diff < 60) return diff + 's ago';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
         function showToast(message, type) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.className = 'toast show ' + type;
+            toast.className = 'toast show ' + (type || '');
             setTimeout(() => { toast.className = 'toast'; }, 3000);
         }
 
         // ── Init ──
-        loadInitialData();
         connectSSE();
+
+        // Load recent uploads on page load
+        fetch('/admin/api/uploads').then(r => r.json()).then(data => {
+            if (data.uploads && data.uploads.length > 0) {
+                for (const u of data.uploads.slice(0, 10)) {
+                    const item = document.createElement('div');
+                    item.className = 'upload-item';
+                    item.innerHTML = \`
+                        <span class="upload-item-name">\${esc(u.filename)}</span>
+                        <span class="upload-item-status \${u.status}">\${u.status === 'completed' ? 'Indexed' : u.status}</span>
+                    \`;
+                    uploadList.appendChild(item);
+                }
+                updateUploadCount();
+            }
+        }).catch(() => {});
     </script>
 </body>
 </html>`;

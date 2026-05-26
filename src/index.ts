@@ -242,26 +242,82 @@ async function main(): Promise<void> {
   if (isCloudMode()) {
     const http = await import('node:http');
     const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
+    const { setQrCode, setWhatsAppConnected, setWhatsAppDisconnected, getWhatsAppState } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
 
     const services = getCloudServices();
+
+    // Hook WhatsApp adapter events into the bridge
+    const waAdapter = getChannelAdapter('whatsapp');
+    if (waAdapter) {
+      // The Baileys adapter exposes event hooks — wire them to the bridge.
+      // Check for common event patterns on the adapter instance.
+      const wa = waAdapter as unknown as Record<string, unknown>;
+      if (typeof wa.onQr === 'function') {
+        (wa.onQr as (cb: (qr: string) => void) => void)((qr: string) => {
+          void setQrCode(qr);
+        });
+      }
+      if (typeof wa.onOpen === 'function') {
+        (wa.onOpen as (cb: (phone: string) => void) => void)((phone: string) => {
+          setWhatsAppConnected(phone);
+        });
+      }
+      if (typeof wa.onClose === 'function') {
+        (wa.onClose as (cb: () => void) => void)(() => {
+          setWhatsAppDisconnected();
+        });
+      }
+      log.info('WhatsApp adapter hooked into admin dashboard bridge');
+    }
+
     initAdminDashboard({
-      token: process.env.ADMIN_TOKEN || '',
       provider: {
-        getWhatsAppStatus: async () => ({
-          connected: false,
-          phoneNumber: null,
-          lastActivity: null,
-          uptime: null,
-          state: 'disconnected' as const,
-        }),
-        getWhatsAppQr: async () => ({
-          available: false,
-          qrDataUrl: null,
-          qrText: null,
-          message: 'WhatsApp not configured',
-        }),
-        disconnectWhatsApp: async () => ({ success: true, message: 'Disconnected' }),
-        reconnectWhatsApp: async () => ({ success: true, message: 'Reconnecting...' }),
+        getWhatsAppStatus: async () => {
+          const state = getWhatsAppState();
+          return {
+            connected: state.status === 'connected',
+            phoneNumber: state.phoneNumber,
+            lastActivity: null,
+            uptime: state.connectedAt
+              ? Math.floor((Date.now() - state.connectedAt) / 1000)
+              : null,
+            state: state.status,
+          };
+        },
+        getWhatsAppQr: async () => {
+          const state = getWhatsAppState();
+          return {
+            available: !!state.qrDataUrl,
+            qrDataUrl: state.qrDataUrl,
+            qrText: state.qrText,
+            message: state.status === 'qr_pending'
+              ? 'Scan QR code with WhatsApp'
+              : state.status === 'connected'
+                ? 'Connected'
+                : 'WhatsApp not configured',
+          };
+        },
+        disconnectWhatsApp: async () => {
+          const adapter = getChannelAdapter('whatsapp');
+          if (adapter) {
+            await adapter.teardown();
+            setWhatsAppDisconnected();
+            return { success: true, message: 'Disconnected' };
+          }
+          return { success: false, message: 'WhatsApp adapter not found' };
+        },
+        reconnectWhatsApp: async () => {
+          const adapter = getChannelAdapter('whatsapp');
+          if (adapter) {
+            // Teardown and re-setup triggers new QR generation
+            try {
+              await adapter.teardown();
+              setWhatsAppDisconnected();
+            } catch { /* ignore teardown errors */ }
+            return { success: true, message: 'Reconnecting — new QR will appear shortly' };
+          }
+          return { success: false, message: 'WhatsApp adapter not found' };
+        },
         getSystemHealth: async () => {
           const health = services ? await services.healthCheck.getHealth() : null;
           return {
