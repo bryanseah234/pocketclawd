@@ -229,7 +229,7 @@ export async function handleAdminRequest(
         }
 
         // GET /admin/sse — Server-Sent Events stream
-        if (path.startsWith('/admin/sse')) && method === 'GET') {
+        if (path.startsWith('/admin/sse') && method === 'GET') {
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
