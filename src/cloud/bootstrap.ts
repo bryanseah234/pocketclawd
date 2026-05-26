@@ -227,6 +227,15 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         log.error('Cloud bootstrap: upload worker failed (non-critical)', { err });
     }
 
+    // Start the DataGateway worker (executes persistence ops on behalf of sub-agents)
+    try {
+        const { startDataGatewayWorker } = await import('./data-gateway-worker/index.js');
+        startDataGatewayWorker(_services);
+        log.info('Cloud bootstrap: DataGateway worker started');
+    } catch (err) {
+        log.error('Cloud bootstrap: DataGateway worker failed (non-critical)', { err });
+    }
+
     return _services;
 }
 
@@ -305,6 +314,12 @@ export async function shutdownCloudServices(): Promise<void> {
         const { stopUploadWorker } = await import('./upload-worker/index.js');
         stopUploadWorker();
     } catch { /* upload worker may not have been started */ }
+
+    // Stop DataGateway worker
+    try {
+        const { stopDataGatewayWorker } = await import('./data-gateway-worker/index.js');
+        stopDataGatewayWorker();
+    } catch { /* worker may not have been started */ }
 
     _services.scheduler.stop();
     _services.healthCheck.stop();
