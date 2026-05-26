@@ -51,16 +51,22 @@ function isAuthenticated(req: http.IncomingMessage): boolean {
     const token = getToken();
     if (!token) return true; // No token configured = open (dev mode)
 
+    // Check Authorization header
     const authHeader = req.headers.authorization;
-    if (!authHeader) return false;
-
-    // Support "Bearer <token>" format
-    const parts = authHeader.split(' ');
-    if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
-        return parts[1] === token;
+    if (authHeader) {
+        const parts = authHeader.split(' ');
+        if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+            if (parts[1] === token) return true;
+        }
+        if (authHeader === token) return true;
     }
 
-    return authHeader === token;
+    // Check query parameter (?token=...)
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    const queryToken = url.searchParams.get('token');
+    if (queryToken === token) return true;
+
+    return false;
 }
 
 function sendUnauthorized(res: http.ServerResponse): void {
