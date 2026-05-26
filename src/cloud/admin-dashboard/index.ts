@@ -608,24 +608,23 @@ async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise
             Metadata: { uploadId, originalFilename: file.filename },
         }));
 
-        // Enqueue processing message to Redis
+        // Enqueue processing message via cloud services Redis (already connected)
         try {
-            const ioredis = await import('ioredis');
-            const RedisClient = ioredis.Redis ?? (ioredis as unknown as { default: typeof ioredis.Redis }).default;
-            const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-            const redis = new RedisClient(redisUrl);
-
-            await redis.lpush('nanoclaw:uploads:pending', JSON.stringify({
-                uploadId,
-                filename: file.filename,
-                contentType: file.contentType,
-                s3Key: key,
-                bucket,
-                userId: 'admin', // Admin dashboard uploads default to admin user
-                timestamp: new Date().toISOString(),
-            }));
-
-            await redis.quit();
+            const { getCloudServices } = await import('../bootstrap.js');
+            const services = getCloudServices();
+            if (services) {
+                await services.redis.lpush('nanoclaw:uploads:pending', JSON.stringify({
+                    uploadId,
+                    filename: file.filename,
+                    contentType: file.contentType,
+                    s3Key: key,
+                    bucket,
+                    userId: 'admin', // Admin dashboard uploads default to admin user
+                    timestamp: new Date().toISOString(),
+                }));
+            } else {
+                log.warn('Cloud services not available for upload enqueue', { uploadId });
+            }
         } catch (redisErr) {
             log.error('Redis enqueue failed (upload still in S3)', { uploadId, err: redisErr });
         }
