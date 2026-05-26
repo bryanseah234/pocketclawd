@@ -36,8 +36,8 @@ COPY src/ ./src/
 # Compile TypeScript to dist/
 RUN pnpm run build
 
-# Prune dev dependencies — keep only production deps for the final image
-RUN pnpm prune --prod
+# Install production-only dependencies for the final image
+RUN pnpm install --prod --ignore-scripts --frozen-lockfile
 
 # ==============================================================================
 # Stage 3: Production image
