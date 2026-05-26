@@ -40,12 +40,12 @@ RUN pnpm run build
 RUN pnpm install --prod --ignore-scripts --frozen-lockfile
 
 # ==============================================================================
-# Stage 3: Production image
+# Stage 3: Production image — use slim (glibc) so mounted Docker binary works
 # ==============================================================================
-FROM public.ecr.aws/docker/library/node:20-alpine AS production
+FROM public.ecr.aws/docker/library/node:20-slim AS production
 
-# Install curl for health check
-RUN apk add --no-cache curl tini
+# Install curl for health check and tini for signal handling
+RUN apt-get update && apt-get install -y --no-install-recommends curl tini && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -61,8 +61,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 
 # Create non-root user, data directory, and switch to it
-RUN addgroup -g 1001 -S nanoclaw && \
-    adduser -u 1001 -S nanoclaw -G nanoclaw && \
+RUN groupadd -g 1001 nanoclaw && \
+    useradd -u 1001 -g nanoclaw -s /bin/sh -M nanoclaw && \
     mkdir -p /app/data && \
     chown -R nanoclaw:nanoclaw /app
 
@@ -75,5 +75,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
 # tini as PID 1 for proper signal handling
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/index.js"]
