@@ -1,0 +1,26 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NanoClaw AWS Infrastructure — Example Variables
+# Copy to terraform.tfvars and fill in your values
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Required: Create a key pair in AWS Console → EC2 → Key Pairs
+key_pair_name = "nanoclaw-key"
+
+# Restrict SSH to your IP (find yours: curl ifconfig.me)
+admin_ssh_cidrs = ["YOUR_IP/32"]
+
+# Optional: restrict admin UI access
+admin_https_cidrs = ["0.0.0.0/0"]
+
+# Start small — scale up by changing this one value
+# t3.xlarge  = 4 vCPU, 16 GB RAM  (~$120/mo) — good for 5-20 users
+# r6i.xlarge = 4 vCPU, 32 GB RAM  (~$200/mo) — good for 20-50 users
+# r6i.4xlarge = 16 vCPU, 128 GB RAM (~$800/mo) — good for 50-100 users
+instance_type = "t3.xlarge"
+
+# Redis — start with t3.micro, scale to r6g.large for production
+redis_node_type = "cache.t3.micro"
+
+# Environment
+environment = "production"
+aws_region  = "ap-southeast-1"

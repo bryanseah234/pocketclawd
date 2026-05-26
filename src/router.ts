@@ -5,6 +5,10 @@
  * resolve/pick agent → access gate → resolve/create session → write
  * messages_in → wake container.
  *
+ * Cloud mode (NANOCLAW_ENV=cloud): after the access gate, messages are
+ * rate-limited and enqueued to Redis for sub-agent pickup instead of
+ * writing to SQLite session DBs.
+ *
  * Two module hooks (registered by the permissions module):
  *   - `setSenderResolver` runs BEFORE agent resolution so user rows get
  *     upserted even if the message ends up dropped by agent wiring.
@@ -18,6 +22,7 @@
  * for policy refusals.
  */
 import { getChannelAdapter } from './channels/channel-registry.js';
+import { isCloudMode, getCloudServices } from './cloud/bootstrap.js';
 import { gateCommand } from './command-gate.js';
 import { getAgentGroup } from './db/agent-groups.js';
 import { recordDroppedMessage } from './db/dropped-messages.js';
@@ -251,6 +256,42 @@ export async function routeInbound(event: InboundEvent): Promise<void> {
   //    Without the module, userId is null — downstream tolerates it.
   const userId: string | null = senderResolver ? senderResolver(event) : null;
 
+  // Parse message content early — needed for rate limit drops and fan-out.
+  const parsed = safeParseContent(event.message.content);
+
+  // 2b. Cloud mode: rate limit check before processing.
+  // Rejects messages that exceed per-user (20/min) or global (200/hr) limits.
+  if (isCloudMode() && userId) {
+    const services = getCloudServices();
+    if (services) {
+      try {
+        const rateLimitResult = await services.rateLimiter.checkLimit(userId);
+        if (!rateLimitResult.allowed) {
+          log.info('Message rate-limited', {
+            userId,
+            reason: rateLimitResult.reason,
+            retryAfterMs: rateLimitResult.retryAfterMs,
+          });
+          recordDroppedMessage({
+            channel_type: event.channelType,
+            platform_id: event.platformId,
+            user_id: userId,
+            sender_name: parsed.sender ?? null,
+            reason: 'rate_limited',
+            messaging_group_id: mg.id,
+            agent_group_id: null,
+          });
+          return;
+        }
+        // Record the message for rate limiting tracking
+        await services.rateLimiter.recordMessage(userId);
+      } catch (err) {
+        // Rate limiter failure is non-critical — allow the message through
+        log.warn('Rate limiter check failed, allowing message', { userId, err });
+      }
+    }
+  }
+
   // 3. Fetch wired agents in full (we already know the count is > 0; now
   //    we need their actual rows for fan-out).
   const agents = getMessagingGroupAgents(mg.id);
@@ -267,7 +308,6 @@ export async function routeInbound(event: InboundEvent): Promise<void> {
   //    wiring triggers adapter.subscribe(...); subsequent wirings don't
   //    re-subscribe (chat.subscribe is idempotent anyway, but the flag
   //    avoids the extra await).
-  const parsed = safeParseContent(event.message.content);
   const messageText = parsed.text ?? '';
 
   let engagedCount = 0;
@@ -454,6 +494,56 @@ async function deliverToAgent(
     }
   }
 
+  // Cloud mode: enqueue to Redis for sub-agent pickup.
+  // Local mode: write to SQLite session DB and wake container.
+  if (isCloudMode() && wake && userId) {
+    const services = getCloudServices();
+    if (services) {
+      try {
+        // Check backpressure before enqueuing
+        const backpressured = await services.messageQueue.isBackpressured(userId);
+        if (backpressured) {
+          log.warn('Queue backpressured for user, message will be delayed', { userId, sessionId: session.id });
+        }
+
+        const messageId = messageIdForAgent(event.message.id, agent.agent_group_id);
+        await services.messageQueue.enqueueForAgent(userId, {
+          id: messageId,
+          userId,
+          type: event.message.kind,
+          payload: {
+            sessionId: session.id,
+            agentGroupId: agent.agent_group_id,
+            kind: event.message.kind,
+            content: event.message.content,
+            timestamp: event.message.timestamp,
+            channelType: deliveryAddr.channelType,
+            platformId: deliveryAddr.platformId,
+            threadId: deliveryAddr.threadId,
+          },
+          timestamp: event.message.timestamp,
+        });
+
+        log.info('Message enqueued to Redis', {
+          sessionId: session.id,
+          agentGroup: agent.agent_group_id,
+          engage_mode: agent.engage_mode,
+          kind: event.message.kind,
+          userId,
+          agentGroupName: agentGroup.name,
+        });
+
+        // Start typing indicator for cloud mode too
+        startTypingRefresh(session.id, session.agent_group_id, event.channelType, event.platformId, event.threadId);
+        return;
+      } catch (err) {
+        // Redis enqueue failed — fall through to local mode as graceful degradation
+        log.error('Redis enqueue failed, falling back to local mode', { userId, err });
+      }
+    }
+  }
+
+  // Local mode (or cloud fallback): write to SQLite session DB
   writeSessionMessage(session.agent_group_id, session.id, {
     id: messageIdForAgent(event.message.id, agent.agent_group_id),
     kind: event.message.kind,

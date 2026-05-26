@@ -3,6 +3,10 @@
  *
  * Thin orchestrator: init DB, run migrations, start channel adapters,
  * start delivery polls, start sweep, handle shutdown.
+ *
+ * Cloud mode (NANOCLAW_ENV=cloud): initializes AWS services (Secrets Manager,
+ * Data Gateway, Redis queue, rate limiter, CloudWatch logger) and uses Redis
+ * for message passing instead of SQLite session DBs.
  */
 import path from 'path';
 
@@ -10,6 +14,14 @@ import { backfillContainerConfigs } from './backfill-container-configs.js';
 import { DATA_DIR } from './config.js';
 import { enforceStartupBackoff, resetCircuitBreaker } from './circuit-breaker.js';
 import { migrateGroupsToClaudeLocal } from './claude-md-compose.js';
+import {
+  isCloudMode,
+  bootstrapCloudServices,
+  shutdownCloudServices,
+  startResponsePoll,
+  stopResponsePoll,
+  getCloudServices,
+} from './cloud/bootstrap.js';
 import { initDb } from './db/connection.js';
 import { runMigrations } from './db/migrations/index.js';
 import { ensureContainerRuntimeRunning, cleanupOrphans } from './container-runtime.js';
@@ -68,10 +80,22 @@ import type { ChannelAdapter, ChannelSetup } from './channels/adapter.js';
 import { initChannelAdapters, teardownChannelAdapters, getChannelAdapter } from './channels/channel-registry.js';
 
 async function main(): Promise<void> {
-  log.info('NanoClaw starting');
+  log.info('NanoClaw starting', { cloudMode: isCloudMode() });
 
   // 0. Circuit breaker — backoff on rapid restarts
   await enforceStartupBackoff();
+
+  // 0b. Cloud mode: initialize AWS services before anything else.
+  // Secrets Manager → Data Gateway → Redis queue → rate limiter → CloudWatch logger
+  if (isCloudMode()) {
+    try {
+      await bootstrapCloudServices();
+      log.info('Cloud services initialized');
+    } catch (err) {
+      log.fatal('Cloud bootstrap failed', { err });
+      process.exit(1);
+    }
+  }
 
   // 1. Init central DB
   const dbPath = path.join(DATA_DIR, 'v2.db');
@@ -174,6 +198,39 @@ async function main(): Promise<void> {
   startSweepDeliveryPoll();
   log.info('Delivery polls started');
 
+  // 5b. Cloud mode: start Redis response poll for sub-agent → orchestrator flow.
+  // This replaces the SQLite outbound.db polling for cloud-managed containers.
+  if (isCloudMode()) {
+    const services = getCloudServices();
+    if (services) {
+      startResponsePoll(async (response) => {
+        // Sub-agent response arrived via Redis — deliver through the channel adapter.
+        const payload = response.payload;
+        const channelType = payload.channelType as string | undefined;
+        const platformId = payload.platformId as string | undefined;
+        const threadId = (payload.threadId as string | null) ?? null;
+        const kind = (payload.kind as string) ?? 'chat';
+        const content = (payload.content as string) ?? JSON.stringify(payload);
+
+        if (!channelType || !platformId) {
+          log.warn('Cloud response missing routing fields', { responseId: response.id, userId: response.userId });
+          return;
+        }
+
+        if (deliveryAdapter) {
+          await deliveryAdapter.deliver(channelType, platformId, threadId, kind, content);
+          log.info('Cloud response delivered', {
+            responseId: response.id,
+            userId: response.userId,
+            channelType,
+            platformId,
+          });
+        }
+      });
+      log.info('Cloud response poll started');
+    }
+  }
+
   // 6. Start host sweep
   startHostSweep();
   log.info('Host sweep started');
@@ -195,8 +252,15 @@ async function shutdown(signal: string): Promise<void> {
     }
   }
   stopDeliveryPolls();
+  stopResponsePoll();
   stopHostSweep();
   await stopCliServer();
+
+  // Shutdown cloud services (Redis, scheduler, health checks, etc.)
+  if (isCloudMode()) {
+    await shutdownCloudServices();
+  }
+
   try {
     await teardownChannelAdapters();
   } finally {

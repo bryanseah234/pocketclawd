@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+# NanoClaw Orchestrator — production multi-stage build
+# Image: nanoclaw/orchestrator (pushed to ECR with git-hash + latest tags)
+
+# ==============================================================================
+# Stage 1: Install dependencies
+# ==============================================================================
+FROM node:20-alpine AS deps
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# Copy dependency manifests first for layer caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+
+# Install all dependencies (dev included — needed for TypeScript build)
+RUN pnpm install --frozen-lockfile
+
+# ==============================================================================
+# Stage 2: Build TypeScript
+# ==============================================================================
+FROM node:20-alpine AS build
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# Copy deps from previous stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy source and config needed for compilation
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json ./
+COPY src/ ./src/
+
+# Compile TypeScript to dist/
+RUN pnpm run build
+
+# Prune dev dependencies — keep only production deps for the final image
+RUN pnpm prune --prod
+
+# ==============================================================================
+# Stage 3: Production image
+# ==============================================================================
+FROM node:20-alpine AS production
+
+# Install curl for health check
+RUN apk add --no-cache curl tini
+
+WORKDIR /app
+
+# Labels for ECR tagging and image metadata
+LABEL org.opencontainers.image.title="nanoclaw-orchestrator" \
+      org.opencontainers.image.description="NanoClaw WhatsApp AI Assistant — Orchestrator" \
+      org.opencontainers.image.vendor="NanoClaw" \
+      org.opencontainers.image.source="https://github.com/pocketclaw/pocketclaw"
+
+# Copy compiled output and production dependencies
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./
+
+# Create non-root user and switch to it
+RUN addgroup -g 1000 -S nanoclaw && \
+    adduser -u 1000 -S nanoclaw -G nanoclaw
+
+USER nanoclaw
+
+EXPOSE 3000
+
+# Health check — verifies the /health endpoint responds
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# tini as PID 1 for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/index.js"]

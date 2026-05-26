@@ -36,3 +36,37 @@ jobs:
 
       - name: Test
         run: pnpm run test
+
+  terraform-validate:
+    name: Terraform · Validate · Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.5"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan (syntax check)
+        run: terraform plan -input=false -no-color
+        env:
+          AWS_DEFAULT_REGION: ap-southeast-1
+        continue-on-error: true
+
+      - name: Run tfsec security scan
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: false
