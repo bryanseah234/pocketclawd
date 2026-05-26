@@ -103,6 +103,80 @@ async function main(): Promise<void> {
   runMigrations(db);
   log.info('Central DB ready', { path: dbPath });
 
+  // 1c. Start HTTP server early (before channel adapters which may block)
+  if (isCloudMode()) {
+    const http = await import('node:http');
+    const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
+    const { getWhatsAppState, setWhatsAppConnected, setWhatsAppDisconnected, setQrCode } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
+
+    const services = getCloudServices();
+
+    // Store bridge functions globally so we can wire them after channel adapters init
+    (globalThis as any).__nanoclaw_wa_bridge = { setQrCode, setWhatsAppConnected, setWhatsAppDisconnected, getWhatsAppState };
+
+    initAdminDashboard({
+      provider: {
+        getWhatsAppStatus: async () => {
+          const state = getWhatsAppState();
+          return {
+            connected: state.status === 'connected',
+            phoneNumber: state.phoneNumber,
+            lastActivity: null,
+            uptime: state.connectedAt ? Math.floor((Date.now() - state.connectedAt) / 1000) : null,
+            state: state.status,
+          };
+        },
+        getWhatsAppQr: async () => {
+          const state = getWhatsAppState();
+          return {
+            available: !!state.qrDataUrl,
+            qrDataUrl: state.qrDataUrl,
+            qrText: state.qrText,
+            message: state.status === 'qr_pending' ? 'Scan QR code' : state.status === 'connected' ? 'Connected' : 'Not connected',
+          };
+        },
+        disconnectWhatsApp: async () => {
+          const adapter = getChannelAdapter('whatsapp');
+          if (adapter) { await adapter.teardown(); setWhatsAppDisconnected(); return { success: true, message: 'Disconnected' }; }
+          return { success: false, message: 'WhatsApp adapter not found' };
+        },
+        reconnectWhatsApp: async () => {
+          const adapter = getChannelAdapter('whatsapp');
+          if (adapter) { try { await adapter.teardown(); setWhatsAppDisconnected(); } catch { } return { success: true, message: 'Reconnecting...' }; }
+          return { success: false, message: 'WhatsApp adapter not found' };
+        },
+        getSystemHealth: async () => {
+          const health = services ? await services.healthCheck.getHealth() : null;
+          return {
+            overallStatus: (health?.status ?? 'unknown') as any,
+            uptime: health?.uptime ?? 0,
+            timestamp: new Date().toISOString(),
+            services: health ? Object.entries(health.components).map(([name, c]) => ({ name, status: c.status, latencyMs: c.latencyMs, lastChecked: c.lastChecked ?? new Date().toISOString() })) : [],
+          };
+        },
+        getContainers: async () => ({ total: 0, containers: [] }),
+        getRecentMessages: async () => ({ messages: [], totalProcessed24h: 0 }),
+        getStats: async () => ({ globalMessagesPerMinute: 0, globalMessagesPerHour: 0, activeUsers: 0, topUsers: [], rateLimitHits24h: 0 }),
+      },
+    });
+
+    const server = http.createServer(async (req, res) => {
+      if (req.url === '/health' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+        return;
+      }
+      const handled = await handleAdminRequest(req, res);
+      if (handled) return;
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    server.listen(3000, '0.0.0.0', () => {
+      log.info('HTTP server listening', { port: 3000, admin: '/admin' });
+    });
+  }
+
   // 1b. Backfill container_configs from legacy container.json files.
   // Idempotent — skips groups that already have a config row.
   backfillContainerConfigs();
@@ -238,132 +312,23 @@ async function main(): Promise<void> {
   // 7. Start the `ncl` CLI socket server (data/ncl.sock).
   await startCliServer();
 
-  // 8. Start HTTP server for admin dashboard and health endpoint
+  // 8. Wire WhatsApp adapter events into the admin dashboard bridge
   if (isCloudMode()) {
-    const http = await import('node:http');
-    const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
-    const { setQrCode, setWhatsAppConnected, setWhatsAppDisconnected, getWhatsAppState } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
-
-    const services = getCloudServices();
-
-    // Hook WhatsApp adapter events into the bridge
+    const bridge = (globalThis as any).__nanoclaw_wa_bridge;
     const waAdapter = getChannelAdapter('whatsapp');
-    if (waAdapter) {
-      // The Baileys adapter exposes event hooks — wire them to the bridge.
-      // Check for common event patterns on the adapter instance.
+    if (waAdapter && bridge) {
       const wa = waAdapter as unknown as Record<string, unknown>;
       if (typeof wa.onQr === 'function') {
-        (wa.onQr as (cb: (qr: string) => void) => void)((qr: string) => {
-          void setQrCode(qr);
-        });
+        (wa.onQr as (cb: (qr: string) => void) => void)((qr: string) => { void bridge.setQrCode(qr); });
       }
       if (typeof wa.onOpen === 'function') {
-        (wa.onOpen as (cb: (phone: string) => void) => void)((phone: string) => {
-          setWhatsAppConnected(phone);
-        });
+        (wa.onOpen as (cb: (phone: string) => void) => void)((phone: string) => { bridge.setWhatsAppConnected(phone); });
       }
       if (typeof wa.onClose === 'function') {
-        (wa.onClose as (cb: () => void) => void)(() => {
-          setWhatsAppDisconnected();
-        });
+        (wa.onClose as (cb: () => void) => void)(() => { bridge.setWhatsAppDisconnected(); });
       }
       log.info('WhatsApp adapter hooked into admin dashboard bridge');
     }
-
-    initAdminDashboard({
-      provider: {
-        getWhatsAppStatus: async () => {
-          const state = getWhatsAppState();
-          return {
-            connected: state.status === 'connected',
-            phoneNumber: state.phoneNumber,
-            lastActivity: null,
-            uptime: state.connectedAt
-              ? Math.floor((Date.now() - state.connectedAt) / 1000)
-              : null,
-            state: state.status,
-          };
-        },
-        getWhatsAppQr: async () => {
-          const state = getWhatsAppState();
-          return {
-            available: !!state.qrDataUrl,
-            qrDataUrl: state.qrDataUrl,
-            qrText: state.qrText,
-            message: state.status === 'qr_pending'
-              ? 'Scan QR code with WhatsApp'
-              : state.status === 'connected'
-                ? 'Connected'
-                : 'WhatsApp not configured',
-          };
-        },
-        disconnectWhatsApp: async () => {
-          const adapter = getChannelAdapter('whatsapp');
-          if (adapter) {
-            await adapter.teardown();
-            setWhatsAppDisconnected();
-            return { success: true, message: 'Disconnected' };
-          }
-          return { success: false, message: 'WhatsApp adapter not found' };
-        },
-        reconnectWhatsApp: async () => {
-          const adapter = getChannelAdapter('whatsapp');
-          if (adapter) {
-            // Teardown and re-setup triggers new QR generation
-            try {
-              await adapter.teardown();
-              setWhatsAppDisconnected();
-            } catch { /* ignore teardown errors */ }
-            return { success: true, message: 'Reconnecting — new QR will appear shortly' };
-          }
-          return { success: false, message: 'WhatsApp adapter not found' };
-        },
-        getSystemHealth: async () => {
-          const health = services ? await services.healthCheck.getHealth() : null;
-          return {
-            overallStatus: (health?.status ?? 'unknown') as 'healthy' | 'degraded' | 'unhealthy' | 'unknown',
-            uptime: health?.uptime ?? 0,
-            timestamp: new Date().toISOString(),
-            services: health ? Object.entries(health.components).map(([name, c]) => ({
-              name,
-              status: c.status,
-              latencyMs: c.latencyMs,
-              lastChecked: c.lastChecked ?? new Date().toISOString(),
-            })) : [],
-          };
-        },
-        getContainers: async () => ({ total: 0, containers: [] }),
-        getRecentMessages: async () => ({ messages: [], totalProcessed24h: 0 }),
-        getStats: async () => ({
-          globalMessagesPerMinute: 0,
-          globalMessagesPerHour: 0,
-          activeUsers: 0,
-          topUsers: [],
-          rateLimitHits24h: 0,
-        }),
-      },
-    });
-
-    const server = http.createServer(async (req, res) => {
-      // Health endpoint
-      if (req.url === '/health' && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
-        return;
-      }
-
-      // Admin dashboard
-      const handled = await handleAdminRequest(req, res);
-      if (handled) return;
-
-      // 404 for everything else
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
-    });
-
-    server.listen(3000, '0.0.0.0', () => {
-      log.info('HTTP server listening', { port: 3000, admin: '/admin' });
-    });
   }
 
   log.info('NanoClaw running');
