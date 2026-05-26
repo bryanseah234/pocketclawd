@@ -155,19 +155,111 @@ async def process_message(message: InboundMessage) -> AgentResponse:
     if msg_type == "document_upload":
         return await _handle_document_upload(message)
 
-    # Default: placeholder chat response (will be replaced with LLM + RAG)
-    response_content = (
-        f"Received your message. Processing is not yet implemented. "
-        f"(message_id={message.message_id})"
-    )
+    # Chat message — use RAG pipeline (embed → search → LLM)
+    return await _handle_chat_message(message)
 
-    return AgentResponse(
-        message_id=message.message_id,
-        user_id=message.user_id,
-        content=response_content,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        metadata={"source": "sub-agent", "processed": True},
-    )
+
+async def _handle_chat_message(message: InboundMessage) -> AgentResponse:
+    """
+    Handle a chat message using the RAG pipeline.
+
+    1. Fetch conversation history from DynamoDB (via orchestrator)
+    2. Run RAG pipeline (embed query → search → format context → LLM)
+    3. Store the response in DynamoDB (via orchestrator)
+    4. Return the response for delivery
+    """
+    from src.rag.pipeline import RAGPipeline
+
+    try:
+        # Initialize RAG pipeline
+        if state.redis is None:
+            raise RuntimeError("Redis not connected")
+
+        pipeline = RAGPipeline(
+            redis_client=state.redis,
+            user_id=message.user_id,
+            region=state.settings.aws_region,
+        )
+
+        # Fetch chat history from DynamoDB via orchestrator
+        chat_history = await _get_chat_history(message.user_id)
+
+        # Store user message in DynamoDB
+        await _store_chat_message(message.user_id, "user", message.content)
+
+        # Run RAG pipeline (searches documents + calls LLM)
+        response_text = await pipeline.query(
+            user_message=message.content,
+            chat_history=chat_history,
+        )
+
+        # Store assistant response in DynamoDB
+        await _store_chat_message(message.user_id, "assistant", response_text)
+
+        return AgentResponse(
+            message_id=message.message_id,
+            user_id=message.user_id,
+            content=response_text,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            metadata={"source": "sub-agent", "type": "chat", "processed": True},
+        )
+
+    except Exception as e:
+        logger.error(
+            "Chat processing failed for user_id=%s: %s",
+            message.user_id, str(e), exc_info=True,
+        )
+        return AgentResponse(
+            message_id=message.message_id,
+            user_id=message.user_id,
+            content="I'm having trouble processing your message right now. Please try again in a moment.",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            metadata={"source": "sub-agent", "type": "chat", "error": str(e)},
+        )
+
+
+async def _get_chat_history(user_id: str) -> list[dict[str, Any]]:
+    """Fetch last 30 messages from DynamoDB via orchestrator Redis queue."""
+    if state.redis is None:
+        return []
+
+    import secrets as sec
+    request_id = sec.token_hex(8)
+    request = {
+        "action": "get_chat_history",
+        "request_id": request_id,
+        "user_id": user_id,
+        "limit": 30,
+    }
+    await state.redis.lpush("queue:orchestrator:data_gateway", json.dumps(request))
+
+    response_key = f"queue:agent:{user_id}:dg_response:{request_id}"
+    result = await state.redis.brpop(response_key, timeout=5)
+
+    if result is None:
+        return []
+
+    _key, raw = result
+    response = json.loads(raw)
+    return response.get("messages", [])
+
+
+async def _store_chat_message(user_id: str, role: str, content: str) -> None:
+    """Store a chat message in DynamoDB via orchestrator Redis queue."""
+    if state.redis is None:
+        return
+
+    request = {
+        "action": "put_chat_message",
+        "user_id": user_id,
+        "message": {
+            "messageId": f"{role}-{datetime.now(timezone.utc).timestamp():.0f}",
+            "role": role,
+            "content": content,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    await state.redis.lpush("queue:orchestrator:data_gateway", json.dumps(request))
 
 
 async def _handle_document_upload(message: InboundMessage) -> AgentResponse:

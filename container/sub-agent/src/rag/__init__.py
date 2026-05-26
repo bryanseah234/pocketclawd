@@ -1,5 +1,5 @@
-"""RAG retrieval module — hybrid search with cross-encoder reranking."""
+"""RAG pipeline module."""
 
-from .retrieval import RAGResult, RAGRetrieval, RetrievedChunk
+from .pipeline import RAGPipeline
 
-__all__ = ["RAGRetrieval", "RAGResult", "RetrievedChunk"]
+__all__ = ["RAGPipeline"]

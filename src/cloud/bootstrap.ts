@@ -236,6 +236,22 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         log.error('Cloud bootstrap: DataGateway worker failed (non-critical)', { err });
     }
 
+    // Initialize container manager (per-user Docker containers)
+    try {
+        const { CloudContainerManager } = await import('./container-manager/index.js');
+        const containerManager = new CloudContainerManager({
+            region: 'ap-southeast-1',
+            ecrRegistryUri: config.ecr?.registryUrl ?? '',
+            agentImageRepo: 'nanoclaw/agent',
+            imageTag: 'latest',
+        });
+        await containerManager.initialize();
+        (globalThis as any).__nanoclaw_container_manager = containerManager;
+        log.info('Cloud bootstrap: container manager initialized');
+    } catch (err) {
+        log.error('Cloud bootstrap: container manager failed (non-critical)', { err });
+    }
+
     return _services;
 }
 

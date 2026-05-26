@@ -1,5 +1,5 @@
-"""LLM integration module — Bedrock client with circuit breaker and retry logic."""
+"""LLM client module."""
 
-from .bedrock_client import BedrockClient, TaskType
+from .client import BedrockLLMClient, format_rag_context, format_chat_history
 
-__all__ = ["BedrockClient", "TaskType"]
+__all__ = ["BedrockLLMClient", "format_rag_context", "format_chat_history"]
