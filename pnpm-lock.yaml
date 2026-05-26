@@ -11,9 +11,6 @@ importers:
       '@aws-sdk/client-cloudwatch':
         specifier: ^3.1053.0
         version: 3.1053.0
-      '@aws-sdk/client-cloudwatch-logs':
-        specifier: ^3.1053.0
-        version: 3.1053.0
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1053.0
         version: 3.1053.0
@@ -98,6 +95,9 @@ importers:
       mammoth:
         specifier: 1.11.0
         version: 1.11.0
+      node-cron:
+        specifier: ^3.0.3
+        version: 3.0.3
       pdf-parse:
         specifier: 1.1.1
         version: 1.1.1
@@ -202,10 +202,6 @@ packages:
 
   '@aws-crypto/util@5.2.0':
     resolution: {integrity: sha512-4RkU9EsI6ZpBve5fseQlGNUWKMa1RLPQ1dnjnQoe07ldfIzcsGb5hC5W0Dm7u423KWzawlrpbjXBrXCEv9zazQ==}
-
-  '@aws-sdk/client-cloudwatch-logs@3.1053.0':
-    resolution: {integrity: sha512-M8AVDGPxzYHgJM7YfAefYOd+qAbo3tKs7Sw5S13kaDvk0A6nALtrroUNtvJI+ZXdy4Ys2j5icUYqGp+4PzAZmg==}
-    engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-cloudwatch@3.1053.0':
     resolution: {integrity: sha512-Zp3oR2z8lurzIouAK0KiLeJyAW//0HwQX9c3a7C+rXoaKUbw8L9hfKSp2z0HQPIV9UBfFOTIba30ViKdMWFcAg==}
@@ -2710,6 +2706,10 @@ packages:
     resolution: {integrity: sha512-6u9UwL0HlAl21+agMN3YAMXcKByMqwGx+pq+P76vii5f7hTPtKDp08/H9py6DY+cfDw7kQNTGEj/rly3IgbNQA==}
     engines: {node: '>=10'}
 
+  node-cron@3.0.3:
+    resolution: {integrity: sha512-dOal67//nohNgYWb+nWmg5dkFdIwDm8EpeGYMekPMrngV3637lqnX0lbUcCtgibHTz6SEz7DAIjKvKDFYCnO1A==}
+    engines: {node: '>=6.0.0'}
+
   node-ensure@0.0.0:
     resolution: {integrity: sha512-DRI60hzo2oKN1ma0ckc6nQWlHU69RH6xN0sjQTjMpChPfTYvKZdcQFfdYK2RWbJcKyUizSIy/l8OTGxMAM1QDw==}
 
@@ -3700,19 +3700,6 @@ snapshots:
     dependencies:
       '@aws-sdk/types': 3.973.9
       '@smithy/util-utf8': 2.3.0
-      tslib: 2.8.1
-
-  '@aws-sdk/client-cloudwatch-logs@3.1053.0':
-    dependencies:
-      '@aws-crypto/sha256-browser': 5.2.0
-      '@aws-crypto/sha256-js': 5.2.0
-      '@aws-sdk/core': 3.974.13
-      '@aws-sdk/credential-provider-node': 3.972.44
-      '@aws-sdk/types': 3.973.9
-      '@smithy/core': 3.24.4
-      '@smithy/fetch-http-handler': 5.4.4
-      '@smithy/node-http-handler': 4.7.4
-      '@smithy/types': 4.14.2
       tslib: 2.8.1
 
   '@aws-sdk/client-cloudwatch@3.1053.0':
@@ -6586,6 +6573,10 @@ snapshots:
   node-abi@3.89.0:
     dependencies:
       semver: 7.7.4
+
+  node-cron@3.0.3:
+    dependencies:
+      uuid: 8.3.2
 
   node-ensure@0.0.0: {}
 
