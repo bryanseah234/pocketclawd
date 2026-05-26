@@ -586,12 +586,18 @@ export async function handleAdminRequest(
 // ── S3 Upload + Redis Enqueue ──
 
 async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise<void> {
+    const bucket = process.env.DATA_BUCKET || process.env.S3_BUCKET;
+    if (!bucket) {
+        throw new Error('DATA_BUCKET or S3_BUCKET environment variable is not configured');
+    }
+
+    const region = process.env.AWS_REGION || 'ap-southeast-1';
+
     try {
         // Dynamic import to avoid hard dependency at module load
         const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
 
-        const s3 = new S3Client({});
-        const bucket = process.env.DATA_BUCKET || process.env.S3_BUCKET || 'nanoclaw-data';
+        const s3 = new S3Client({ region });
         const key = `staging/uploads/${uploadId}/${file.filename}`;
 
         await s3.send(new PutObjectCommand({
