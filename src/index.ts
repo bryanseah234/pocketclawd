@@ -238,6 +238,78 @@ async function main(): Promise<void> {
   // 7. Start the `ncl` CLI socket server (data/ncl.sock).
   await startCliServer();
 
+  // 8. Start HTTP server for admin dashboard and health endpoint
+  if (isCloudMode()) {
+    const http = await import('node:http');
+    const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
+
+    const services = getCloudServices();
+    initAdminDashboard({
+      token: process.env.ADMIN_TOKEN || '',
+      provider: {
+        getWhatsAppStatus: async () => ({
+          connected: false,
+          phoneNumber: null,
+          lastActivity: null,
+          uptime: null,
+          state: 'disconnected' as const,
+        }),
+        getWhatsAppQr: async () => ({
+          available: false,
+          qrDataUrl: null,
+          qrText: null,
+          message: 'WhatsApp not configured',
+        }),
+        disconnectWhatsApp: async () => ({ success: true, message: 'Disconnected' }),
+        reconnectWhatsApp: async () => ({ success: true, message: 'Reconnecting...' }),
+        getSystemHealth: async () => {
+          const health = services ? await services.healthCheck.getHealth() : null;
+          return {
+            overallStatus: (health?.status ?? 'unknown') as 'healthy' | 'degraded' | 'unhealthy' | 'unknown',
+            uptime: health?.uptime ?? 0,
+            timestamp: new Date().toISOString(),
+            services: health ? Object.entries(health.components).map(([name, c]) => ({
+              name,
+              status: c.status,
+              latencyMs: c.latencyMs,
+              lastChecked: c.lastChecked ?? new Date().toISOString(),
+            })) : [],
+          };
+        },
+        getContainers: async () => ({ total: 0, containers: [] }),
+        getRecentMessages: async () => ({ messages: [], totalProcessed24h: 0 }),
+        getStats: async () => ({
+          globalMessagesPerMinute: 0,
+          globalMessagesPerHour: 0,
+          activeUsers: 0,
+          topUsers: [],
+          rateLimitHits24h: 0,
+        }),
+      },
+    });
+
+    const server = http.createServer(async (req, res) => {
+      // Health endpoint
+      if (req.url === '/health' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+        return;
+      }
+
+      // Admin dashboard
+      const handled = await handleAdminRequest(req, res);
+      if (handled) return;
+
+      // 404 for everything else
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    });
+
+    server.listen(3000, '0.0.0.0', () => {
+      log.info('HTTP server listening', { port: 3000, admin: '/admin' });
+    });
+  }
+
   log.info('NanoClaw running');
 }
 
