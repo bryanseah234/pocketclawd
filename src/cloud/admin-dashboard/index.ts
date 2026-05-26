@@ -166,7 +166,11 @@ export async function handleAdminRequest(
     // Only handle /admin routes
     if (!url.startsWith('/admin')) return false;
 
-    // Auth check (except for the SSE endpoint which checks via query param)
+    // Parse URL to separate path from query string
+    const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+    const path = parsedUrl.pathname;
+
+    // Auth check
     if (!isAuthenticated(req)) {
         sendUnauthorized(res);
         return true;
@@ -174,20 +178,20 @@ export async function handleAdminRequest(
 
     try {
         // GET /admin — serve HTML dashboard
-        if ((url === '/admin' || url === '/admin/') && method === 'GET') {
+        if ((path === '/admin' || path === '/admin/') && method === 'GET') {
             sendHtml(res, getDashboardHtml());
             return true;
         }
 
         // GET /admin/api/health — system health JSON
-        if (url === '/admin/api/health' && method === 'GET') {
+        if (path === '/admin/api/health' && method === 'GET') {
             const health = await config!.provider.getSystemHealth();
             sendJson(res, health);
             return true;
         }
 
         // GET /admin/api/whatsapp/status — WhatsApp status + QR
-        if (url === '/admin/api/whatsapp/status' && method === 'GET') {
+        if (path === '/admin/api/whatsapp/status' && method === 'GET') {
             const [status, qr] = await Promise.all([
                 config!.provider.getWhatsAppStatus(),
                 config!.provider.getWhatsAppQr(),
@@ -197,35 +201,35 @@ export async function handleAdminRequest(
         }
 
         // POST /admin/api/whatsapp/disconnect
-        if (url === '/admin/api/whatsapp/disconnect' && method === 'POST') {
+        if (path === '/admin/api/whatsapp/disconnect' && method === 'POST') {
             const result = await config!.provider.disconnectWhatsApp();
             sendJson(res, result);
             return true;
         }
 
         // POST /admin/api/whatsapp/reconnect
-        if (url === '/admin/api/whatsapp/reconnect' && method === 'POST') {
+        if (path === '/admin/api/whatsapp/reconnect' && method === 'POST') {
             const result = await config!.provider.reconnectWhatsApp();
             sendJson(res, result);
             return true;
         }
 
         // GET /admin/api/containers — active containers
-        if (url === '/admin/api/containers' && method === 'GET') {
+        if (path === '/admin/api/containers' && method === 'GET') {
             const containers = await config!.provider.getContainers();
             sendJson(res, containers);
             return true;
         }
 
         // GET /admin/api/stats — rate limiting stats
-        if (url === '/admin/api/stats' && method === 'GET') {
+        if (path === '/admin/api/stats' && method === 'GET') {
             const stats = await config!.provider.getStats();
             sendJson(res, stats);
             return true;
         }
 
         // GET /admin/sse — Server-Sent Events stream
-        if (url.startsWith('/admin/sse') && method === 'GET') {
+        if (path.startsWith('/admin/sse')) && method === 'GET') {
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
@@ -245,7 +249,7 @@ export async function handleAdminRequest(
         }
 
         // POST /admin/api/actions/clear-rate-limits
-        if (url === '/admin/api/actions/clear-rate-limits' && method === 'POST') {
+        if (path === '/admin/api/actions/clear-rate-limits' && method === 'POST') {
             sendJson(res, { success: true, message: 'Rate limits cleared' });
             return true;
         }
