@@ -28,6 +28,7 @@ Local-first personal assistant built on top of [NanoClaw v2](https://github.com/
 - [docs/SERVICE.md](docs/SERVICE.md) — Windows service lifecycle (install / migrate / teardown)
 - [docs/POCKETCLAW.md](docs/POCKETCLAW.md) — PocketClaw-specific architecture
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — underlying NanoClaw architecture
+- [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md) — AWS cloud deployment guide (NanoClaw multi-user)
 - [PRD.md](PRD.md) — full product spec v3.0 + v1.1 extensions (§17)
 - [CONTRIBUTING.md](CONTRIBUTING.md) — branch naming, commit format, PR flow
 
@@ -108,6 +109,7 @@ Layout details:
 
 - NanoClaw: [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
 - PocketClaw: [docs/POCKETCLAW.md](docs/POCKETCLAW.md)
+- Cloud (AWS): [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md) — Terraform + EC2 + managed services for multi-user deployment
 
 ---
 
@@ -251,9 +253,10 @@ Each cloud source needs its own credential. PocketClaw never holds raw passwords
 
 ⚠️ **Code is built and ready, but Outlook ingestion is parked indefinitely.**
 
-Microsoft's Entra app registration system has a tenant-lifecycle policy that automatically blocks personal-account "shadow tenants" after ~200 days of inactivity (error `AADSTS5000225`). For new personal accounts, the only way to register an app and use device-code flow is to phone Microsoft support and request manual reactivation within a 20-day window — this is documented at https://learn.microsoft.com/en-us/entra/fundamentals/inaccessible-tenant.
+Microsoft's Entra app registration system has a tenant-lifecycle policy that automatically blocks personal-account "shadow tenants" after ~200 days of inactivity (error `AADSTS5000225`). For new personal accounts, the only way to register an app and use device-code flow is to phone Microsoft support and request manual reactivation within a 20-day window — this is documented at <https://learn.microsoft.com/en-us/entra/fundamentals/inaccessible-tenant>.
 
 If you ever want to revisit, the options are:
+
 - **Phone Microsoft support** with the AADSTS5000225 trace ID and ask for tenant reactivation (free, 15-30 min on the phone)
 - **Subscribe to Microsoft 365 Personal** ($7/mo trial, free first month) — paid subscriptions auto-keep the tenant active
 - **Use a corporate/school account** where app registration is allowed by IT
@@ -268,10 +271,12 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
 1. [account.apple.com](https://account.apple.com) → **Sign-In and Security → App-Specific Passwords → Generate**
 2. Label: `PocketClaw`. Apple shows the password ONCE — copy immediately.
 3. In `.env`:
+
    ```env
    APPLE_ID_EMAIL=your.email@icloud.com
    APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
    ```
+
 4. Restart service. No `/auth` flow needed — PocketClaw uses these on every IMAP/CalDAV/CardDAV connection.
 
 ### GitHub (PRs + commits + issues)
@@ -289,10 +294,12 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
 2. **OAuth & Permissions → User Token Scopes** (NOT Bot Token Scopes!) → add: `channels:history`, `channels:read`, `groups:history`, `groups:read`, `im:history`, `im:read`, `users:read`, `search:read`
 3. **Install to Workspace → Allow** → copy the `xoxp-...` token
 4. In `.env`:
+
    ```env
    SLACK_USER_TOKEN=xoxp-...
    SLACK_WORKSPACE=your-workspace-name
    ```
+
 5. Restart service.
 
 ---
@@ -406,6 +413,7 @@ Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 50
 ```
 
 Common issues:
+
 - `.env` missing → installer refuses; the error tells you exactly what's missing
 - `dist/index.js` missing → run `pnpm run build` first
 - Postgres container not running → cloud ingestion errors but service still runs (start it with `docker compose up -d postgres`)
@@ -413,6 +421,7 @@ Common issues:
 ### Some sources show as `[ERR]` in `pnpm ingest:now`
 
 Look at the error line:
+
 - `MS_CLIENT_ID env var not set` → Outlook walkthrough above
 - `Apple iCloud creds missing` → Apple walkthrough above
 - `SLACK_USER_TOKEN not set` → Slack walkthrough above
@@ -432,6 +441,7 @@ Run `pnpm svc` — if `Insights` count is 0, ingestion hasn't fired yet. Trigger
 ### Disk getting full
 
 The big consumers, in order:
+
 1. Postgres knowledge-base volume (`pocketclaw_pgdata`) — grows ~2 KB per entry incl. embedding. 100k entries ≈ 200 MB.
 2. `X:\PocketClawData\vault\research\` — PDFs from `/research`, ~50-200 KB each
 3. `X:\PocketClawData\vault\presentations\` — PPTX, ~50-100 KB each

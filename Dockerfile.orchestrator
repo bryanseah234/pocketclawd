@@ -15,7 +15,7 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 # Install all dependencies (dev included — needed for TypeScript build)
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # ==============================================================================
 # Stage 2: Build TypeScript
