@@ -217,6 +217,16 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
     };
 
     log.info('Cloud bootstrap: all services initialized');
+
+    // Start the upload worker (processes admin dashboard uploads → sub-agent queues)
+    try {
+        const { startUploadWorker } = await import('./upload-worker/index.js');
+        startUploadWorker(_services);
+        log.info('Cloud bootstrap: upload worker started');
+    } catch (err) {
+        log.error('Cloud bootstrap: upload worker failed (non-critical)', { err });
+    }
+
     return _services;
 }
 
@@ -289,6 +299,12 @@ export async function shutdownCloudServices(): Promise<void> {
     log.info('Cloud shutdown: stopping services');
 
     stopResponsePoll();
+
+    // Stop upload worker
+    try {
+        const { stopUploadWorker } = await import('./upload-worker/index.js');
+        stopUploadWorker();
+    } catch { /* upload worker may not have been started */ }
 
     _services.scheduler.stop();
     _services.healthCheck.stop();

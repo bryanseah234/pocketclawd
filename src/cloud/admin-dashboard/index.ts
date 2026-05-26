@@ -621,6 +621,7 @@ async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise
                 contentType: file.contentType,
                 s3Key: key,
                 bucket,
+                userId: 'admin', // Admin dashboard uploads default to admin user
                 timestamp: new Date().toISOString(),
             }));
 

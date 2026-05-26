@@ -136,22 +136,26 @@ async def process_message(message: InboundMessage) -> AgentResponse:
     """
     Process a single inbound message and produce a response.
 
-    This is the core processing function. In later tasks it will be extended
-    to handle:
-      - RAG-based knowledge queries (task 7.4)
-      - Document ingestion commands (task 7.7)
-      - Slide generation (task 7.10)
-      - LLM communication via Bedrock (task 7.2)
+    Routes messages by type:
+      - document_upload: extract → chunk → embed → index via DataGateway
+      - chat (default): placeholder for LLM + RAG pipeline
 
-    For now, it acknowledges receipt and echoes back a placeholder response.
+    For document_upload messages, the metadata contains:
+      - filename, contentType, s3Key, bucket, uploadId
     """
     logger.info(
-        "Processing message_id=%s from user_id=%s",
+        "Processing message_id=%s type=%s from user_id=%s",
         message.message_id,
+        message.metadata.get("type", "chat"),
         message.user_id,
     )
 
-    # Placeholder: will be replaced with actual LLM + RAG pipeline
+    msg_type = message.metadata.get("type", "chat")
+
+    if msg_type == "document_upload":
+        return await _handle_document_upload(message)
+
+    # Default: placeholder chat response (will be replaced with LLM + RAG)
     response_content = (
         f"Received your message. Processing is not yet implemented. "
         f"(message_id={message.message_id})"
@@ -164,6 +168,155 @@ async def process_message(message: InboundMessage) -> AgentResponse:
         timestamp=datetime.now(timezone.utc).isoformat(),
         metadata={"source": "sub-agent", "processed": True},
     )
+
+
+async def _handle_document_upload(message: InboundMessage) -> AgentResponse:
+    """
+    Handle a document_upload message: download from S3, extract text,
+    chunk, embed, and index into OpenSearch via the orchestrator's DataGateway.
+    """
+    import boto3
+
+    metadata = message.metadata
+    filename = metadata.get("filename", "unknown")
+    content_type = metadata.get("contentType", "application/octet-stream")
+    s3_key = metadata.get("s3Key", "")
+    bucket = metadata.get("bucket", "")
+    upload_id = metadata.get("uploadId", "")
+
+    logger.info(
+        "Document upload: filename=%s content_type=%s s3_key=%s",
+        filename,
+        content_type,
+        s3_key,
+    )
+
+    try:
+        # Step 1: Download file from S3
+        s3_client = boto3.client("s3", region_name=state.settings.aws_region)
+        response = s3_client.get_object(Bucket=bucket, Key=s3_key)
+        content = response["Body"].read()
+
+        logger.info("Downloaded %d bytes from S3: %s/%s", len(content), bucket, s3_key)
+
+        # Step 2: Process document (extract → chunk → embed)
+        from src.documents.processor import DocumentProcessor
+        from src.embeddings.pipeline import EmbeddingPipeline
+
+        pipeline = EmbeddingPipeline(region=state.settings.aws_region)
+        processor = DocumentProcessor(pipeline, user_id=message.user_id)
+        result = await processor.process_document(filename, content, content_type)
+
+        if result.status == "failed":
+            logger.warning(
+                "Document processing failed: %s (error: %s)",
+                filename,
+                result.error,
+            )
+            return AgentResponse(
+                message_id=message.message_id,
+                user_id=message.user_id,
+                content=f"❌ Failed to process '{filename}': {result.error}",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                metadata={
+                    "source": "sub-agent",
+                    "type": "document_processed",
+                    "status": "failed",
+                    "uploadId": upload_id,
+                },
+            )
+
+        # Step 3: Index chunks into OpenSearch via orchestrator DataGateway queue
+        from src.documents.extractors import extract_text as do_extract
+        from src.embeddings.pipeline import RecursiveCharacterSplitter
+
+        splitter = RecursiveCharacterSplitter()
+        text = do_extract(content, content_type)
+        chunks = splitter.split_text(text)
+        embeddings = await pipeline.embed_batch(chunks)
+
+        # Send indexing requests to orchestrator via Redis
+        if state.redis is not None:
+            for i, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+                chunk_id = f"{message.user_id}/{filename}-chunk-{i}"
+                index_request = {
+                    "action": "index_document",
+                    "user_id": message.user_id,
+                    "chunk": {
+                        "id": chunk_id,
+                        "docType": content_type.split("/")[-1],
+                        "content": chunk_text,
+                        "contentVector": embedding,
+                        "filename": filename,
+                        "pageNumber": 0,
+                        "chunkIndex": i,
+                        "uploadedAt": datetime.now(timezone.utc).isoformat(),
+                    },
+                }
+                await state.redis.lpush(
+                    "queue:orchestrator:data_gateway",
+                    json.dumps(index_request),
+                )
+
+        # Step 4: Move file from staging to documents prefix
+        documents_key = f"{message.user_id}/documents/{filename}"
+        try:
+            s3_client.copy_object(
+                Bucket=bucket,
+                CopySource={"Bucket": bucket, "Key": s3_key},
+                Key=documents_key,
+            )
+            s3_client.delete_object(Bucket=bucket, Key=s3_key)
+            logger.info("Moved file from staging to documents: %s", documents_key)
+        except Exception as move_err:
+            logger.warning("Failed to move file from staging: %s", move_err)
+
+        logger.info(
+            "Document processed successfully: %s (%d chunks, %d tokens)",
+            filename,
+            result.chunk_count,
+            result.total_tokens,
+        )
+
+        return AgentResponse(
+            message_id=message.message_id,
+            user_id=message.user_id,
+            content=(
+                f"✅ Document '{filename}' processed successfully.\n"
+                f"📊 {result.chunk_count} chunks indexed ({result.total_tokens} tokens).\n"
+                f"You can now ask questions about this document."
+            ),
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            metadata={
+                "source": "sub-agent",
+                "type": "document_processed",
+                "status": "success",
+                "uploadId": upload_id,
+                "chunkCount": result.chunk_count,
+                "totalTokens": result.total_tokens,
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            "Document upload processing failed: %s (error: %s)",
+            filename,
+            str(e),
+            exc_info=True,
+        )
+        return AgentResponse(
+            message_id=message.message_id,
+            user_id=message.user_id,
+            content=f"❌ Error processing '{filename}': {str(e)}",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            metadata={
+                "source": "sub-agent",
+                "type": "document_processed",
+                "status": "failed",
+                "uploadId": upload_id,
+                "error": str(e),
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +356,16 @@ async def poll_queue() -> None:
 
             try:
                 data = json.loads(raw_payload)
-                message = InboundMessage(**data)
+                message = InboundMessage(
+                    message_id=data.get("id", ""),
+                    user_id=data.get("userId", ""),
+                    content=data.get("payload", {}).get("content", data.get("content", "")),
+                    timestamp=data.get("timestamp", ""),
+                    metadata={
+                        "type": data.get("type", "chat"),
+                        **data.get("payload", {}),
+                    },
+                )
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error("Failed to parse inbound message: %s", e)
                 continue
