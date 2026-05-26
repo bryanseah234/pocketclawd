@@ -1,129 +1,187 @@
-# PocketClaw — Setup Guide
+# NanoClaw — Developer Setup
 
-A step-by-step walkthrough from clean machine to your first message. Total time: ~30 min (most of it waiting for `pnpm install`).
+How to set up the development environment for contributing to NanoClaw.
+
+**NanoClaw runs entirely on AWS.** There is no local deployment mode for the
+cloud system. Development involves building/testing locally and deploying to
+the AWS infrastructure via CI/CD.
+
+---
 
 ## Prerequisites
 
-| Tool | macOS | Linux | Windows |
-|------|-------|-------|---------|
-| Docker Desktop | `brew install --cask docker` | [docs.docker.com](https://docs.docker.com/engine/install) | [docker.com/desktop](https://docker.com/desktop) |
-| Node.js 22 LTS | `brew install node@22` | `apt install nodejs` | [nodejs.org](https://nodejs.org) |
-| pnpm 10+ | `npm install -g pnpm` | same | same |
-| Ollama | `brew install ollama` | curl `https://ollama.com/install.sh` | [ollama.com](https://ollama.com) |
-| Syncthing | `brew install syncthing` | `apt install syncthing` | [syncthing.net](https://syncthing.net) |
-| Obsidian | [obsidian.md](https://obsidian.md) | same | same |
-| Claude Code subscription | $100/mo (Max) | required for the agent | https://claude.ai/upgrade |
+| Tool | Version | Install |
+|------|---------|---------|
+| Node.js | 22 LTS | `nvm install 22` or [nodejs.org](https://nodejs.org) |
+| pnpm | 10+ | `npm install -g pnpm` |
+| AWS CLI | v2 | [aws.amazon.com/cli](https://aws.amazon.com/cli/) |
+| Terraform | ≥ 1.5 | [terraform.io](https://www.terraform.io/downloads) |
+| Docker | Latest | [docker.com](https://docker.com) (for building images) |
+| Python | 3.11+ | For sub-agent development |
 
-> **Important**: PocketClaw is pinned to Node **22**. Running it on Node ≥ 26 will fail to compile `better-sqlite3@11`. Check `node --version` matches `.nvmrc`.
+### AWS Access
 
-## 1. Clone + install
+You need AWS credentials with access to the NanoClaw account (`709609992277`):
 
 ```bash
-git clone https://github.com/<your-fork>/pocketclaw.git
+aws configure
+# Region: ap-southeast-1
+# Output: json
+
+# Verify:
+aws sts get-caller-identity
+```
+
+---
+
+## 1. Clone and Install
+
+```bash
+git clone https://github.com/tokenlab42/pocketclaw.git
 cd pocketclaw
-./scripts/setup_hooks.sh    # macOS / Linux
-./scripts/setup_hooks.ps1   # Windows
 pnpm install
 pnpm run build
 ```
 
-If you're on an exFAT/FAT drive (no symlinks), `.npmrc` already sets `node-linker=hoisted`. Expect 5-10 min on slow drives.
+---
 
-## 2. Pull Ollama models
-
-```bash
-ollama pull nomic-embed-text   # for knowledge-base embeddings (768-dim)
-ollama pull llava              # for photo descriptions
-```
-
-## 3. Start Postgres + pgvector
-
-PocketClaw stores its knowledge base in a single Postgres container with the `pgvector` extension. The container ships in the repo's `docker-compose.yml` and listens on `127.0.0.1:5432` only.
-
-```bash
-docker compose up -d postgres
-```
-
-Schema is applied on first start from `src/db/postgres-migrations/001_init.sql` (creates the `knowledge` table, `vector(768)` column, HNSW index, and `(source, source_id)` upsert key).
-
-Sanity check:
-
-```bash
-docker compose exec postgres psql -U pocketclaw -d pocketclaw -c '\dx'
-# vector | <ver> | public | vector data type and ivfflat / hnsw access methods
-```
-
-> **Why a real database, not embedded SQLite?** Embedding-vector search needs `pgvector` HNSW indexes; SQLite has no equivalent that scales past a few thousand facts. Postgres also gives us proper indexes, transactions, and a stable backup story (`pg_dump`).
-
-## 4. Configure `.env`
-
-Copy `.env.sample` → `.env` and fill in:
+## 2. Environment Configuration
 
 ```bash
 cp .env.sample .env
-$EDITOR .env
 ```
 
-Required at minimum:
-
-- `TELEGRAM_BOT_TOKEN` (from @BotFather)
-- `TELEGRAM_ALLOWED_CHAT_ID` (from @userinfobot)
-
-Authenticate Claude Code via the subscription path the first time the host spawns an agent container (`claude /login` inside the container, or use OneCLI). No `ANTHROPIC_API_KEY` or AWS Bedrock vars are required — those are gone in the current arch.
-
-Optional but recommended (cloud ingestion):
-
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — see `groups/pocketclaw/skills/auth/SKILL.md`
-- `MS_CLIENT_ID` — see auth skill
-- `APPLE_ID_EMAIL`, `APPLE_APP_PASSWORD` — see auth skill
-- `WHATSAPP_AUTH_DIR` — Baileys session path; defaults to `~/.pocketclaw/whatsapp/`
-
-## 5. Run the host
+Required variables:
 
 ```bash
-pnpm run dev
+# Cloud mode (activates AWS services)
+NANOCLAW_ENV=cloud
+AWS_REGION=ap-southeast-1
+
+# S3 bucket (Terraform-created)
+DATA_BUCKET=nanoclaw-data-709609992277
+
+# ElastiCache Redis endpoint
+REDIS_URL=redis://nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379
+
+# WhatsApp (for local testing with Baileys)
+TELEGRAM_BOT_TOKEN=<from-botfather>
+TELEGRAM_ALLOWED_CHAT_ID=<your-chat-id>
 ```
 
-The host opens an outbound websocket to Telegram (long polling — no inbound port required) and listens for messages from your allowlisted chat.
+All other config (DynamoDB tables, OpenSearch endpoint, Bedrock model, ECR registry)
+is loaded at runtime from AWS Secrets Manager (`nanoclaw/app-config`).
 
-## 6. First message
+---
 
-Send `/start` to your bot in Telegram. PocketClaw should reply with a greeting and run the `init-first-agent` flow.
+## 3. AWS Infrastructure
 
-## 7. (Optional) Set up Obsidian + Syncthing
+Infrastructure is managed via Terraform in `infrastructure/terraform/`.
 
 ```bash
-# 1. Install Obsidian and open the vault at $VAULT_PATH (default: ~/.pocketclaw/vault)
-# 2. Install plugins: Dataview, Graph View, Calendar, Tag Wrangler
-# 3. Start Syncthing on each device
-syncthing
-# 4. Add vault folder via Syncthing's web UI at http://127.0.0.1:8384
-# 5. Pair devices via Syncthing device IDs
+cd infrastructure/terraform
+terraform init
+terraform plan    # Review changes
+terraform apply   # Deploy (requires admin access)
 ```
 
-Now your wiki entries (auto-generated nightly at 03:00, currently a host-side no-op pending re-wiring through the agent container) sync peer-to-peer to your phone, tablet, second laptop — no cloud intermediary.
+### Live Resources
 
-## 8. Verify scheduled jobs
+| Resource | Identifier |
+|----------|-----------|
+| S3 Bucket | `nanoclaw-data-709609992277` |
+| ElastiCache | `nanoclaw-redis-ec2vpc` |
+| OpenSearch | `nanoclaw-documents` (collection ID: `66ik2p21jw225em9uj25`) |
+| DynamoDB | `nanoclaw-chat-messages`, `nanoclaw-user-preferences`, `nanoclaw-webhook-tokens`, `nanoclaw-system-errors` |
+| Secrets | `nanoclaw/app-config` |
+| ECR | `nanoclaw/orchestrator`, `nanoclaw/agent` |
 
-After a few minutes, check `~/.pocketclaw/logs/audit.log` for:
+---
 
+## 4. Development Workflow
+
+### Orchestrator (TypeScript)
+
+```bash
+pnpm run dev          # Run with tsx (hot reload)
+pnpm run typecheck    # Type checking
+pnpm run lint         # ESLint
+pnpm run test         # Vitest
+pnpm run build        # Compile to dist/
 ```
-2026-05-20T11:47:41Z | POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, morning-digest@07:00
+
+### Sub-Agent (Python)
+
+```bash
+cd container/sub-agent
+pip install -e .
+uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-If that line is present, the three cron jobs are wired. They'll fire at 02:00 / 03:00 / 07:00 local time. Cloud ingest writes facts into the knowledge base; wiki-regen and morning-digest currently log `SKIP | no-provider` / `SKIP | no-handler` until they're re-routed through the agent container (post-rearch follow-on).
+### Docker Images
+
+```bash
+# Orchestrator
+docker build -f Dockerfile.orchestrator -t nanoclaw-orchestrator .
+
+# Sub-agent
+docker build -f container/sub-agent/Dockerfile -t nanoclaw-agent container/sub-agent/
+```
+
+---
+
+## 5. Deployment
+
+Push to `main` or `staging` triggers the CI/CD pipeline:
+
+1. Quality gates (lint, typecheck, test, tfsec)
+2. Docker build → push to ECR
+3. Deploy to staging via SSM
+4. Smoke test (health endpoint)
+5. Deploy to production (main only, with auto-rollback)
+
+Manual deployment:
+
+```bash
+# Push to staging
+git push origin feature/my-change:staging
+
+# Or merge to main for production
+gh pr create --base main
+```
+
+---
+
+## 6. Testing
+
+```bash
+# Host tests (vitest)
+pnpm run test
+
+# Sub-agent tests (pytest)
+cd container/sub-agent
+pytest
+
+# Type checking
+pnpm run typecheck
+```
+
+---
+
+## 7. Monitoring
+
+- **CloudWatch Logs**: `/nanoclaw/app/*`
+- **Health endpoint**: `https://<instance-ip>:3000/health`
+- **Admin dashboard**: `https://<instance-ip>:3000/admin`
+
+---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `pnpm install` hangs forever | exFAT drive without `node-linker=hoisted` | Confirm `.npmrc` has it |
-| `docker compose up -d postgres` exits immediately | Port 5432 already in use | Stop the conflicting Postgres or change the published port in `docker-compose.yml` |
-| `pgvector` extension missing | Wrong Postgres image | The compose file pins `pgvector/pgvector:pg16` — don't substitute vanilla `postgres:16` |
-| `better-sqlite3` compile error | Node version mismatch | Use Node 22 (`nvm use 22`) |
-| Pre-push hook rejects branch | Branch not in allowed pattern | Rename to `feature/...`, `fix/...`, etc. |
-| Telegram bot silent | Wrong `TELEGRAM_ALLOWED_CHAT_ID` | Check your chat id via @userinfobot |
-| Photo not stored | Ollama not running on host | `ollama serve` then retry |
-| Wiki entries empty | Knowledge base has no entries yet | Send a few `/memory <fact>` messages first |
-
-See `docs/ARCHITECTURE.md` for the full data flow.
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Upload fails with "DATA_BUCKET not configured" | Missing env var | Set `DATA_BUCKET=nanoclaw-data-709609992277` |
+| Redis connection refused | Not pointing at ElastiCache | Check `REDIS_URL` points to AWS endpoint |
+| Secrets Manager access denied | IAM permissions | Ensure your role has `secretsmanager:GetSecretValue` |
+| OpenSearch 403 | Missing data access policy | Check Terraform `opensearch.tf` access policy |
+| Docker build fails | Node version mismatch | Use Node 22 (check `.nvmrc`) |

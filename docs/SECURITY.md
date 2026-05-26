@@ -1,161 +1,158 @@
 # NanoClaw Security Model
 
-## Trust Model
+## Overview
 
-| Entity | Trust Level | Rationale |
-|--------|-------------|-----------|
-| Main group | Trusted | Private self-chat, admin control |
-| Non-main groups | Untrusted | Other users may be malicious |
-| Container agents | Sandboxed | Isolated execution environment |
-| Incoming messages | User input | Potential prompt injection |
+NanoClaw enforces security through multiple layers: container isolation,
+data isolation via userId enforcement, secrets management, and network controls.
 
-## Security Boundaries
+---
 
-### 1. Container Isolation (Primary Boundary)
+## Data Isolation (Critical)
 
-Agents execute in containers (lightweight Linux VMs), providing:
-- **Process isolation** - Container processes cannot affect the host
-- **Filesystem isolation** - Only explicitly mounted directories are visible
-- **Non-root execution** - Runs as unprivileged `node` user (uid 1000)
-- **Ephemeral containers** - Fresh environment per invocation (`--rm`)
+Every persistence operation goes through the DataGateway, which enforces userId
+on ALL operations. Cross-user access is impossible by construction:
 
-This is the primary security boundary. Rather than relying on application-level permission checks, the attack surface is limited by what's mounted.
+| Layer | Enforcement |
+|-------|-------------|
+| DynamoDB | userId is the partition key — queries physically cannot cross partitions |
+| OpenSearch | Mandatory `{ term: { userId } }` filter on every search query |
+| S3 | Key prefix validation + path traversal rejection (`../` blocked) |
+| Redis | Per-user queue keys (`queue:agent:{userId}:inbound`) |
+| Containers | Each user runs in isolated Docker container (separate PID/network/fs) |
 
-### 2. Mount Security
+---
 
-**External Allowlist** - Mount permissions stored at `~/.config/nanoclaw/mount-allowlist.json`, which is:
-- Outside project root
-- Never mounted into containers
-- Cannot be modified by agents
+## Container Security
 
-**Default Blocked Patterns:**
-```
-.ssh, .gnupg, .aws, .azure, .gcloud, .kube, .docker,
-credentials, .env, .netrc, .npmrc, id_rsa, id_ed25519,
-private_key, .secret
-```
+### Hardening
 
-**Protections:**
-- Symlink resolution before validation (prevents traversal attacks)
-- Container path validation (rejects `..` and absolute paths)
-- `nonMainReadOnly` option forces read-only for non-main groups
+- **Non-root user** (UID 1000)
+- **Read-only root filesystem** (tmpfs for writable areas)
+- **All Linux capabilities dropped**
+- **Seccomp filtering** (minimal syscall set)
+- **No new privileges** (prevents escalation)
+- **Resource limits**: 512 MB RAM, 50% CPU, 100 PIDs, 2 GB disk
 
-**Read-Only Project Root:**
+### Network Isolation
 
-The main group's project root is mounted read-only. Writable paths the agent needs (store, group folder, IPC, `.claude/`) are mounted separately. This prevents the agent from modifying host application code (`src/`, `dist/`, `package.json`, etc.) which would bypass the sandbox entirely on next restart. The `store/` directory is mounted read-write so the main agent can access the SQLite database directly.
+Each sub-agent container operates in its own network namespace:
 
-### 3. Session Isolation
+- Can only communicate with orchestrator via management network
+- Outbound access to AWS services only (Bedrock, S3, etc.)
+- No inter-container communication possible
 
-Each group has isolated Claude sessions at `data/sessions/{group}/.claude/`:
-- Groups cannot see other groups' conversation history
-- Session data includes full message history and file contents read
-- Prevents cross-group information disclosure
+---
 
-### 4. IPC Authorization
+## Secrets Management
 
-Messages and task operations are verified against group identity:
+### AWS Secrets Manager
 
-| Operation | Main Group | Non-Main Group |
-|-----------|------------|----------------|
-| Send message to own chat | ✓ | ✓ |
-| Send message to other chats | ✓ | ✗ |
-| Schedule task for self | ✓ | ✓ |
-| Schedule task for others | ✓ | ✗ |
-| View all tasks | ✓ | Own only |
-| Manage other groups | ✓ | ✗ |
+All secrets stored in `nanoclaw/app-config` with:
 
-### 5. Credential Isolation (OneCLI Agent Vault)
+- 5-minute cache + auto-refresh timer
+- Supports credential rotation without restart
+- IAM role-based access (no long-lived keys)
 
-Real API credentials **never enter containers**. NanoClaw uses [OneCLI's Agent Vault](https://github.com/onecli/onecli) to proxy outbound requests and inject credentials at the gateway level.
+### Secret Categories
 
-**How it works:**
-1. Credentials are registered once with `onecli secrets create`, stored and managed by OneCLI
-2. When NanoClaw spawns a container, it calls `applyContainerConfig()` to route outbound HTTPS through the OneCLI gateway
-3. The gateway matches requests by host and path, injects the real credential, and forwards
-4. Agents cannot discover real credentials — not in environment, stdin, files, or `/proc`
+| Secret | Rotation | Access |
+|--------|----------|--------|
+| Redis password | 90 days (automated) | Orchestrator only |
+| DynamoDB (via IAM) | N/A (Managed Identity) | Orchestrator + sub-agents |
+| OpenSearch (via IAM) | N/A (Managed Identity) | Orchestrator only |
+| S3 (via IAM) | N/A (Managed Identity) | Orchestrator + sub-agents |
+| Bedrock (via IAM) | N/A (Managed Identity) | Sub-agents only |
+| Admin dashboard password | 90 days | Admin users |
 
-**Per-agent policies:**
-Each NanoClaw group gets its own OneCLI agent identity. This allows different credential policies per group (e.g. your sales agent vs. support agent). OneCLI supports rate limits, and time-bound access and approval flows are on the roadmap.
+### Sub-Agent Secret Injection
 
-**NOT Mounted:**
-- Channel auth sessions (`store/auth/`) — host only
-- Mount allowlist — external, never mounted
-- Any credentials matching blocked patterns
-- `.env` is shadowed with `/dev/null` in the project root mount
+Secrets are passed to containers as environment variables at creation time.
+They are NEVER stored in Docker images or written to disk inside containers.
 
-## Privilege Comparison
+---
 
-| Capability | Main Group | Non-Main Group |
-|------------|------------|----------------|
-| Project root access | `/workspace/project` (ro) | None |
-| Store (SQLite DB) | `/workspace/project/store` (rw) | None |
-| Group folder | `/workspace/group` (rw) | `/workspace/group` (rw) |
-| Global memory | Implicit via project | `/workspace/global` (ro) |
-| Additional mounts | Configurable | Read-only unless allowed |
-| Network access | Unrestricted | Unrestricted |
-| MCP tools | All | All |
+## WhatsApp Security
 
-## Security Architecture Diagram
+### Session Management
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        UNTRUSTED ZONE                             │
-│  Incoming Messages (potentially malicious)                         │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │
-                                 ▼ Trigger check, input escaping
-┌──────────────────────────────────────────────────────────────────┐
-│                     HOST PROCESS (TRUSTED)                        │
-│  • Message routing                                                │
-│  • IPC authorization                                              │
-│  • Mount validation (external allowlist)                          │
-│  • Container lifecycle                                            │
-│  • OneCLI Agent Vault (injects credentials, enforces policies)   │
-└────────────────────────────────┬─────────────────────────────────┘
-                                 │
-                                 ▼ Explicit mounts only, no secrets
-┌──────────────────────────────────────────────────────────────────┐
-│                CONTAINER (ISOLATED/SANDBOXED)                     │
-│  • Agent execution                                                │
-│  • Bash commands (sandboxed)                                      │
-│  • File operations (limited to mounts)                            │
-│  • API calls routed through OneCLI Agent Vault                   │
-│  • No real credentials in environment or filesystem              │
-└──────────────────────────────────────────────────────────────────┘
-```
+- Baileys session persisted to S3 (`sessions/` prefix)
+- Session restored on VM restart without QR re-scan
+- QR code displayed only in admin dashboard (Basic Auth protected)
+- QR codes expire after 5 minutes
+- Failed scan attempts logged for security monitoring
 
-## Supply Chain Security (pnpm)
+### Rate Limiting
 
-NanoClaw uses pnpm with two supply chain defenses configured in `pnpm-workspace.yaml`:
+- 20 messages/minute per user
+- 200 messages/hour global
+- Exceeding limits → messages queued (not dropped)
+- Rate limit state in Redis (auto-expires)
 
-### Minimum Release Age
+---
 
-`minimumReleaseAge: 4320` (3 days). pnpm will refuse to resolve any package version published less than 3 days ago. This defends against typosquatting and compromised maintainer accounts — most malicious publishes are detected and pulled within 72 hours.
+## Document Security
 
-**Excluding a package from the release age gate** (`minimumReleaseAgeExclude`):
+### Upload Validation
 
-This should be rare. When a zero-day fix or critical dependency requires an immediate update:
+1. MIME type validation via magic byte detection
+2. Extension must match detected MIME type
+3. Maximum file size: 25 MB (WhatsApp) / 50 MB (admin dashboard)
+4. Executable files and archives blocked
 
-1. The exclusion must be reviewed and approved by a human maintainer
-2. The entry must pin the **exact version** being excluded — never a range or wildcard
-   ```yaml
-   minimumReleaseAgeExclude:
-     some-package: "1.2.3"  # Approved by @user, 2026-04-14 — CVE-XXXX-YYYY fix
-   ```
-3. The exclusion should be removed once the version ages past the threshold (i.e. after 3 days)
-4. Automated agents (Claude, CI bots) must never add exclusions without human sign-off
+### Save Confirmation (Webhook Tokens)
 
-### Build Script Allowlist
+- Cryptographically random tokens (32 bytes, `secrets.token_urlsafe`)
+- SHA-256 hashed before storage in DynamoDB
+- 15-minute TTL (auto-expired)
+- One-time use (deleted after validation)
+- Constant-time comparison (prevents timing attacks)
 
-`onlyBuiltDependencies` restricts which packages can execute install/postinstall scripts. Only packages on this list are permitted to run build scripts during `pnpm install`. Currently allowed:
+---
 
-- `better-sqlite3` — compiles native SQLite bindings
-- `esbuild` — downloads platform-specific binary
-- `protobufjs` — generates protobuf bindings (used by Baileys/libsignal)
-- `sharp` — downloads platform-specific image processing binary
+## Network Security
 
-Adding a package to this list requires human approval — build scripts execute arbitrary code with the installing user's permissions.
+### EC2 Security Group
 
-### `.npmrc` Safety Net
+| Direction | Port | Source | Purpose |
+|-----------|------|--------|---------|
+| Inbound | 443 | Admin IPs | Admin dashboard |
+| Inbound | 22 | Admin IPs | SSH access |
+| Outbound | 443 | AWS services | API calls |
+| Outbound | 5222 | WhatsApp servers | Baileys connection |
+| Deny | All other | * | Default deny |
 
-The `.npmrc` file contains `minReleaseAge=3d` as a fallback. The authoritative setting is in `pnpm-workspace.yaml`, but `.npmrc` provides defense-in-depth if npm is ever invoked directly (e.g. by a tool that doesn't respect pnpm).
+### No Public API
+
+The system has no public-facing API. All user interaction is via WhatsApp
+(outbound connection from the EC2 instance). The admin dashboard is
+restricted to specific IP addresses.
+
+---
+
+## Audit Logging
+
+All data access is logged to CloudWatch with:
+
+- userId
+- Operation type
+- Resource accessed
+- Timestamp (ISO 8601)
+- Success/failure
+
+Audit logs retained for 1 year. Access restricted to authorized personnel.
+
+---
+
+## Incident Response
+
+### Breach Notification (PDPA 72-Hour Rule)
+
+1. Incident reported to DPO within 24 hours
+2. Severity assessment within 48 hours
+3. Affected users notified via WhatsApp within 72 hours
+4. PDPC notified if required
+
+### Automatic Rollback
+
+Production deployments include 10-minute health monitoring. If health checks
+fail, automatic rollback to previous image tag via SSM Parameter Store.
