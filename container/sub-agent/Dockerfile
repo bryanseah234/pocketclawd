@@ -1,6 +1,6 @@
 # Development Dockerfile for NanoClaw sub-agent
 # Production Dockerfile will be created in task 9.2 with multi-stage build and OCR deps
-FROM python:3.11-slim AS base
+FROM public.ecr.aws/docker/library/python:3.11-slim AS base
 
 WORKDIR /app
 
