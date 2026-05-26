@@ -10,7 +10,7 @@
  * Requirements: REQ-4.2
  */
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 import type {
     AgentResponse,

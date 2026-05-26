@@ -18,7 +18,7 @@
  * Requirements: REQ-4.1, REQ-4.2, REQ-4.3, REQ-9.1
  */
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 import { log } from '../log.js';
 
@@ -33,8 +33,8 @@ import { SecretsLoader } from './secrets/index.js';
 import type { NanoClawCloudConfig } from './secrets/index.js';
 import type { IMessageQueue, AgentResponse } from './redis-queue/index.js';
 
-// ioredis default export is the Redis class constructor in CJS interop
-type RedisClient = InstanceType<typeof Redis.Redis>;
+// ioredis named export — Redis is the class directly
+type RedisClient = Redis;
 
 // ── Environment detection ──
 
@@ -104,7 +104,7 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
 
     // 3. Redis connection (shared between queue and rate limiter)
     log.info('Cloud bootstrap: connecting to Redis');
-    const redis = new Redis.Redis({
+    const redis = new Redis({
         host: config.redis.host,
         port: config.redis.port,
         password: config.redis.password,

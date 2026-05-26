@@ -9,7 +9,7 @@
  * Requirements: REQ-4.1
  */
 
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 import type { RateLimitResult, RateLimiterConfig } from './types.js';
 
