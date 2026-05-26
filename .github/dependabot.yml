@@ -19,3 +19,13 @@ updates:
       npm-dependencies:
         patterns:
           - "*"
+
+  - package-ecosystem: "terraform"
+    directory: "/infrastructure/terraform"
+    schedule:
+      interval: "monthly"
+    target-branch: "main"
+    groups:
+      terraform-providers:
+        patterns:
+          - "*"

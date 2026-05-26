@@ -2,27 +2,54 @@ name: CI
 
 on:
   push:
-    branches: [main, staging, feature/**]
+    branches: [main, staging, develop, "feature/**", "fix/**", "chore/**"]
   pull_request:
-    branches: [main, staging]
+    branches: [main, staging, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CI: "true"
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10"
 
 jobs:
-  typecheck-lint-test:
-    name: Typecheck · Lint · Test
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install dependencies
@@ -31,14 +58,37 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
-      - name: Lint
-        run: pnpm run lint
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Test
-        run: pnpm run test
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary
+
+      - name: Upload coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
 
   terraform-validate:
-    name: Terraform · Validate · Security Scan
+    name: Terraform Validate
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -59,13 +109,13 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Terraform Plan (syntax check)
-        run: terraform plan -input=false -no-color
-        env:
-          AWS_DEFAULT_REGION: ap-southeast-1
-        continue-on-error: true
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Run tfsec security scan
+      - name: Run tfsec
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: infrastructure/terraform

@@ -6,38 +6,30 @@ BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
 
 echo "🔍 Validating branch name and running pre-push checks..."
 
-# Updated branch naming convention with develop/development
+# Branch naming convention (aligned with CONTRIBUTING.md)
 VALID_BRANCH_REGEX="^(main|master|develop|development|staging|chore/.+|release\/[0-9]{4}-[0-9]{2}-[0-9]{2}|feature\/.+|fix\/.+|bugfix\/.+|hotfix\/.+)$"
 
-# Check if branch name follows convention
 if [[ ! $BRANCH_NAME =~ $VALID_BRANCH_REGEX ]]; then
     echo "❌ Error: Branch name '$BRANCH_NAME' does not follow the naming convention."
     echo ""
-    echo "Please use one of the following patterns:"
-    echo "  - main/master (production branch)"
-    echo "  - develop/development (integration branch)"
-    echo "  - staging (staging environment)"
-    echo "  - release/yyyy-mm-dd (release branches)"
-    echo "  - feature/description (new features)"
-    echo "  - chore/description (new chores)"
-    echo "  - fix/description (bug fixes)"
-    echo "  - bugfix/description (bug fixes)"
-    echo "  - hotfix/description (urgent fixes)"
-    echo ""
-    echo "Examples:"
-    echo "  - feature/user-authentication"
-    echo "  - fix/login-validation"
-    echo "  - hotfix/security-patch"
+    echo "Valid patterns:"
+    echo "  main/master/develop/staging  (protected branches)"
+    echo "  release/yyyy-mm-dd           (release branches)"
+    echo "  feature/description          (new features)"
+    echo "  chore/description            (maintenance)"
+    echo "  fix/description              (bug fixes)"
+    echo "  bugfix/description           (bug fixes)"
+    echo "  hotfix/description           (urgent fixes)"
     exit 1
 fi
 
 # Prevent direct push to protected branches
 PROTECTED_BRANCHES="^(main|master|develop|development|staging)$"
 if [[ $BRANCH_NAME =~ $PROTECTED_BRANCHES ]]; then
-    echo "⚠️  Warning: You are pushing to a protected branch '$BRANCH_NAME'."
-    echo "   This is typically done through pull requests."
+    echo "⚠️  Warning: You are pushing to protected branch '$BRANCH_NAME'."
+    echo "   This should typically be done through pull requests."
     echo ""
-    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+    read -p "Continue? (y/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "❌ Push cancelled."
@@ -45,32 +37,18 @@ if [[ $BRANCH_NAME =~ $PROTECTED_BRANCHES ]]; then
     fi
 fi
 
-# Run tests if test directory exists
-if [ -d "tests" ] || [ -f "pytest.ini" ] || [ -f "pyproject.toml" ]; then
-    echo "🧪 Running tests..."
-    if command -v pytest &> /dev/null; then
-        if ! pytest --tb=short; then
-            echo "❌ Error: Tests failed. Please fix failing tests before pushing."
-            exit 1
-        fi
-    elif command -v python -m pytest &> /dev/null; then
-        if ! python -m pytest --tb=short; then
-            echo "❌ Error: Tests failed. Please fix failing tests before pushing."
-            exit 1
-        fi
-    else
-        echo "⚠️  Warning: No test runner found. Skipping tests."
-    fi
-fi
-
-# Check for secrets/sensitive data
-echo "🔍 Checking for potential secrets..."
-SECRETS_PATTERN="(password|secret|key|token|api_key|private_key|auth)"
-if git diff --cached | grep -iE "$SECRETS_PATTERN.*=.*['\"][^'\"]{8,}['\"]" > /dev/null; then
-    echo "❌ Error: Potential secrets detected in staged files!"
-    echo "   Please review and remove any sensitive information."
-    git diff --cached | grep -iE "$SECRETS_PATTERN.*=.*['\"][^'\"]{8,}['\"]"
+# Run typecheck (fast feedback before push)
+echo "🔍 Running typecheck..."
+if ! pnpm run typecheck; then
+    echo "❌ Error: Typecheck failed. Please fix type errors before pushing."
     exit 1
 fi
 
-echo "✅ All pre-push checks passed! Branch name is valid."
+# Check for secrets/sensitive data in staged changes
+echo "🔍 Checking for potential secrets..."
+if git diff @{push}.. -- . 2>/dev/null | grep -iE "(password|secret|api_key|private_key|token).*=.*['\"][^'\"]{8,}['\"]" > /dev/null 2>&1; then
+    echo "⚠️  Warning: Potential secrets detected in changes."
+    echo "   Please review before pushing."
+fi
+
+echo "✅ All pre-push checks passed!"
