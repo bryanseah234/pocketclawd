@@ -1,212 +1,120 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 
-# ─────────────────────────────────────────────────────────────────────────────
-# NanoClaw EC2 Bootstrap Script
-# Installs Docker (rootless), Node.js, and configures the system
-# ─────────────────────────────────────────────────────────────────────────────
+# NanoClaw EC2 Instance User Data Script
+# Runs on first boot to configure the instance for production
 
-export DEBIAN_FRONTEND=noninteractive
+echo "=== NanoClaw EC2 Setup Starting ==="
 
-echo "=== NanoClaw Bootstrap Starting ==="
+# System updates
+yum update -y
 
-# ─── System Updates ──────────────────────────────────────────────────────────
+# Install Docker
+amazon-linux-extras install docker -y
+systemctl enable docker
+systemctl start docker
+usermod -aG docker ec2-user
 
-apt-get update -y
-apt-get upgrade -y
-apt-get install -y \
-  curl \
-  wget \
-  git \
-  jq \
-  unzip \
-  uidmap \
-  dbus-user-session \
-  fuse-overlayfs \
-  slirp4netns \
-  iptables \
-  ca-certificates \
-  gnupg \
-  lsb-release \
-  python3 \
-  python3-pip \
-  python3-venv \
-  awscli
+# Install Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
 
-# ─── Mount Data Disk ────────────────────────────────────────────────────────
-
-# Format and mount the data disk for Docker storage
-if ! blkid /dev/nvme1n1 > /dev/null 2>&1; then
-  mkfs.ext4 /dev/nvme1n1
-fi
-mkdir -p /data
-echo '/dev/nvme1n1 /data ext4 defaults,nofail 0 2' >> /etc/fstab
-mount -a
-
-mkdir -p /data/docker
-mkdir -p /data/nanoclaw
-
-# ─── Create nanoclaw user ───────────────────────────────────────────────────
-
-useradd -m -s /bin/bash -G docker nanoclaw || true
-loginctl enable-linger nanoclaw
-
-# ─── Install Docker (rootless) ──────────────────────────────────────────────
-
-# Install Docker Engine first (for rootless setup script)
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-apt-get update -y
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Stop system Docker — we'll use rootless
-systemctl stop docker
-systemctl disable docker
-
-# Setup rootless Docker for nanoclaw user
-su - nanoclaw -c 'dockerd-rootless-setuptool.sh install'
-
-# Configure rootless Docker to use data disk
-su - nanoclaw -c 'mkdir -p ~/.config/docker'
-cat > /home/nanoclaw/.config/docker/daemon.json << 'EOF'
-{
-  "data-root": "/data/docker",
-  "storage-driver": "overlay2",
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-EOF
-chown nanoclaw:nanoclaw /home/nanoclaw/.config/docker/daemon.json
-
-# ─── Install Node.js 20 LTS ────────────────────────────────────────────────
-
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
+# Install Node.js 22
+curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+yum install -y nodejs
 
 # Install pnpm
 npm install -g pnpm@10
 
-# ─── Install AWS CloudWatch Agent ──────────────────────────────────────────
+# Create nanoclaw user
+useradd -m -s /bin/bash nanoclaw
+usermod -aG docker nanoclaw
 
-wget -q https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
-dpkg -i -E ./amazon-cloudwatch-agent.deb
-rm -f ./amazon-cloudwatch-agent.deb
+# Create application directory
+mkdir -p /opt/nanoclaw
+chown nanoclaw:nanoclaw /opt/nanoclaw
 
-# CloudWatch agent config
+# Login to ECR
+aws ecr get-login-password --region ${aws_region} | docker login --username AWS --password-stdin ${ecr_registry}
+
+# Pull latest images
+docker pull ${ecr_registry}/${orchestrator_image}:latest
+docker pull ${ecr_registry}/${agent_image}:latest
+
+# Tag as current
+docker tag ${ecr_registry}/${orchestrator_image}:latest nanoclaw-orchestrator:current
+docker tag ${ecr_registry}/${agent_image}:latest nanoclaw-agent:current
+
+# Create systemd service for orchestrator
+cat > /etc/systemd/system/nanoclaw-orchestrator.service << 'EOF'
+[Unit]
+Description=NanoClaw Orchestrator
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=nanoclaw
+Restart=always
+RestartSec=10
+Environment=NANOCLAW_ENV=cloud
+Environment=AWS_REGION=${aws_region}
+
+ExecStartPre=-/usr/bin/docker rm -f nanoclaw-orchestrator
+ExecStart=/usr/bin/docker run --rm \
+    --name nanoclaw-orchestrator \
+    --network host \
+    -e NANOCLAW_ENV=cloud \
+    -e AWS_REGION=${aws_region} \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v /opt/nanoclaw/data:/app/data \
+    nanoclaw-orchestrator:current
+
+ExecStop=/usr/bin/docker stop nanoclaw-orchestrator
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create data directory
+mkdir -p /opt/nanoclaw/data
+chown nanoclaw:nanoclaw /opt/nanoclaw/data
+
+# Enable and start the service
+systemctl daemon-reload
+systemctl enable nanoclaw-orchestrator
+systemctl start nanoclaw-orchestrator
+
+# Install CloudWatch agent for log shipping
+yum install -y amazon-cloudwatch-agent
+
 cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << 'EOF'
 {
-  "agent": {
-    "metrics_collection_interval": 60,
-    "run_as_user": "root"
-  },
   "logs": {
     "logs_collected": {
       "files": {
         "collect_list": [
           {
-            "file_path": "/data/nanoclaw/logs/orchestrator.log",
-            "log_group_name": "/nanoclaw/orchestrator",
-            "log_stream_name": "{instance_id}",
-            "retention_in_days": 90
-          },
-          {
-            "file_path": "/data/nanoclaw/logs/system.log",
+            "file_path": "/var/log/messages",
             "log_group_name": "/nanoclaw/system",
-            "log_stream_name": "{instance_id}",
-            "retention_in_days": 30
+            "log_stream_name": "{instance_id}"
           }
         ]
       }
     }
   },
   "metrics": {
-    "namespace": "NanoClaw",
+    "namespace": "NanoClaw/Infrastructure",
     "metrics_collected": {
-      "disk": {
-        "measurement": ["used_percent"],
-        "resources": ["/", "/data"]
-      },
-      "mem": {
-        "measurement": ["mem_used_percent"]
-      },
-      "cpu": {
-        "measurement": ["cpu_usage_active"]
-      }
+      "cpu": { "measurement": ["cpu_usage_idle", "cpu_usage_user", "cpu_usage_system"] },
+      "mem": { "measurement": ["mem_used_percent"] },
+      "disk": { "measurement": ["disk_used_percent"], "resources": ["*"] }
     }
   }
 }
 EOF
 
-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-  -a fetch-config \
-  -m ec2 \
-  -s \
-  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+systemctl enable amazon-cloudwatch-agent
+systemctl start amazon-cloudwatch-agent
 
-# ─── Write environment config ──────────────────────────────────────────────
-
-cat > /data/nanoclaw/.env << EOF
-# Auto-generated by Terraform bootstrap
-PROJECT_NAME=${project_name}
-AWS_REGION=${aws_region}
-REDIS_HOST=${redis_host}
-REDIS_PORT=${redis_port}
-S3_BUCKET=${s3_bucket}
-ECR_REGISTRY=${ecr_registry}
-SECRETS_ID=${project_name}/app-config
-EOF
-chown nanoclaw:nanoclaw /data/nanoclaw/.env
-
-# ─── Create systemd service ────────────────────────────────────────────────
-
-cat > /etc/systemd/system/nanoclaw.service << 'EOF'
-[Unit]
-Description=NanoClaw WhatsApp Assistant Orchestrator
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=nanoclaw
-Group=nanoclaw
-WorkingDirectory=/data/nanoclaw/app
-ExecStart=/usr/bin/node dist/index.js
-Restart=always
-RestartSec=10
-Environment=NODE_ENV=production
-EnvironmentFile=/data/nanoclaw/.env
-
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/data/nanoclaw
-PrivateTmp=true
-
-# Resource limits
-LimitNOFILE=65536
-LimitNPROC=4096
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable nanoclaw
-
-# ─── Setup complete ────────────────────────────────────────────────────────
-
-echo "=== NanoClaw Bootstrap Complete ==="
-echo "Next steps:"
-echo "  1. Deploy application code to /data/nanoclaw/app"
-echo "  2. Run 'systemctl start nanoclaw'"
-echo "  3. Scan WhatsApp QR code via admin interface"
+echo "=== NanoClaw EC2 Setup Complete ==="
