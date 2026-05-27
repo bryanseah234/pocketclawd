@@ -38,5 +38,13 @@ export function readEnvFile(keys: string[]): Record<string, string> {
     if (value) result[key] = value;
   }
 
+  // Fall back to process.env for keys not found in the file.
+  // Allows docker -e / k8s env vars to work without a .env file.
+  for (const key of keys) {
+    if (!(key in result) && process.env[key]) {
+      result[key] = process.env[key] as string;
+    }
+  }
+
   return result;
 }

@@ -110,7 +110,8 @@ describe('getLandingPageHtml — hero section', () => {
     });
 
     it('contains CTA button (default pre-launch state)', () => {
-        expect(html).toContain('Get Early Access');
+        // Default (not connected): disabled CTA with 'Join the Waitlist' text
+        expect(html).toContain('Join the Waitlist');
     });
 
     it('connected state shows live CTA', () => {

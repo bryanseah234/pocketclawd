@@ -29,7 +29,7 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
     const phone = opts?.waPhone ?? DEFAULT_PHONE;
     const waConnected = opts?.waConnected ?? false;
     const waLink = `https://wa.me/${phone}?text=Hi%20Clawd!`;
-    const ctaLabel = waConnected ? 'Chat with Clawd on WhatsApp' : 'Get Early Access';
+    const ctaLabel: string | null = waConnected ? 'Chat with Clawd on WhatsApp ➜' : null;
     const heroBadge = waConnected
         ? `<span class="status-badge status-live">● Live</span>`
         : `<span class="status-badge status-coming-soon">Coming Soon</span>`;
@@ -552,7 +552,7 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
                 ${heroBadge}
                 <h1 class="highlight-swipe">${HERO_HEADLINE}</h1>
                 <p class="hero-subheadline">${HERO_SUBHEADLINE}</p>
-                <a href="${waLink}" class="cta-btn washi-tape">${ctaLabel}</a>
+                ${ctaLabel ? `<a href="${waConnected ? waLink : '#pricing'}" class="cta-btn washi-tape">${ctaLabel}</a>` : `<span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist &rarr;</span>`}
             </div>
         </section>
 
@@ -642,7 +642,7 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
                         <ul class="pricing-features">
                             ${tier.features.map((f) => `<li>${f}</li>`).join('\n                            ')}
                         </ul>
-                        <a href="${waLink}" class="cta-btn${tier.highlighted ? '' : ' cta-btn-outline'} washi-tape">${tier.ctaLabel}</a>
+                        <a href="${waConnected ? waLink : '#pricing'}" class="cta-btn${tier.highlighted ? '' : ' cta-btn-outline'} washi-tape">${tier.ctaLabel}</a>
                     </div>`,
     ).join('\n                    ')}
                 </div>

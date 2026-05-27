@@ -526,35 +526,14 @@ export function getDashboardHtml(): string {
         </header>
 
         <nav class="tab-nav" id="tab-nav">
-            <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+                        <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+            <button class="tab-btn" data-tab="whatsapp" onclick="switchTab('whatsapp')">WhatsApp</button>
+            <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">Documents</button>
             <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
-        <div class="tab-panel active" id="tab-overview">
+                <div class="tab-panel active" id="tab-overview">
         <div class="grid">
-            <!-- WhatsApp QR Code / Status -->
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-title">WhatsApp Connection</span>
-                    <div class="btn-group">
-                        <button class="btn btn-outline" onclick="reconnectWhatsApp()">Reconnect</button>
-                        <button class="btn btn-danger" onclick="disconnectWhatsApp()">Disconnect</button>
-                    </div>
-                </div>
-                <div class="qr-container" id="whatsapp-section">
-                    <div class="qr-image" id="qr-box">
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">Loading...</span>
-                    </div>
-                    <div class="qr-info">
-                        <div class="qr-status" id="wa-status">—</div>
-                        <div class="qr-detail" id="wa-phone"></div>
-                        <div class="qr-detail" id="wa-uptime"></div>
-                        <div class="qr-detail" id="wa-activity"></div>
-                        <div class="qr-countdown" id="wa-countdown"></div>
-                    </div>
-                </div>
-            </div>
-
             <!-- System Health -->
             <div class="card">
                 <div class="card-header">
@@ -563,32 +542,6 @@ export function getDashboardHtml(): string {
                 </div>
                 <div class="service-list" id="services-list">
                     <div class="empty-state">Loading services...</div>
-                </div>
-            </div>
-
-            <!-- Active Containers -->
-            <div class="card card-full">
-                <div class="card-header">
-                    <span class="card-title">Active Containers</span>
-                    <span id="container-count" style="color: var(--text-muted); font-size: 0.8rem;">0 running</span>
-                </div>
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>User</th>
-                                <th>Container ID</th>
-                                <th>Status</th>
-                                <th>Uptime</th>
-                                <th>Memory</th>
-                                <th>CPU</th>
-                                <th>Last Activity</th>
-                            </tr>
-                        </thead>
-                        <tbody id="containers-body">
-                            <tr><td colspan="7" class="empty-state">No containers running</td></tr>
-                        </tbody>
-                    </table>
                 </div>
             </div>
 
@@ -617,12 +570,65 @@ export function getDashboardHtml(): string {
                 </div>
             </div>
 
-            <!-- Quick Actions -->
+            <!-- Active Containers -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Active Containers</span>
+                    <span id="container-count" style="color: var(--text-muted); font-size: 0.8rem;">0 running</span>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Container ID</th>
+                                <th>Status</th>
+                                <th>Uptime</th>
+                                <th>Memory</th>
+                                <th>CPU</th>
+                                <th>Last Activity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="containers-body">
+                            <tr><td colspan="7" class="empty-state">No containers running</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        </div><!-- /tab-overview -->
+
+        <div class="tab-panel" id="tab-whatsapp">
+        <div class="grid">
+            <!-- WhatsApp QR Code / Status -->
             <div class="card">
                 <div class="card-header">
-                    <span class="card-title">Quick Actions</span>
+                    <span class="card-title">WhatsApp Connection</span>
+                    <div class="btn-group">
+                        <button class="btn btn-outline" onclick="reconnectWhatsApp()">Reconnect</button>
+                        <button class="btn btn-danger" onclick="disconnectWhatsApp()">Disconnect</button>
+                    </div>
                 </div>
-                <div class="actions-grid">
+                <div class="qr-container" id="whatsapp-section">
+                    <div class="qr-image" id="qr-box">
+                        <span style="color: var(--text-muted); font-size: 0.8rem;">Loading...</span>
+                    </div>
+                    <div class="qr-info">
+                        <div class="qr-status" id="wa-status">—</div>
+                        <div class="qr-detail" id="wa-phone"></div>
+                        <div class="qr-detail" id="wa-uptime"></div>
+                        <div class="qr-detail" id="wa-activity"></div>
+                        <div class="qr-countdown" id="wa-countdown"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WhatsApp Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">WhatsApp Actions</span>
+                </div>
+                <div class="actions-grid" style="grid-template-columns: 1fr 1fr;">
                     <button class="action-btn" onclick="doAction('reconnect')">
                         <div class="action-icon">&#x1f504;</div>
                         <div class="action-label">Reconnect WhatsApp</div>
@@ -645,7 +651,11 @@ export function getDashboardHtml(): string {
                     </button>
                 </div>
             </div>
+        </div>
+        </div><!-- /tab-whatsapp -->
 
+        <div class="tab-panel" id="tab-documents">
+        <div class="grid">
             <!-- Document Upload -->
             <div class="card card-full">
                 <div class="card-header">
@@ -660,7 +670,7 @@ export function getDashboardHtml(): string {
                     <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
                 </div>
                 <!-- Corporate toggle (data-isolation-corporate-docs req 6.1, 6.4) -->
-                <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:var(--bg-secondary,#1e1e2e);border-radius:6px;">
+                <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:rgba(61,43,31,0.05);border-radius:6px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
                         <input type="checkbox" id="corporate-toggle" name="corporate" value="true"
                                data-testid="corporate-toggle"
@@ -672,15 +682,17 @@ export function getDashboardHtml(): string {
                         <input type="text" id="target-user-id" name="targetUserId"
                                data-testid="target-user-id"
                                placeholder="e.g. 6281234567890"
-                               style="width:100%;margin-top:4px;padding:6px;background:var(--bg-primary,#13131a);border:1px solid var(--border,#333);border-radius:4px;color:inherit;font-size:0.9rem;">
+                               style="width:100%;margin-top:4px;padding:6px;background:rgba(255,255,255,0.6);border:1px solid var(--border);border-radius:4px;color:inherit;font-size:0.9rem;">
                     </div>
                 </div>
                 <div class="upload-list" id="upload-list"></div>
             </div>
         </div>
         </div><!-- /tab-overview -->
+        </div>
+        </div><!-- /tab-documents -->
 
-        <div class="tab-panel" id="tab-settings">
+<div class="tab-panel" id="tab-settings">
             <!-- Settings panel content injected server-side -->
         </div>
     </div>
