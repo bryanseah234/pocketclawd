@@ -140,7 +140,16 @@ async function main(): Promise<void> {
         },
         disconnectWhatsApp: async () => {
           const adapter = getChannelAdapter('whatsapp');
-          if (adapter) { await adapter.teardown(); setWhatsAppDisconnected(); return { success: true, message: 'Disconnected' }; }
+          if (adapter) {
+            // purgeSession wipes auth + S3 backup so next start re-pairs
+            if (adapter.purgeSession) {
+              await adapter.purgeSession();
+            } else {
+              await adapter.teardown();
+            }
+            setWhatsAppDisconnected();
+            return { success: true, message: 'Disconnected and session wiped' };
+          }
           return { success: false, message: 'WhatsApp adapter not found' };
         },
         reconnectWhatsApp: async () => {

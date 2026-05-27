@@ -58,6 +58,7 @@ import { registerChannelAdapter } from './channel-registry.js';
 import { normalizeOptions, type NormalizedOption } from './ask-question.js';
 import type { ChannelAdapter, ChannelSetup, ConversationInfo, InboundMessage, OutboundMessage } from './adapter.js';
 import { archiveChatMessage } from '../modules/chat-archive.js';
+import { WhatsAppSessionBackup } from '../modules/whatsapp-session-backup.js';
 
 const baileysLogger = pino({ level: 'silent' });
 
@@ -112,6 +113,9 @@ const GROUP_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const GROUP_METADATA_CACHE_TTL_MS = 60_000; // 1 min for outbound sends
 const SENT_MESSAGE_CACHE_MAX = 256;
 const RECONNECT_DELAY_MS = 5000;
+const SESSION_BACKUP_INTERVAL_MS = 5 * 60 * 1000;   // backup every 5 min
+const KEEPALIVE_INTERVAL_MS = 6 * 60 * 60 * 1000;   // self-DM every 6h to keep Baileys alive
+const SESSION_S3_PREFIX = 'whatsapp-session/';
 const PENDING_QUESTIONS_MAX = 64;
 const MAX_OUTGOING_QUEUE = 500;
 
@@ -250,16 +254,62 @@ function buildMediaMessage(data: Buffer, filename: string, ext: string, caption?
 }
 
 registerChannelAdapter('whatsapp', {
-  factory: () => {
+  factory: async () => {
     const env = readEnvFile(['WHATSAPP_PHONE_NUMBER', 'WHATSAPP_ENABLED']);
     const phoneNumber = env.WHATSAPP_PHONE_NUMBER;
     const authDir = AUTH_DIR;
 
-    // Skip if no existing auth, no phone number for pairing, and not explicitly enabled (QR mode)
-    const hasAuth = fs.existsSync(path.join(authDir, 'creds.json'));
-    if (!hasAuth && !phoneNumber && !env.WHATSAPP_ENABLED) return null;
+    // ── Session backup (S3) — survives container restarts ──
+    const dataBucket = process.env.DATA_BUCKET || '';
+    const awsRegion = process.env.AWS_REGION || 'ap-southeast-1';
+    const sessionBackup = dataBucket
+      ? new WhatsAppSessionBackup({
+          s3Bucket: dataBucket,
+          s3Prefix: SESSION_S3_PREFIX,
+          localAuthDir: authDir,
+          region: awsRegion,
+        })
+      : null;
+    let backupTimer: NodeJS.Timeout | null = null;
+    let keepaliveTimer: NodeJS.Timeout | null = null;
+    let lastBackupAt = 0;
+    const debouncedBackup = (delayMs = 2000) => {
+      if (!sessionBackup) return;
+      if (backupTimer) return;  // already scheduled
+      backupTimer = setTimeout(async () => {
+        backupTimer = null;
+        try {
+          const r = await sessionBackup.backup();
+          lastBackupAt = Date.now();
+          if (r.errors.length > 0) {
+            log.warn('WA session backup completed with errors', { uploaded: r.uploaded.length, errors: r.errors.slice(0, 3) });
+          } else {
+            log.debug('WA session backed up to S3', { files: r.uploaded.length });
+          }
+        } catch (err) {
+          log.warn('WA session backup failed', { err: err instanceof Error ? err.message : String(err) });
+        }
+      }, delayMs);
+    };
 
+    // Skip if no existing auth, no phone number for pairing, and not explicitly enabled (QR mode)
     fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
+    let hasAuth = fs.existsSync(path.join(authDir, 'creds.json'));
+
+    // Restore from S3 if local is empty
+    if (!hasAuth && sessionBackup) {
+      try {
+        const r = await sessionBackup.restore();
+        if (r.restored.length > 0) {
+          log.info('WA session restored from S3', { files: r.restored.length });
+          hasAuth = fs.existsSync(path.join(authDir, 'creds.json'));
+        }
+      } catch (err) {
+        log.warn('WA session restore from S3 failed (continuing with empty session)', { err: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    if (!hasAuth && !phoneNumber && !env.WHATSAPP_ENABLED) return null;
 
     // State
     let sock: WASocket;
@@ -608,6 +658,34 @@ registerChannelAdapter('whatsapp', {
         } else if (connection === 'open') {
           connected = true;
           log.info('Connected to WhatsApp');
+
+          // Initial backup right after connection (creds may have just changed)
+          debouncedBackup(5000);
+
+          // Periodic backup every 5 minutes
+          if (!backupTimer && sessionBackup) {
+            const periodicBackup = setInterval(() => {
+              if (Date.now() - lastBackupAt >= SESSION_BACKUP_INTERVAL_MS - 1000) {
+                debouncedBackup(0);
+              }
+            }, SESSION_BACKUP_INTERVAL_MS);
+            (periodicBackup as unknown as { unref?: () => void }).unref?.();
+          }
+
+          // 6-hour self-DM keep-alive (prevents Baileys timeout on idle accounts)
+          if (keepaliveTimer) clearInterval(keepaliveTimer);
+          keepaliveTimer = setInterval(async () => {
+            try {
+              const myJid = sock.user?.id;
+              if (!myJid) return;
+              const phoneJid = myJid.split(':')[0] + '@s.whatsapp.net';
+              await sock.sendMessage(phoneJid, { text: `🔄 Keepalive ${new Date().toISOString()}` });
+              log.debug('WA keep-alive self-DM sent');
+            } catch (err) {
+              log.warn('WA keep-alive self-DM failed', { err: err instanceof Error ? err.message : String(err) });
+            }
+          }, KEEPALIVE_INTERVAL_MS);
+          (keepaliveTimer as unknown as { unref?: () => void }).unref?.();
           // Notify admin dashboard bridge
           try {
             const bridge = (globalThis as any).__nanoclaw_wa_bridge;
@@ -658,7 +736,10 @@ registerChannelAdapter('whatsapp', {
         }
       });
 
-      sock.ev.on('creds.update', saveCreds);
+      sock.ev.on('creds.update', async () => {
+        await saveCreds();
+        debouncedBackup();
+      });
 
       // LID ↔ phone mapping updates (v7 replaces chats.phoneNumberShare)
       sock.ev.on('lid-mapping.update', ({ lid, pn }) => {
@@ -1016,8 +1097,47 @@ registerChannelAdapter('whatsapp', {
 
       async teardown() {
         connected = false;
+        if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+        if (backupTimer) { clearTimeout(backupTimer); backupTimer = null; }
+        // Final backup so the latest session state lives in S3 before container exit
+        try {
+          if (sessionBackup) await sessionBackup.backup();
+        } catch (err) {
+          log.warn('Final WA session backup failed', { err: err instanceof Error ? err.message : String(err) });
+        }
         sock?.end(undefined);
-        log.info('WhatsApp adapter shut down');
+        log.info('WhatsApp adapter shut down (session preserved in S3)');
+      },
+
+      async purgeSession() {
+        connected = false;
+        if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
+        if (backupTimer) { clearTimeout(backupTimer); backupTimer = null; }
+        // Tell WhatsApp to log this device out (best-effort, may already be disconnected)
+        try { await sock?.logout(); } catch (err) {
+          log.debug('WA logout call failed (proceeding with local purge)', { err: err instanceof Error ? err.message : String(err) });
+        }
+        sock?.end(undefined);
+        // Wipe local auth dir
+        try {
+          if (fs.existsSync(authDir)) {
+            for (const entry of fs.readdirSync(authDir)) {
+              fs.rmSync(path.join(authDir, entry), { recursive: true, force: true });
+            }
+          }
+          log.info('WA local auth dir purged');
+        } catch (err) {
+          log.warn('WA local auth dir purge failed', { err: err instanceof Error ? err.message : String(err) });
+        }
+        // Wipe S3 backup
+        try {
+          if (sessionBackup) {
+            const r = await sessionBackup.purge();
+            log.info('WA S3 session purged', { deleted: r.deleted.length, errors: r.errors.length });
+          }
+        } catch (err) {
+          log.warn('WA S3 session purge failed', { err: err instanceof Error ? err.message : String(err) });
+        }
       },
 
       isConnected() {

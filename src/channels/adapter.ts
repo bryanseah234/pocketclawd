@@ -164,10 +164,18 @@ export interface ChannelAdapter {
    * Returning the same platform_id on repeated calls is expected.
    */
   openDM?(userHandle: string): Promise<string>;
+
+  /**
+   * Wipe the persisted authentication session, forcing a fresh QR/pairing flow
+   * the next time setup() runs. Used by the admin dashboard's "Disconnect"
+   * action to deliberately log out — distinct from teardown(), which only
+   * stops the socket while preserving the saved session.
+   */
+  purgeSession?(): Promise<void>;
 }
 
 /** Factory function that creates a channel adapter (returns null if credentials missing). */
-export type ChannelAdapterFactory = () => ChannelAdapter | Promise<ChannelAdapter> | null;
+export type ChannelAdapterFactory = () => ChannelAdapter | Promise<ChannelAdapter | null> | null;
 
 /** Registration entry for a channel adapter. */
 export interface ChannelRegistration {

@@ -4,7 +4,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { Readable } from 'stream';
 
 export interface SessionBackupConfig {
@@ -102,6 +102,30 @@ export class WhatsAppSessionBackup {
       errors.push(`list: ${e instanceof Error ? e.message : String(e)}`);
     }
     return { restored, errors };
+  }
+
+  /** Wipe all session files from S3. Used when admin clicks Disconnect (force re-pair). */
+  async purge(): Promise<{ deleted: string[]; errors: string[] }> {
+    const deleted: string[] = [];
+    const errors: string[] = [];
+    try {
+      const list = await this.s3.send(new ListObjectsV2Command({
+        Bucket: this.config.s3Bucket,
+        Prefix: this.config.s3Prefix,
+      }));
+      for (const obj of list.Contents ?? []) {
+        const key = obj.Key!;
+        try {
+          await this.s3.send(new DeleteObjectCommand({ Bucket: this.config.s3Bucket, Key: key }));
+          deleted.push(key);
+        } catch (e) {
+          errors.push(`${key}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    } catch (e) {
+      errors.push(`list: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    return { deleted, errors };
   }
 
   startPeriodicBackup(intervalMs = 5 * 60 * 1000): NodeJS.Timeout {
