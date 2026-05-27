@@ -14,8 +14,6 @@
 import {
     HERO_HEADLINE,
     HERO_SUBHEADLINE,
-    HERO_CTA_LABEL,
-    WHATSAPP_LINK,
     FEATURES,
     HOW_IT_WORKS_STEPS,
     PRICING_TIERS,
@@ -30,11 +28,11 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
     const DEFAULT_PHONE = '6581234567';
     const phone = opts?.waPhone ?? DEFAULT_PHONE;
     const waConnected = opts?.waConnected ?? false;
-    const waLink = \`https://wa.me/\${phone}?text=Hi%20Clawd!\`;
+    const waLink = `https://wa.me/${phone}?text=Hi%20Clawd!`;
     const ctaLabel = waConnected ? 'Chat with Clawd on WhatsApp' : 'Get Early Access';
     const heroBadge = waConnected
-        ? \`<span class="status-badge status-live">● Live</span>\`
-        : \`<span class="status-badge status-coming-soon">Coming Soon</span>\`;
+        ? `<span class="status-badge status-live">● Live</span>`
+        : `<span class="status-badge status-coming-soon">Coming Soon</span>`;
 
         return `<!DOCTYPE html>
 <html lang="en">

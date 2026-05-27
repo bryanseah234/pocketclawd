@@ -123,10 +123,6 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
                 await handleDeleteUserDocuments(services, userId, request);
                 break;
 
-            case 'hybrid_search':
-                await handleHybridSearch(services, userId, requestId, request);
-                break;
-
             case 'get_file':
                 await handleGetFile(services, userId, requestId, request);
                 break;
