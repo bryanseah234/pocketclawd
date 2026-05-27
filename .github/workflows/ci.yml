@@ -73,6 +73,20 @@ jobs:
       - name: Run tests with coverage
         run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary
 
+      - name: Check coverage threshold (≥70%)
+        run: |
+          COVERAGE=$(node -e "
+            const s = require('./coverage/coverage-summary.json');
+            const lines = s.total.lines.pct;
+            console.log(lines);
+          " 2>/dev/null || echo 0)
+          echo "Line coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below 70% threshold"
+            exit 1
+          fi
+          echo "Coverage OK: ${COVERAGE}%"
+
       - name: Upload coverage summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,6 +116,23 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+  k6-smoke:
+    name: k6 Smoke Test
+    runs-on: ubuntu-latest
+    needs: [test]
+    # Only run on pushes to feature branches (not PRs — live instance needed)
+    if: github.event_name == 'push' && contains(github.ref, 'feature/nanoclaw')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          curl -s https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+      - name: Run k6 smoke test
+        run: k6 run tests/load/k6-smoke.js --env TARGET_URL=http://3.0.132.150:3000
+        timeout-minutes: 2
 
   security-scan:
     name: Security Scan

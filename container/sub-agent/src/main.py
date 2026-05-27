@@ -155,6 +155,65 @@ async def process_message(message: InboundMessage) -> AgentResponse:
     if msg_type == "document_upload":
         return await _handle_document_upload(message)
 
+    # Check PDPA consent before any chat processing
+    from src.consent import needs_consent, handle_consent_response, CONSENT_MESSAGE
+    if state.redis is not None:
+        in_consent = await needs_consent(state.redis, message.user_id)
+        if in_consent:
+            # Check if this message is a consent response
+            granted, reply = await handle_consent_response(state.redis, message.user_id, message.content)
+            if granted is None and reply == "":
+                # Fresh user — send consent message
+                return AgentResponse(
+                    message_id=message.message_id,
+                    user_id=message.user_id,
+                    content=CONSENT_MESSAGE,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    metadata={"source": "sub-agent", "type": "consent_request"},
+                )
+            if granted is False:
+                return AgentResponse(
+                    message_id=message.message_id,
+                    user_id=message.user_id,
+                    content=reply,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    metadata={"source": "sub-agent", "type": "consent_declined"},
+                )
+            if granted is None:
+                return AgentResponse(
+                    message_id=message.message_id,
+                    user_id=message.user_id,
+                    content=reply,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    metadata={"source": "sub-agent", "type": "consent_pending"},
+                )
+            # granted=True — fall through to normal processing
+
+        # Rate limiting (only after consent granted)
+        from src.rate_limiter import RateLimiter
+        rate_limiter = RateLimiter(state.redis)
+        allowed, rate_reason = await rate_limiter.check_and_record(message.user_id)
+        if not allowed:
+            return AgentResponse(
+                message_id=message.message_id,
+                user_id=message.user_id,
+                content=f"⚠️ {rate_reason}. Please wait a moment before sending another message.",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                metadata={"source": "sub-agent", "type": "rate_limited"},
+            )
+
+        # Slash command handling
+        from src.commands import handle_command
+        command_response = await handle_command(state.redis, message.user_id, message.content)
+        if command_response is not None:
+            return AgentResponse(
+                message_id=message.message_id,
+                user_id=message.user_id,
+                content=command_response,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                metadata={"source": "sub-agent", "type": "command"},
+            )
+
     # Chat message — use RAG pipeline (embed → search → LLM)
     return await _handle_chat_message(message)
 

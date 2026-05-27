@@ -1,0 +1,2 @@
+[test]
+testPathPattern = "src/.*\.test\.ts$"
