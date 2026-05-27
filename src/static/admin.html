@@ -846,15 +846,15 @@
                 list.innerHTML = '<div class="empty-state">No services reporting</div>';
                 return;
             }
-            list.innerHTML = data.services.map(s => \`
+            list.innerHTML = data.services.map(s => `
                 <div class="service-item">
-                    <span class="service-name">\${esc(s.name)}</span>
+                    <span class="service-name">${esc(s.name)}</span>
                     <div class="service-status">
-                        \${s.latencyMs != null ? '<span>' + s.latencyMs + 'ms</span>' : ''}
-                        <span class="badge badge-\${s.status}">\${s.status}</span>
+                        ${s.latencyMs != null ? '<span>' + s.latencyMs + 'ms</span>' : ''}
+                        <span class="badge badge-${s.status}">${s.status}</span>
                     </div>
                 </div>
-            \`).join('');
+            `).join('');
         }
 
         function updateWhatsApp(data) {
@@ -917,17 +917,17 @@
                 body.innerHTML = '<tr><td colspan="7" class="empty-state">No containers running</td></tr>';
                 return;
             }
-            body.innerHTML = data.containers.map(c => \`
+            body.innerHTML = data.containers.map(c => `
                 <tr>
-                    <td>\${esc(c.userHash || c.userId || '—')}</td>
-                    <td><code>\${esc((c.containerId || '').slice(0, 12))}</code></td>
-                    <td><span class="badge badge-\${c.status === 'running' ? 'healthy' : 'unhealthy'}">\${c.status}</span></td>
-                    <td>\${formatUptime(c.uptime)}</td>
-                    <td>\${c.memoryUsageMb ? c.memoryUsageMb.toFixed(1) + ' MB' : '—'}</td>
-                    <td>\${c.cpuPercent != null ? c.cpuPercent.toFixed(1) + '%' : '—'}</td>
-                    <td>\${c.lastActivity ? timeAgo(c.lastActivity) : '—'}</td>
+                    <td>${esc(c.userHash || c.userId || '—')}</td>
+                    <td><code>${esc((c.containerId || '').slice(0, 12))}</code></td>
+                    <td><span class="badge badge-${c.status === 'running' ? 'healthy' : 'unhealthy'}">${c.status}</span></td>
+                    <td>${formatUptime(c.uptime)}</td>
+                    <td>${c.memoryUsageMb ? c.memoryUsageMb.toFixed(1) + ' MB' : '—'}</td>
+                    <td>${c.cpuPercent != null ? c.cpuPercent.toFixed(1) + '%' : '—'}</td>
+                    <td>${c.lastActivity ? timeAgo(c.lastActivity) : '—'}</td>
                 </tr>
-            \`).join('');
+            `).join('');
         }
 
         function updateStats(data) {
@@ -1028,11 +1028,11 @@
             const item = document.createElement('div');
             item.className = 'upload-item';
             item.id = 'upload-' + id;
-            item.innerHTML = \`
-                <span class="upload-item-name">\${esc(file.name)}</span>
+            item.innerHTML = `
+                <span class="upload-item-name">${esc(file.name)}</span>
                 <span class="upload-item-status uploading">Uploading...</span>
                 <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%"></div></div>
-            \`;
+            `;
             uploadList.prepend(item);
 
             try {
@@ -1164,10 +1164,10 @@
                 for (const u of data.uploads.slice(0, 10)) {
                     const item = document.createElement('div');
                     item.className = 'upload-item';
-                    item.innerHTML = \`
-                        <span class="upload-item-name">\${esc(u.filename)}</span>
-                        <span class="upload-item-status \${u.status}">\${u.status === 'completed' ? 'Indexed' : u.status}</span>
-                    \`;
+                    item.innerHTML = `
+                        <span class="upload-item-name">${esc(u.filename)}</span>
+                        <span class="upload-item-status ${u.status}">${u.status === 'completed' ? 'Indexed' : u.status}</span>
+                    `;
                     uploadList.appendChild(item);
                 }
                 updateUploadCount();
