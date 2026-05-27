@@ -12,16 +12,9 @@ import type {
     DocumentsResponse,
     IngestionSourceConfig,
 } from './types.js';
-import {
-    DescribeTableCommand,
-    type DynamoDBClient,
-} from '@aws-sdk/client-dynamodb';
+import { DescribeTableCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
-import {
-    ListObjectsV2Command,
-    DeleteObjectCommand,
-    type S3Client,
-} from '@aws-sdk/client-s3';
+import { ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { log } from '../../log.js';
 
 // ── DataStats ────────────────────────────────────────────────────────────────
@@ -64,7 +57,7 @@ export async function getDataStats(services: CloudServices): Promise<DataStats> 
     try {
         const r = await dataGateway.openSearch.indices.stats({ index: cfg.openSearch.indexName });
         // Type-loose access: the response shape is heavily typed but varies by version
-        const statsBody = (r as { body?: Record<string, unknown> }).body ?? (r as Record<string, unknown>);
+        const statsBody = (r as unknown as { body?: Record<string, unknown> }).body ?? (r as unknown as Record<string, unknown>);
         const indices = (statsBody as { indices?: Record<string, { primaries?: { docs?: { count?: number }; store?: { size_in_bytes?: number } } }> }).indices;
         const idx = indices?.[cfg.openSearch.indexName];
         osDocCount = idx?.primaries?.docs?.count ?? 0;
