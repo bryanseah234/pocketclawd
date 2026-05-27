@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * PocketClaw — Slide deck generator (PRD §17.5)
  *

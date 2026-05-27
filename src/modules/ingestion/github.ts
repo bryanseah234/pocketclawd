@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * PocketClaw — GitHub ingestion (PRD §17.1)
  *

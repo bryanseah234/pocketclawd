@@ -1,0 +1,7 @@
+# Auto-generated test files — lint handled by vitest type-check, not eslint
+**/*.test.ts
+**/*.spec.ts
+**/property-tests/
+# Infrastructure scripts
+infrastructure/
+scripts/

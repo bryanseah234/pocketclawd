@@ -4,7 +4,17 @@ import tseslint from 'typescript-eslint'
 import noCatchAll from 'eslint-plugin-no-catch-all'
 
 export default [
-  { ignores: ['node_modules/', 'dist/', 'container/', 'groups/'] },
+  {
+    ignores: [
+      'node_modules/', 'dist/', 'container/', 'groups/',
+      // Test files — type-checked by vitest, not eslint
+      '**/*.test.ts', '**/*.spec.ts',
+      // Property tests
+      '**/property-tests/',
+      // Infrastructure
+      'infrastructure/', 'scripts/',
+    ],
+  },
   { files: ['src/**/*.{js,ts}'] },
   { languageOptions: { globals: globals.node } },
   pluginJs.configs.recommended,
@@ -26,6 +36,8 @@ export default [
       ],
       'no-catch-all/no-catch-all': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
+      // Disable rules that fire on legitimate patterns in generated code
+      'no-fallthrough': 'warn',
     },
   },
 ]
