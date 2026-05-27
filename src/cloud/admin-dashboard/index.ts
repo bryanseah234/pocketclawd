@@ -562,7 +562,7 @@ export async function handleAdminRequest(
             const phone = String(body?.phone ?? '').trim().replace(/[^\d]/g, '');
             if (!phone) { sendJson(res, { error: 'phone required' }, 400); return true; }
             try {
-                getSettingsManager().updateSetting('credentials.whatsapp_phone_number', phone, 'admin-api');
+                getSettingsManager().updateSetting('credentials.whatsapp_phone_number', phone, 'admin');
                 const bridge = (globalThis as any).__nanoclaw_wa_bridge;
                 const pairingCode = bridge?.requestPairingCode ? await bridge.requestPairingCode(phone) : null;
                 sendJson(res, { success: true, phone, pairingCode });
@@ -576,7 +576,7 @@ export async function handleAdminRequest(
             const token = String(body?.token ?? '').trim();
             if (!token) { sendJson(res, { error: 'token required' }, 400); return true; }
             try {
-                getSettingsManager().updateSetting('setup.telegram_bot_token', token, 'admin-api');
+                getSettingsManager().updateSetting('setup.telegram_bot_token', token, 'admin');
                 sendJson(res, { success: true });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
             return true;
@@ -587,7 +587,7 @@ export async function handleAdminRequest(
             const body = await readJsonBody(req);
             const enabled = body?.enabled !== false;
             try {
-                getSettingsManager().updateSetting('setup.auto_approve_senders', String(enabled), 'admin-api');
+                getSettingsManager().updateSetting('setup.auto_approve_senders', String(enabled), 'admin');
                 sendJson(res, { success: true, policy: enabled ? 'public' : 'request_approval' });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
             return true;
