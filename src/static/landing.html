@@ -457,7 +457,8 @@
             }
 
             .pricing-grid {
-                grid-template-columns: 1fr;
+                flex-direction: column;
+                align-items: center;
                 gap: 20px;
             }
 
@@ -550,12 +551,9 @@
             <div class="container">
                 <h2 class="highlight-swipe section-heading">How It Works</h2>
                 <div class="steps-container">
-                    <div class="step"><div class="step-number">1</div><h3 class="step-title">Send a message</h3><p class="step-desc">Open WhatsApp and say hello to Clawd. No sign-up forms, no downloads—just start chatting.</p></div>
-<div class="doodle-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
-<div class="step"><div class="step-number">2</div><h3 class="step-title">Clawd learns</h3><p class="step-desc">Every conversation helps Clawd understand your preferences, schedule, and priorities.</p></div>
-<div class="doodle-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
-<div class="step"><div class="step-number">3</div><h3 class="step-title">Ask anything</h3><p class="step-desc">Need a recap? A document summary? A reminder? Clawd has your back with instant, personalized answers.</p></div>
-                </div>
+                    <div class="step"><div class="step-number">1</div><div class="step-content"><h3 class="step-title">Send a message</h3><p class="step-desc">Open WhatsApp and say hello to Clawd. No sign-up forms, no downloads—just start chatting.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 48" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="48" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
+<div class="step"><div class="step-number">2</div><div class="step-content"><h3 class="step-title">Clawd learns</h3><p class="step-desc">Every conversation helps Clawd understand your preferences, schedule, and priorities.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 48" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="48" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
+<div class="step"><div class="step-number">3</div><div class="step-content"><h3 class="step-title">Ask anything</h3><p class="step-desc">Need a recap? A document summary? A reminder? Clawd has your back with instant, personalized answers.</p></div></div>                </div>
             </div>
         </section>
 
@@ -567,7 +565,7 @@
         <!-- Social Proof Section -->
         <section id="social-proof">
             <div class="container testimonials">
-                <h2 class="highlight-swipe">What People Are Saying</h2>
+                <h2 class="highlight-swipe section-heading">What People Are Saying</h2>
                 <div class="testimonial-card">
                     <p class="testimonial-quote">Clawd remembers everything I tell it — my meeting notes, my preferences, even my coffee order. It's like having a personal assistant who actually pays attention.</p>
                     <p class="testimonial-author">— Early Beta User</p>
@@ -585,11 +583,8 @@
             <div class="container">
                 <h2 class="highlight-swipe section-heading">Simple, Transparent Pricing</h2>
                 <div class="pricing-grid">
-                    <div class="pricing-card highlighted"><div class="pricing-name">Early Access — Free</div><div class="pricing-price">Free</div><p class="pricing-desc">Free to use while we’re in early access. No credit card, no commitment.</p><ul class="pricing-features"><li>Unlimited WhatsApp messages</li><li>Personal knowledge base</li><li>Document uploads & Q&A</li><li>Daily morning briefings</li><li>Calendar & email summaries</li></ul><span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist</span></div>
-                        </ul>
-                        <a href="#pricing" class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist</a>
-                    </div>`,
-    ).join('\n                    ')}
+                    <div class="pricing-card highlighted"><div class="pricing-name">Early Access — Free</div><div class="pricing-price">Free</div><p class="pricing-desc">Free to use while we’re in early access. No credit card, no commitment.</p><ul class="pricing-features"><li>Unlimited WhatsApp messages</li><li>Personal knowledge base</li><li>Document uploads & Q&A</li><li>Daily morning briefings</li><li>Calendar & email summaries</li></ul><span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist</span>
+                    </div>
                 </div>
             </div>
         </section>
