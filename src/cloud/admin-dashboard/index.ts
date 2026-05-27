@@ -321,6 +321,11 @@ interface ParsedFile {
     data: Buffer;
 }
 
+interface ParsedFormResult {
+    files: ParsedFile[];
+    fields: Record<string, string>;
+}
+
 function parseMultipartFormData(body: Buffer, boundary: string): ParsedFormResult {
     const files: ParsedFile[] = [];
     const fields: Record<string, string> = {};

@@ -19,11 +19,13 @@ import type { DocumentChunk } from '../data-gateway/types.js';
 // Replicate handleIndexDocument exactly from data-gateway-worker/index.ts.
 // We test the logic directly because the handler is not exported.
 
+type MockFn = (...args: unknown[]) => unknown;
+
 async function handleIndexDocument(
     services: Pick<CloudServices, 'dataGateway'>,
     userId: string,
     request: Record<string, unknown>,
-    logger: { error: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; debug: ReturnType<typeof vi.fn> },
+    logger: { error: MockFn; warn: MockFn; debug: MockFn },
 ): Promise<void> {
     const chunk = request.chunk as DocumentChunk;
     const origin = request.origin as string | undefined;
@@ -64,12 +66,12 @@ async function handleIndexDocument(
 }
 
 function createMocks() {
-    const indexDocument = vi.fn().mockResolvedValue(undefined);
-    const indexCorporateDocument = vi.fn().mockResolvedValue(undefined);
+    const indexDocument = vi.fn<[string, DocumentChunk], Promise<void>>().mockResolvedValue(undefined);
+    const indexCorporateDocument = vi.fn<[DocumentChunk], Promise<void>>().mockResolvedValue(undefined);
     const services = {
         dataGateway: { indexDocument, indexCorporateDocument },
     } as unknown as Pick<CloudServices, 'dataGateway'>;
-    const logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const logger = { error: vi.fn<[], void>(), warn: vi.fn<[], void>(), debug: vi.fn<[], void>() };
     return { services, indexDocument, indexCorporateDocument, logger };
 }
 

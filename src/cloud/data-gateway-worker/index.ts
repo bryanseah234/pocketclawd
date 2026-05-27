@@ -231,59 +231,6 @@ async function handleIndexDocument(
     log.debug('Indexed document chunk', { userId, chunkId: chunk.id, filename: chunk.filename });
 }
 
-async function handleHybridSearch(
-    services: CloudServices,
-    userId: string,
-    requestId: string | undefined,
-    request: Record<string, unknown>,
-): Promise<void> {
-    if (!requestId || !userId) return;
-
-    const query = request.query as string || '';
-    const vector = request.vector as number[] || [];
-    const topK = (request.top_k as number) || 3;
-
-    const results = await services.dataGateway.hybridSearch(userId, query, vector, topK);
-
-    const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
-    await services.redis.lpush(responseKey, JSON.stringify({ success: true, results }));
-    await services.redis.expire(responseKey, 60);
-}
-
-async function handleGetChatHistory(
-    services: CloudServices,
-    userId: string,
-    requestId: string | undefined,
-    request: Record<string, unknown>,
-): Promise<void> {
-    if (!requestId || !userId) return;
-
-    const limit = (request.limit as number) || 30;
-    const messages = await services.dataGateway.getChatHistory(userId, limit);
-
-    const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
-    await services.redis.lpush(responseKey, JSON.stringify({ success: true, messages }));
-    await services.redis.expire(responseKey, 60);
-}
-
-async function handlePutChatMessage(
-    services: CloudServices,
-    userId: string,
-    request: Record<string, unknown>,
-): Promise<void> {
-    if (!userId) return;
-
-    const message = request.message as Record<string, unknown>;
-    if (!message) return;
-
-    await services.dataGateway.putChatMessage(userId, {
-        messageId: message.messageId as string,
-        role: message.role as 'user' | 'assistant',
-        content: message.content as string,
-        timestamp: message.timestamp as string,
-    });
-}
-
 async function handleListFiles(
     services: CloudServices,
     userId: string,

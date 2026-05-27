@@ -63,8 +63,9 @@ vi.mock('@aws-sdk/credential-provider-node', () => ({
 
 // Import after mocks are set up
 const { DataGateway } = await import('./index.js');
+type GatewayType = GatewayType;
 
-function createGateway(): InstanceType<typeof DataGateway> {
+function createGateway(): GatewayType {
     return DataGateway.createWithConfig({
         region: 'ap-southeast-1',
         dynamoDb: {
@@ -84,7 +85,7 @@ function createGateway(): InstanceType<typeof DataGateway> {
 }
 
 describe('DataGateway Audit & PDPA compliance', () => {
-    let gateway: InstanceType<typeof DataGateway>;
+    let gateway: GatewayType;
 
     beforeEach(() => {
         vi.clearAllMocks();
