@@ -89,6 +89,7 @@ const SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
 const SESSION_COOKIE_NAME = 'nanoclaw_admin_session';
 
 function setSessionCookie(res: http.ServerResponse): void {
+    if (typeof res.setHeader !== 'function') return;
     res.setHeader('Set-Cookie',
         `${SESSION_COOKIE_NAME}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=86400`
     );
