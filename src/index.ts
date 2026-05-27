@@ -168,7 +168,7 @@ async function main(): Promise<void> {
       if (req.url === '/' && req.method === 'GET') {
         const { handleWaStateRequest } = await import('./cloud/admin-dashboard/wa-state.js');
         if (handleWaStateRequest(req, res)) return;
-        const lpPath = path.join(process.cwd(), 'src', 'static', 'landing.html');
+        const lpPath = [path.join(process.cwd(), 'dist', 'static', 'landing.html'), path.join(process.cwd(), 'src', 'static', 'landing.html')].find(fs.existsSync) ?? '';
         if (fs.existsSync(lpPath)) {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
           res.end(fs.readFileSync(lpPath));

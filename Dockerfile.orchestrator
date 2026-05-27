@@ -39,6 +39,9 @@ COPY src/ ./src/
 # Compile TypeScript to dist/
 RUN pnpm run build
 
+# Copy static HTML assets into dist/ so they survive the production COPY
+RUN mkdir -p dist/static && (cp -r src/static/* dist/static/ 2>/dev/null; true)
+
 # Install production-only dependencies for the final image
 RUN pnpm install --prod --ignore-scripts --frozen-lockfile
 

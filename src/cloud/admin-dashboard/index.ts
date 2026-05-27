@@ -482,7 +482,7 @@ export async function handleAdminRequest(
 
         // GET /admin — serve HTML dashboard with settings panel
         if ((path === '/admin' || path === '/admin/') && method === 'GET') {
-            const adminPath = nodePath.join(process.cwd(), 'src', 'static', 'admin.html');
+            const adminPath = [nodePath.join(process.cwd(), 'dist', 'static', 'admin.html'), nodePath.join(process.cwd(), 'src', 'static', 'admin.html')].find(fs.existsSync) ?? '';
             if (fs.existsSync(adminPath)) {
                 sendHtml(res, fs.readFileSync(adminPath, 'utf-8'));
             } else {
