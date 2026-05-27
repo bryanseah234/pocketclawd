@@ -1,22 +1,24 @@
 /**
  * Daily briefing notification handler.
  * Scans all users from DynamoDB, generates a personalised morning briefing
- * via Bedrock Claude Sonnet, and pushes it to each user's Redis queue.
+ * via a Bedrock invoker callback, and pushes it to each user's Redis queue.
  *
  * Triggered from index.ts at 07:00 daily.
  */
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import type { Redis } from 'ioredis';
 import { randomUUID } from 'crypto';
 
 export interface NotificationConfig {
   dynamoClient: DynamoDBClient;
-  bedrockClient: BedrockRuntimeClient;
+  /**
+   * Calls the LLM with a prompt and returns the response text.
+   * Kept as a callback so notification-handler has no direct Bedrock dep.
+   */
+  invokeModel: (prompt: string) => Promise<string>;
   redisClient: Redis;
   userPreferencesTable: string;
-  modelId: string;
 }
 
 export interface BriefingResult {
@@ -32,7 +34,7 @@ export function generateBriefingPrompt(prefs: { technical_depth?: string; primar
     `You are a personal AI assistant delivering a morning briefing.\n` +
     `User preferences: technical_depth=${depth}, primary_domain=${domain}.\n\n` +
     `Generate a concise, engaging morning briefing (max 200 words) tailored to these preferences.\n` +
-    `Include: 1 relevant tech tip for their domain, 1 motivational thought, today's date.\n` +
+    `Include: 1 relevant tech tip for their domain, 1 motivational thought, today\'s date.\n` +
     `Match the tone to their depth preference — ${depth === 'detailed' ? 'technical and specific' : 'concise and clear'}.\n` +
     `Format for WhatsApp (use *bold* for headings, no markdown headers).`
   );
@@ -71,22 +73,6 @@ async function getUserPrefs(
   return { technical_depth: depth, primary_domain: domain };
 }
 
-async function callBedrock(client: BedrockRuntimeClient, modelId: string, prompt: string): Promise<string> {
-  const body = JSON.stringify({
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 512,
-    messages: [{ role: 'user', content: prompt }],
-  });
-  const resp = await client.send(new InvokeModelCommand({
-    modelId,
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: Buffer.from(body),
-  }));
-  const parsed = JSON.parse(Buffer.from(resp.body).toString('utf8'));
-  return parsed.content?.[0]?.text ?? '';
-}
-
 export async function sendDailyBriefings(config: NotificationConfig): Promise<BriefingResult[]> {
   const docClient = DynamoDBDocumentClient.from(config.dynamoClient);
   const results: BriefingResult[] = [];
@@ -107,9 +93,9 @@ export async function sendDailyBriefings(config: NotificationConfig): Promise<Br
         continue;
       }
       const prompt = generateBriefingPrompt(prefs);
-      const content = await callBedrock(config.bedrockClient, config.modelId, prompt);
+      const content = await config.invokeModel(prompt);
       if (!content) {
-        results.push({ userId, status: 'error', reason: 'empty_bedrock_response' });
+        results.push({ userId, status: 'error', reason: 'empty_model_response' });
         continue;
       }
       const message = JSON.stringify({

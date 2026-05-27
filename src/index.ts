@@ -338,45 +338,11 @@ async function main(): Promise<void> {
     }
   }
 
-  // 9. Cloud mode: daily briefing scheduler (07:00 daily)
+  // 9. Cloud mode: daily briefing scheduler — wired once DataGateway exposes invokeLlm
+  // TODO: wire when DataGateway.invokeLlm() is available.
+  // For now matches the pre-existing behaviour: SKIP | no-handler logged at cron time.
   if (isCloudMode()) {
-    const services = getCloudServices();
-    if (services) {
-      const scheduleDaily = (targetHour: number, fn: () => void): void => {
-        const msUntilNext = (): number => {
-          const now = new Date();
-          const next = new Date(now);
-          next.setHours(targetHour, 0, 0, 0);
-          if (next <= now) next.setDate(next.getDate() + 1);
-          return next.getTime() - now.getTime();
-        };
-        setTimeout(function fire() {
-          fn();
-          setTimeout(fire, msUntilNext());
-        }, msUntilNext());
-      };
-
-      scheduleDaily(7, () => {
-        import('./cloud/notification-handler.js').then(({ sendDailyBriefings }) => {
-          sendDailyBriefings({
-            dynamoClient: services.dynamoDb,
-            bedrockClient: services.bedrock,
-            redisClient: services.redis,
-            userPreferencesTable: services.config.userPreferencesTable,
-            modelId: services.config.llmSubagentModelId ?? 'global.anthropic.claude-sonnet-4-6',
-          }).then((results) => {
-            const sent = results.filter(r => r.status === 'sent').length;
-            const errs = results.filter(r => r.status === 'error').length;
-            log.info('Daily briefings sent', { sent, errors: errs, total: results.length });
-          }).catch((err) => {
-            log.error('Daily briefing send failed', { err });
-          });
-        }).catch((err) => {
-          log.error('Failed to import notification-handler', { err });
-        });
-      });
-      log.info('Daily briefing scheduler registered (07:00 daily)');
-    }
+    log.info('Daily briefing scheduler: SKIP | no-handler (DataGateway.invokeLlm not yet wired)');
   }
 
   log.info('NanoClaw running');
