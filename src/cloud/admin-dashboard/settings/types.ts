@@ -10,7 +10,7 @@
 // ── Setting Type Enum ──
 
 /** The data type of a setting value. */
-export type SettingType = 'string' | 'number' | 'boolean' | 'enum' | 'cron';
+export type SettingType = 'string' | 'number' | 'boolean' | 'enum' | 'cron' | 'secret';
 
 /** The source from which a setting value was resolved. */
 export type SettingSource = 'database' | 'env' | 'default';
@@ -28,7 +28,8 @@ export type SettingCategory =
     | 'notifications'
     | 'channels'
     | 'container'
-    | 'knowledge_base';
+    | 'knowledge_base'
+    | 'credentials';
 
 // ── Core Interfaces ──
 

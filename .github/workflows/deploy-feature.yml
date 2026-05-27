@@ -111,6 +111,9 @@ jobs:
           docker rm   nanoclaw-orchestrator 2>/dev/null || true
 
           echo "=== Starting new container ==="
+          # Ensure persistent dirs exist
+          mkdir -p /opt/nanoclaw-data/whatsapp /opt/nanoclaw-data/logs /opt/nanoclaw-data/db
+
           docker run -d \
             --name nanoclaw-orchestrator \
             --restart unless-stopped \
@@ -118,6 +121,10 @@ jobs:
             --user root \
             -e NANOCLAW_ENV=cloud \
             -e AWS_REGION=ap-southeast-1 \
+            -e WHATSAPP_ENABLED=true \
+            -e WHATSAPP_AUTH_DIR=/app/data/whatsapp \
+            -e DATA_BUCKET=nanoclaw-data-709609992277 \
+            -e LOG_PATH=/app/data/logs \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "\$(which docker)":/usr/local/bin/docker:ro \
             -v /opt/nanoclaw-data:/app/data \
