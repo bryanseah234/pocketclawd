@@ -109,8 +109,14 @@ describe('getLandingPageHtml — hero section', () => {
         expect(html).toContain('AI assistant');
     });
 
-    it('contains "Get Started" CTA', () => {
-        expect(html).toContain('Get Started');
+    it('contains CTA button (default pre-launch state)', () => {
+        expect(html).toContain('Get Early Access');
+    });
+
+    it('connected state shows live CTA', () => {
+        const liveHtml = getLandingPageHtml({ waConnected: true, waPhone: '6581234567' });
+        expect(liveHtml).toContain('Chat with Clawd on WhatsApp');
+        expect(liveHtml).toContain('status-live');
     });
 });
 
