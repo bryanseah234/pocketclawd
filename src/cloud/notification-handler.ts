@@ -34,7 +34,7 @@ export function generateBriefingPrompt(prefs: { technical_depth?: string; primar
     `You are a personal AI assistant delivering a morning briefing.\n` +
     `User preferences: technical_depth=${depth}, primary_domain=${domain}.\n\n` +
     `Generate a concise, engaging morning briefing (max 200 words) tailored to these preferences.\n` +
-    `Include: 1 relevant tech tip for their domain, 1 motivational thought, today\'s date.\n` +
+    `Include: 1 relevant tech tip for their domain, 1 motivational thought, today's date.\n` +
     `Match the tone to their depth preference — ${depth === 'detailed' ? 'technical and specific' : 'concise and clear'}.\n` +
     `Format for WhatsApp (use *bold* for headings, no markdown headers).`
   );

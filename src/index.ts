@@ -142,7 +142,7 @@ async function main(): Promise<void> {
         },
         reconnectWhatsApp: async () => {
           const adapter = getChannelAdapter('whatsapp');
-          if (adapter) { try { await adapter.teardown(); setWhatsAppDisconnected(); } catch { } return { success: true, message: 'Reconnecting...' }; }
+          if (adapter) { try { await adapter.teardown(); setWhatsAppDisconnected(); } catch (_e) { /* best-effort reconnect */ } return { success: true, message: 'Reconnecting...' }; }
           return { success: false, message: 'WhatsApp adapter not found' };
         },
         getSystemHealth: async () => {
