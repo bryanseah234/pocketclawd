@@ -160,6 +160,22 @@ async function main(): Promise<void> {
         getContainers: async () => ({ total: 0, containers: [] }),
         getRecentMessages: async () => ({ messages: [], totalProcessed24h: 0 }),
         getStats: async () => ({ globalMessagesPerMinute: 0, globalMessagesPerHour: 0, activeUsers: 0, topUsers: [], rateLimitHits24h: 0 }),
+        getDataStats: async () => {
+          const { getDataStats } = await import('./cloud/admin-dashboard/data-stats.js');
+          return getDataStats(services!);
+        },
+        listDocuments: async (filter) => {
+          const { listAllDocuments } = await import('./cloud/admin-dashboard/data-stats.js');
+          return listAllDocuments(services!, filter ?? 'all');
+        },
+        deleteDocument: async (documentId) => {
+          const { deleteDocument } = await import('./cloud/admin-dashboard/data-stats.js');
+          return deleteDocument(services!, documentId);
+        },
+        getIngestionSources: async () => {
+          const { getIngestionSources } = await import('./cloud/admin-dashboard/data-stats.js');
+          return getIngestionSources();
+        },
       },
     });
 

@@ -108,4 +108,51 @@ export interface DashboardDataProvider {
     getContainers(): Promise<ContainersResponse>;
     getRecentMessages(): Promise<RecentMessagesResponse>;
     getStats(): Promise<StatsResponse>;
+    getDataStats?(): Promise<DataStats>;
+    listDocuments?(filter?: 'all' | 'admin' | 'user'): Promise<DocumentsResponse>;
+    deleteDocument?(documentId: string): Promise<{ success: boolean; message: string }>;
+    getIngestionSources?(): Promise<IngestionSourceConfig[]>;
+}
+
+
+// ── Data tab: stats + documents ──
+
+export interface DataStats {
+    dynamodb: {
+        tables: Array<{ name: string; itemCount: number; sizeBytes: number }>;
+    };
+    opensearch: {
+        indexName: string;
+        documentCount: number;
+        sizeBytes: number;
+    };
+    s3: {
+        bucketName: string;
+        objectCount: number;
+        sizeBytes: number;
+    };
+}
+
+export interface DocumentEntry {
+    id: string;            // S3 key
+    filename: string;
+    sizeBytes: number;
+    uploadedAt: string;    // ISO 8601
+    uploaderType: 'admin' | 'user';
+    uploaderId: string;    // 'admin' or 'wa-<phone-hash>'
+    contentType?: string;
+}
+
+export interface DocumentsResponse {
+    documents: DocumentEntry[];
+    total: number;
+}
+
+export interface IngestionSourceConfig {
+    id: 'gmail' | 'outlook' | 'gdrive' | 'icloud' | 'file_watcher';
+    name: string;
+    enabled: boolean;
+    connected: boolean;
+    lastSync?: string;       // ISO 8601
+    docsImported?: number;
 }

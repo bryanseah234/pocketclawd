@@ -524,7 +524,101 @@
         .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
         .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
 
-        </style>
+        
+        /* ─── Data tab ───────────────────────────────────────── */
+        .stats-tile {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .stats-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .stats-value {
+            font-family: var(--font-heading, 'Playfair Display', serif);
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.1;
+            margin-bottom: 6px;
+        }
+        .stats-detail {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .stats-detail .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .doc-table th {
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-bottom: 2px solid var(--border);
+            font-weight: 600;
+        }
+        .doc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .doc-table tr:hover { background: rgba(61,43,31,0.03); }
+        .doc-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .doc-badge-admin { background: rgba(196,163,90,0.15); color: var(--accent-mustard, #C4A35A); }
+        .doc-badge-user { background: rgba(34,197,94,0.12); color: #16a34a; }
+        .doc-delete-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: #dc2626;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.15s;
+        }
+        .doc-delete-btn:hover { background: rgba(220,38,38,0.08); }
+        .doc-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ingestion-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .ingestion-row:last-child { border-bottom: none; }
+        .ingestion-name { font-weight: 500; }
+        .ingestion-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-left: 8px;
+        }
+
+</style>
 </head>
 <body>
     <div class="container">
@@ -542,7 +636,7 @@
         <nav class="tab-nav" id="tab-nav">
                         <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
             <button class="tab-btn" data-tab="whatsapp" onclick="switchTab('whatsapp')">Set Up</button>
-            <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">Documents</button>
+            <button class="tab-btn" data-tab="data" onclick="switchTab('data')">Data</button>
             <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
@@ -710,9 +804,45 @@
         </div>
         </div><!-- /tab-whatsapp -->
 
-        <div class="tab-panel" id="tab-documents">
+        <div class="tab-panel" id="tab-data">
         <div class="grid">
-            <!-- Document Upload -->
+            <!-- ─────────── Database Stats ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Database Stats</span>
+                    <button class="btn btn-outline" onclick="loadDataStats()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                </div>
+                <div class="data-stats-grid" id="data-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:16px;">
+                    <div class="stats-tile" id="stats-dynamodb">
+                        <div class="stats-label">DynamoDB</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-dynamodb-detail">Loading…</div>
+                    </div>
+                    <div class="stats-tile" id="stats-opensearch">
+                        <div class="stats-label">OpenSearch</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-opensearch-detail">Loading…</div>
+                    </div>
+                    <div class="stats-tile" id="stats-s3">
+                        <div class="stats-label">S3 Bucket</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-s3-detail">Loading…</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─────────── Ingestion Sources ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Ingestion Sources</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">Configure in Settings → Ingestion</span>
+                </div>
+                <div id="ingestion-sources" style="padding:8px 16px 16px;">
+                    <div style="color:var(--text-muted);font-size:0.85rem;">Loading sources…</div>
+                </div>
+            </div>
+
+            <!-- ─────────── Document Upload (existing) ─────────── -->
             <div class="card card-full">
                 <div class="card-header">
                     <span class="card-title">Document Upload</span>
@@ -725,26 +855,34 @@
                     <div class="upload-text">Drag &amp; drop files here, or click to select</div>
                     <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
                 </div>
-                <!-- Corporate toggle (data-isolation-corporate-docs req 6.1, 6.4) -->
                 <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:rgba(61,43,31,0.05);border-radius:6px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
-                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true"
-                               data-testid="corporate-toggle"
-                               style="width:16px;height:16px;cursor:pointer;">
-                        <span>Make available to <strong>all users</strong> (corporate document)</span>
+                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true" data-testid="corporate-toggle">
+                        <span>Mark as corporate document (visible to all users)</span>
                     </label>
-                    <div id="target-user-row" style="margin-top:8px;">
-                        <label style="font-size:0.85rem;color:var(--text-muted);" for="target-user-id">Target user (phone number):</label>
-                        <input type="text" id="target-user-id" name="targetUserId"
-                               data-testid="target-user-id"
-                               placeholder="e.g. 6281234567890"
-                               style="width:100%;margin-top:4px;padding:6px;background:rgba(255,255,255,0.6);border:1px solid var(--border);border-radius:4px;color:inherit;font-size:0.9rem;">
+                </div>
+                <div id="upload-list" style="margin-top:12px;"></div>
+            </div>
+
+            <!-- ─────────── Documents (with delete) ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Documents</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select id="doc-filter" onchange="loadDocuments()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;">
+                            <option value="all">All sources</option>
+                            <option value="admin">Admin uploads</option>
+                            <option value="user">User uploads</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="loadDocuments()" style="padding:6px 12px;font-size:0.8rem;">↻</button>
                     </div>
                 </div>
-                <div class="upload-list" id="upload-list"></div>
+                <div id="documents-table" style="padding:8px 16px 16px;overflow-x:auto;">
+                    <div style="color:var(--text-muted);font-size:0.85rem;">Loading documents…</div>
+                </div>
             </div>
         </div>
-        </div><!-- /tab-overview -->
+    </div><!-- /tab-overview -->
         </div>
         </div><!-- /tab-documents -->
 
@@ -1257,6 +1395,160 @@
         });
     }
 
+
+
+        // ─── Data tab: stats / documents / ingestion ───────────────────────
+        function fmtBytes(n) {
+            if (n == null || n < 0) return '—';
+            const u = ['B','KB','MB','GB','TB'];
+            let i = 0;
+            while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+            return n.toFixed(n < 10 && i > 0 ? 1 : 0) + ' ' + u[i];
+        }
+        function fmtNum(n) {
+            if (n == null || n < 0) return '—';
+            return n.toLocaleString();
+        }
+        function fmtRelTime(iso) {
+            try {
+                const d = new Date(iso); const s = (Date.now() - d.getTime())/1000;
+                if (s < 60) return Math.floor(s) + 's ago';
+                if (s < 3600) return Math.floor(s/60) + 'm ago';
+                if (s < 86400) return Math.floor(s/3600) + 'h ago';
+                return Math.floor(s/86400) + 'd ago';
+            } catch (_e) { return iso || '—'; }
+        }
+
+        async function loadDataStats() {
+            try {
+                const r = await fetch('/admin/api/data/stats', { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                const ddb = document.getElementById('stats-dynamodb');
+                const ddbDet = document.getElementById('stats-dynamodb-detail');
+                let totalItems = 0, totalSize = 0;
+                for (const t of (data.dynamodb?.tables || [])) {
+                    if (t.itemCount > 0) totalItems += t.itemCount;
+                    if (t.sizeBytes > 0) totalSize += t.sizeBytes;
+                }
+                ddb.querySelector('.stats-value').textContent = fmtNum(totalItems) + ' items';
+                ddbDet.innerHTML = (data.dynamodb?.tables || []).map(t =>
+                    '<div class="stats-row"><span>' + t.name.replace('nanoclaw-','') + '</span><span>' + fmtNum(t.itemCount) + ' / ' + fmtBytes(t.sizeBytes) + '</span></div>'
+                ).join('') + '<div class="stats-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:6px;"><span><strong>Total size</strong></span><span>' + fmtBytes(totalSize) + '</span></div>';
+
+                const os = document.getElementById('stats-opensearch');
+                const osDet = document.getElementById('stats-opensearch-detail');
+                os.querySelector('.stats-value').textContent = fmtNum(data.opensearch?.documentCount ?? 0) + ' docs';
+                osDet.innerHTML =
+                    '<div class="stats-row"><span>Index</span><span>' + (data.opensearch?.indexName ?? '—') + '</span></div>' +
+                    '<div class="stats-row"><span>Size</span><span>' + fmtBytes(data.opensearch?.sizeBytes ?? 0) + '</span></div>';
+
+                const s3 = document.getElementById('stats-s3');
+                const s3Det = document.getElementById('stats-s3-detail');
+                s3.querySelector('.stats-value').textContent = fmtNum(data.s3?.objectCount ?? 0) + ' files';
+                s3Det.innerHTML =
+                    '<div class="stats-row"><span>Bucket</span><span style="font-size:0.7rem;">' + (data.s3?.bucketName ?? '—') + '</span></div>' +
+                    '<div class="stats-row"><span>Total size</span><span>' + fmtBytes(data.s3?.sizeBytes ?? 0) + '</span></div>';
+            } catch (e) {
+                console.error('loadDataStats failed', e);
+                ['stats-dynamodb-detail','stats-opensearch-detail','stats-s3-detail'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '<span style="color:#dc2626;">Failed: ' + (e.message || e) + '</span>';
+                });
+            }
+        }
+
+        async function loadDocuments() {
+            const filterSel = document.getElementById('doc-filter');
+            const filter = filterSel ? filterSel.value : 'all';
+            const tbl = document.getElementById('documents-table');
+            tbl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">Loading…</div>';
+            try {
+                const r = await fetch('/admin/api/data/documents?filter=' + encodeURIComponent(filter), { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                if (!data.documents || data.documents.length === 0) {
+                    tbl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">No documents.</div>';
+                    return;
+                }
+                let html = '<table class="doc-table"><thead><tr><th>Name</th><th>Source</th><th>Uploaded</th><th>Size</th><th></th></tr></thead><tbody>';
+                for (const d of data.documents) {
+                    const badge = d.uploaderType === 'admin'
+                        ? '<span class="doc-badge doc-badge-admin">Admin</span>'
+                        : '<span class="doc-badge doc-badge-user">' + d.uploaderId.replace(/^wa-/, '') + '</span>';
+                    const safeId = encodeURIComponent(d.id);
+                    html += '<tr>' +
+                        '<td style="font-weight:500;">' + escapeHtml(d.filename) + '</td>' +
+                        '<td>' + badge + '</td>' +
+                        '<td title="' + escapeHtml(d.uploadedAt) + '">' + fmtRelTime(d.uploadedAt) + '</td>' +
+                        '<td>' + fmtBytes(d.sizeBytes) + '</td>' +
+                        '<td><button class="doc-delete-btn" onclick="deleteDocument(\''+safeId+'\',\''+escapeHtml(d.filename).replace(/\'/g,"\\\'")+'\')">Delete</button></td>' +
+                        '</tr>';
+                }
+                html += '</tbody></table>';
+                tbl.innerHTML = html;
+            } catch (e) {
+                console.error('loadDocuments failed', e);
+                tbl.innerHTML = '<div style="color:#dc2626;padding:16px;">Failed to load: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+        }
+
+        async function deleteDocument(documentId, filename) {
+            if (!confirm('Delete "' + decodeURIComponent(filename) + '"?\n\nThis will remove it from S3 and OpenSearch. Cannot be undone.')) return;
+            try {
+                const r = await fetch('/admin/api/data/documents/' + documentId, { method: 'DELETE', credentials: 'include' });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.message || data.error || 'Delete failed');
+                await loadDocuments();
+                await loadDataStats();
+            } catch (e) {
+                console.error('deleteDocument failed', e);
+                alert('Delete failed: ' + (e.message || e));
+            }
+        }
+
+        async function loadIngestionSources() {
+            const el = document.getElementById('ingestion-sources');
+            try {
+                const r = await fetch('/admin/api/data/ingestion-sources', { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                if (!data.sources || data.sources.length === 0) {
+                    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No ingestion sources configured.</div>';
+                    return;
+                }
+                el.innerHTML = data.sources.map(s => {
+                    const status = s.connected ? 'Connected' : (s.enabled ? 'Enabled (not connected)' : 'Disabled');
+                    const statusColor = s.connected ? '#16a34a' : (s.enabled ? '#C4A35A' : 'var(--text-muted)');
+                    return '<div class="ingestion-row">' +
+                        '<div><span class="ingestion-name">' + escapeHtml(s.name) + '</span>' +
+                        '<span class="ingestion-status" style="color:' + statusColor + ';">' + status + '</span></div>' +
+                        '<div style="font-size:0.75rem;color:var(--text-muted);">' +
+                        (s.lastSync ? 'Last sync: ' + fmtRelTime(s.lastSync) : 'Never synced') +
+                        (s.docsImported != null ? ' • ' + fmtNum(s.docsImported) + ' imported' : '') +
+                        '</div></div>';
+                }).join('');
+            } catch (e) {
+                console.error('loadIngestionSources failed', e);
+                el.innerHTML = '<div style="color:#dc2626;font-size:0.85rem;">Failed to load: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        // Auto-load when Data tab is opened
+        (function attachDataTabHook() {
+            const tabBtn = document.querySelector('[data-tab="data"]');
+            if (tabBtn) {
+                tabBtn.addEventListener('click', () => {
+                    loadDataStats();
+                    loadDocuments();
+                    loadIngestionSources();
+                });
+            }
+        })();
 </script>
 </body>
 </html>

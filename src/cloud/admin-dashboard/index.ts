@@ -621,6 +621,63 @@ export async function handleAdminRequest(
         }
 
 
+        // ── GET /admin/api/data/stats — DynamoDB / OpenSearch / S3 size + counts ──
+        if (path === '/admin/api/data/stats' && method === 'GET') {
+            try {
+                if (!config!.provider.getDataStats) { sendJson(res, { error: 'not implemented' }, 501); return true; }
+                const stats = await config!.provider.getDataStats();
+                sendJson(res, stats);
+            } catch (err) {
+                log.error('Admin /api/data/stats error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // ── GET /admin/api/data/documents — list with optional ?filter=all|admin|user ──
+        if (path === '/admin/api/data/documents' && method === 'GET') {
+            try {
+                if (!config!.provider.listDocuments) { sendJson(res, { error: 'not implemented' }, 501); return true; }
+                const url = new URL(req.url ?? '/', 'http://localhost');
+                const filterRaw = url.searchParams.get('filter') ?? 'all';
+                const filter = (['all', 'admin', 'user'].includes(filterRaw) ? filterRaw : 'all') as 'all' | 'admin' | 'user';
+                const docs = await config!.provider.listDocuments(filter);
+                sendJson(res, docs);
+            } catch (err) {
+                log.error('Admin /api/data/documents error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // ── DELETE /admin/api/data/documents/:id — delete from S3 + OpenSearch ──
+        if (path.startsWith('/admin/api/data/documents/') && method === 'DELETE') {
+            try {
+                if (!config!.provider.deleteDocument) { sendJson(res, { error: 'not implemented' }, 501); return true; }
+                const documentId = decodeURIComponent(path.substring('/admin/api/data/documents/'.length));
+                if (!documentId) { sendJson(res, { error: 'document id required' }, 400); return true; }
+                const result = await config!.provider.deleteDocument(documentId);
+                sendJson(res, result, result.success ? 200 : 500);
+            } catch (err) {
+                log.error('Admin /api/data/documents DELETE error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // ── GET /admin/api/data/ingestion-sources ──
+        if (path === '/admin/api/data/ingestion-sources' && method === 'GET') {
+            try {
+                if (!config!.provider.getIngestionSources) { sendJson(res, { sources: [] }); return true; }
+                const sources = await config!.provider.getIngestionSources();
+                sendJson(res, { sources });
+            } catch (err) {
+                log.error('Admin /api/data/ingestion-sources error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
         // POST /admin/api/whatsapp/reconnect
         if (path === '/admin/api/whatsapp/reconnect' && method === 'POST') {
             const result = await config!.provider.reconnectWhatsApp();
