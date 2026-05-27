@@ -97,8 +97,8 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Test fail-open returns `is_new_user: True` on Redis timeout
     - _Requirements: 1.1, 9.2, 9.3, 9.4_
 
-- [ ] 5. Implement Discovery Phase skill
-  - [-] 5.1 Create the Discovery Phase skill module
+- [x] 5. Implement Discovery Phase skill
+  - [x] 5.1 Create the Discovery Phase skill module
     - Create `src/persona/discovery_skill.py` in the sub-agent codebase
     - Implement the discovery flow as a skill (similar to existing `welcome` skill pattern)
     - When activated, inject discovery phase instructions into the system prompt context so Claude asks exactly two questions: technical depth preference and primary domain
@@ -108,7 +108,7 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - After preferences stored, acknowledge naturally and answer the user's original question in the same response
     - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-  - [~] 5.2 Write unit tests for Discovery Phase skill
+  - [x] 5.2 Write unit tests for Discovery Phase skill
     - Test discovery questions are exactly two (technical depth + primary domain)
     - Test valid responses trigger preference storage
     - Test invalid enum values trigger re-ask
@@ -143,8 +143,8 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
 - [~] 7. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Implement Threaded Reply Routing
-  - [~] 8.1 Implement threaded reply parsing and routing in agent-runner
+- [x] 8. Implement Threaded Reply Routing
+  - [x] 8.1 Implement threaded reply parsing and routing in agent-runner
     - Extend the agent-runner's poll loop to handle batched inbound messages
     - Instruct Claude (via system prompt) to delimit responses per inbound message using a structured delimiter format
     - Implement response parser that splits Claude's multi-response output and maps each segment to its source message ID via `inReplyTo`
@@ -152,46 +152,46 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Handle edge case: single inbound message produces single response without delimiters
     - _Requirements: 3.1, 3.2_
 
-  - [~] 8.2 Write property test for threaded reply mapping
+  - [x] 8.2 Write property test for threaded reply mapping
     - **Property 3: Threaded reply maps responses to source messages**
     - For any batch of N distinct inbound messages (N ≥ 1), the system produces exactly N outbound responses, each with an `inReplyTo` matching its corresponding inbound message ID, with no duplicates and no orphans
     - Use `fast-check` to generate arbitrary message batches
     - **Validates: Requirements 3.1, 3.2**
 
-  - [~] 8.3 Write unit tests for threaded reply routing
+  - [x] 8.3 Write unit tests for threaded reply routing
     - Test single message produces single response without delimiters
     - Test batch of 3 messages produces 3 threaded responses with correct `inReplyTo` mapping
     - Test malformed delimiter output falls back to single response
     - _Requirements: 3.1, 3.2_
 
-- [ ] 9. Wire session initialization flow
-  - [~] 9.1 Integrate Preference Probe into session initialization
+- [x] 9. Wire session initialization flow
+  - [x] 9.1 Integrate Preference Probe into session initialization
     - Modify the agent-runner's session initialization to call `probe_user_preferences` before invoking Claude
     - Based on `UserPersonaContext.is_new_user`, inject either discovery phase context or returning-user context (with stored preferences) into the system prompt
     - For returning users, include `technical_depth` and `primary_domain` in the prompt context so Claude applies them silently
     - _Requirements: 1.1, 2.1, 2.2, 2.3, 9.2, 9.3, 9.4_
 
-  - [~] 9.2 Integrate system prompt hot-reload into session initialization
+  - [x] 9.2 Integrate system prompt hot-reload into session initialization
     - Call the system prompt loader at session start; reload if cached template is stale (TTL expired)
     - Assemble final system prompt from template sections + runtime addendum + user persona context
     - _Requirements: 10.4_
 
-  - [~] 9.3 Integrate escalation tracking into message processing loop
+  - [x] 9.3 Integrate escalation tracking into message processing loop
     - Add resolution outcome tracking (success/failure) per message in the session
     - Wire the consecutive failure counter to trigger `log_escalation` when threshold is reached
     - Wire unknown-domain and compliance-sensitive detection to trigger escalation
     - On escalation, send user-facing message and exit session loop
     - _Requirements: 7.1, 7.2, 7.3, 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [~] 9.4 Write integration tests for session initialization flow
+  - [x] 9.4 Write integration tests for session initialization flow
     - Test new user flow: message → preference probe returns null → discovery phase activates → preferences stored → next message skips discovery
     - Test returning user flow: message → preference probe returns preferences → context-aware greeting without discovery
     - Test escalation flow: simulate 3 consecutive failures → escalation event logged → user informed
     - Test hot-reload: update template in Secrets Manager → next session uses updated prompt
     - _Requirements: 1.1, 2.1, 8.1, 10.4_
 
-- [ ] 10. Create the system prompt template content
-  - [~] 10.1 Author the system prompt template sections
+- [x] 10. Create the system prompt template content
+  - [x] 10.1 Author the system prompt template sections
     - Write the `identity` section: Clawd's name, role as senior specialist, personality baseline, conversational tone
     - Write the `onboarding` section: discovery phase instructions, two-question template, preference acknowledgment script
     - Write the `responseStyle` section: conciseness rules, numbered lists for choices, source citation format, anticipate-next-step behavior
@@ -202,7 +202,7 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Store as JSON in AWS Secrets Manager under `nanoclaw/app-config` → `systemPromptTemplate` key
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 7.1, 7.2, 7.3, 10.1, 10.2, 10.3_
 
-- [~] 11. Final checkpoint - Ensure all tests pass
+- [x] 11. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

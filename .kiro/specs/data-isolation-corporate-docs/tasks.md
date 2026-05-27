@@ -114,14 +114,14 @@ This plan implements corporate document support in the NanoClaw DataGateway, ena
 - [x] 5. Checkpoint — Backend complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [~] 6. Admin Dashboard — corporate toggle UI
-  - [~] 6.1 Add corporate toggle to upload form HTML
+- [x] 6. Admin Dashboard — corporate toggle UI
+  - [x] 6.1 Add corporate toggle to upload form HTML
     - Modify `src/cloud/admin-dashboard/html.ts` to add a "Make available to all users" toggle on the document upload form
     - Default the toggle to disabled (user-specific) position
     - When toggle is disabled, display a user selection field
     - _Requirements: 6.1, 6.4_
 
-  - [~] 6.2 Implement corporate toggle upload logic
+  - [x] 6.2 Implement corporate toggle upload logic
     - Modify `src/cloud/admin-dashboard/index.ts` upload handler:
       - When toggle enabled: set `userId = 'CORPORATE'` and `s3Key = corporate/{uploadId}/{filename}` in upload metadata
       - When toggle disabled: set `userId` to selected user's identifier
@@ -129,7 +129,7 @@ This plan implements corporate document support in the NanoClaw DataGateway, ena
     - Set `corporate: true/false` flag in the Redis queue message
     - _Requirements: 6.2, 6.3, 6.5_
 
-  - [~] 6.3 Write unit tests for Admin Dashboard corporate toggle
+  - [x] 6.3 Write unit tests for Admin Dashboard corporate toggle
     - Add tests to `src/cloud/admin-dashboard/admin-dashboard.test.ts`:
       - HTML contains corporate toggle element (Req 6.1)
       - Toggle defaults to disabled (Req 6.4)
@@ -156,21 +156,21 @@ This plan implements corporate document support in the NanoClaw DataGateway, ena
     - Test router strips other users' content from context (Req 5.2, 5.3)
     - _Requirements: 5.2, 5.3, 5.5_
 
-- [~] 8. Integration wiring and final validation
-  - [~] 8.1 Wire all components together end-to-end
+- [x] 8. Integration wiring and final validation
+  - [x] 8.1 Wire all components together end-to-end
     - Ensure the Admin Dashboard → Upload Worker → DataGateway Worker → DataGateway flow works for corporate uploads
     - Ensure the Sub-Agent → DataGateway Worker → DataGateway hybrid search returns corporate + user docs
     - Verify the `origin` field is correctly propagated through the Redis queue messages
     - _Requirements: 1.1, 2.1, 7.1_
 
-  - [~] 8.2 Write integration tests for corporate document lifecycle
+  - [x] 8.2 Write integration tests for corporate document lifecycle
     - Add to `src/cloud/integration-tests/`:
       - End-to-end corporate upload → search inclusion test
       - PDPA deletion leaves corporate docs intact
       - Sub-agent cannot index CORPORATE documents
     - _Requirements: 1.1, 2.1, 7.2, 8.2_
 
-- [~] 9. Final checkpoint — All tests pass
+- [x] 9. Final checkpoint — All tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
