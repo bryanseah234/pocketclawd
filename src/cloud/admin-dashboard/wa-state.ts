@@ -4,10 +4,11 @@
  */
 import http from 'node:http';
 
-let _provider: (() => { status: string; phoneNumber?: string | null; [key: string]: unknown }) | null = null;
+interface WaStateMin { status: string; phoneNumber?: string | null; }
+let _provider: (() => WaStateMin) | null = null;
 
 export function registerWaStateProvider(
-    fn: () => { status: string; phoneNumber?: string | null; [key: string]: unknown },
+    fn: () => WaStateMin,
 ): void {
     _provider = fn;
 }

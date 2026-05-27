@@ -170,15 +170,6 @@ function renderInput(s: CategoryGroup['settings'][number]): string {
             return `<div style="position:relative"><input type="password" id="${esc(id)}" class="setting-input" data-key="${esc(def.key)}" value="${esc(s.value)}" autocomplete="new-password" oninput="onSettingChange('${esc(def.key)}', this.value)"><button type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Show':'Hide'" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:#888;font-size:11px">Show</button></div>`;
 
 
-        case 'secret':
-
-
-
-            return `<div style="position:relative"><input type="password" id="${esc(id)}" class="setting-input" data-key="${esc(def.key)}" value="${esc(s.value)}" autocomplete="new-password" oninput="onSettingChange('${esc(def.key)}', this.value)"><button type="button" onclick="var i=this.previousElementSibling;i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'Show':'Hide'" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:#888;font-size:11px">Show</button></div>`;
-
-
-
-
         case 'string':
         default:
             return `
