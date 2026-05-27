@@ -150,6 +150,8 @@ The container is a **stateless worker** that clocks in when needed and clocks ou
 
 ## Auth Configuration
 
+> **Note (2026-05-27):** PocketClaw now exists in two forms — the original single-user Windows host (described below) and a multi-user AWS deployment that uses **AWS Bedrock** for the LLM. The Bedrock path is documented in [`AWS-DEPLOYMENT.md`](./AWS-DEPLOYMENT.md) and [`aws-resource-inventory.md`](./aws-resource-inventory.md). This section describes the host-mode subscription path.
+
 PocketClaw uses the **Claude Code subscription** path that ships with NanoClaw v2. The agent container talks to `api.anthropic.com` through the OneCLI proxy; OneCLI injects credentials at request time so no API key is passed in env vars or chat context.
 
 First-time auth: when the host spawns the first agent container, run `claude /login` inside that container (or use the OneCLI web UI at `http://127.0.0.1:10254`). After that the credentials persist in the OneCLI vault and are reused on every subsequent container.
@@ -157,7 +159,7 @@ First-time auth: when the host spawns the first agent container, run `claude /lo
 What this arch does **not** use:
 
 - `ANTHROPIC_API_KEY` env var (subscription handles auth)
-- `CLAUDE_CODE_USE_BEDROCK`, `AWS_*` env vars (Bedrock removed in the knowledge re-arch)
+- `CLAUDE_CODE_USE_BEDROCK`, `AWS_*` env vars (host mode only — the AWS cloud deployment uses Bedrock natively, see [`AWS-DEPLOYMENT.md`](./AWS-DEPLOYMENT.md))
 - `scripts/refresh-bedrock-creds.ps1` (deleted)
 - `PocketClaw-RefreshBedrock` Windows Task Scheduler entry (delete it; it has nothing to refresh)
 

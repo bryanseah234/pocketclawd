@@ -39,7 +39,17 @@ export interface NanoClawCloudConfig {
     };
     // LLM
     llm?: {
+        /**
+         * Default / orchestrator model — used for high-reasoning calls and
+         * fallback when no surface-specific model is set. Typically Opus.
+         */
         modelId?: string;
+        /**
+         * Sub-agent (per-user worker) model — used for the high-volume
+         * Bedrock InvokeModel calls in container/sub-agent. Typically Sonnet.
+         * Falls back to `modelId` if unset.
+         */
+        subagentModelId?: string;
         region?: string;
     };
     // ECR
@@ -176,6 +186,9 @@ export class SecretsLoader {
             },
             llm: {
                 modelId: raw.llm_model_id as string | undefined,
+                subagentModelId:
+                    (raw.llm_subagent_model_id as string | undefined) ??
+                    (raw.llm_model_id as string | undefined),
                 region: raw.llm_region as string | undefined,
             },
             ecr: {

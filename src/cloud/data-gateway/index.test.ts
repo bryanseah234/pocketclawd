@@ -13,21 +13,21 @@ const { mockSend } = vi.hoisted(() => ({
 }));
 
 vi.mock('@aws-sdk/client-dynamodb', () => ({
-    DynamoDBClient: vi.fn().mockImplementation(() => ({})),
+    DynamoDBClient: vi.fn(function () { return {}; }),
 }));
 
 vi.mock('@aws-sdk/lib-dynamodb', () => ({
     DynamoDBDocumentClient: {
         from: vi.fn().mockReturnValue({ send: mockSend }),
     },
-    PutCommand: vi.fn().mockImplementation((input) => ({ _input: input, _type: 'Put' })),
-    QueryCommand: vi.fn().mockImplementation((input) => ({ _input: input, _type: 'Query' })),
-    GetCommand: vi.fn().mockImplementation((input) => ({ _input: input, _type: 'Get' })),
-    DeleteCommand: vi.fn().mockImplementation((input) => ({ _input: input, _type: 'Delete' })),
+    PutCommand: vi.fn(function (input) { return ({ _input: input, _type: 'Put' }); }),
+    QueryCommand: vi.fn(function (input) { return ({ _input: input, _type: 'Query' }); }),
+    GetCommand: vi.fn(function (input) { return ({ _input: input, _type: 'Get' }); }),
+    DeleteCommand: vi.fn(function (input) { return ({ _input: input, _type: 'Delete' }); }),
 }));
 
 vi.mock('@aws-sdk/client-s3', () => ({
-    S3Client: vi.fn().mockImplementation(() => ({})),
+    S3Client: vi.fn(function () { return {}; }),
     PutObjectCommand: vi.fn(),
     GetObjectCommand: vi.fn(),
     ListObjectsV2Command: vi.fn(),
@@ -44,7 +44,7 @@ vi.mock('@aws-sdk/client-secrets-manager', () => ({
 }));
 
 vi.mock('@opensearch-project/opensearch', () => ({
-    Client: vi.fn().mockImplementation(() => ({})),
+    Client: vi.fn(function () { return {}; }),
 }));
 
 vi.mock('@opensearch-project/opensearch/aws', () => ({

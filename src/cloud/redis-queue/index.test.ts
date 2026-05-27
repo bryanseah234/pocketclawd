@@ -42,6 +42,7 @@ const { mockRedisInstance, mockBlockingRedisInstance, MockRedis } = vi.hoisted((
 
 vi.mock('ioredis', () => ({
     default: MockRedis,
+    Redis: MockRedis,
 }));
 
 // Import after mocks

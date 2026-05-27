@@ -20,6 +20,12 @@ export interface UserPreferences {
     slideTemplate: 'Corporate' | 'Modern' | 'Elegant' | 'Informative';
     consentGiven: boolean;
     consentTimestamp?: string; // ISO 8601
+
+    // Persona fields (discovery phase preferences)
+    technical_depth?: 'detailed' | 'high-level';
+    primary_domain?: 'frontend' | 'infrastructure' | 'data';
+    discoveryCompleted?: boolean;
+    discoveryCompletedAt?: string; // ISO 8601
 }
 
 export interface TokenValidation {
@@ -135,6 +141,12 @@ export interface IDataGateway {
 
     // OpenSearch operations
     indexDocument(userId: string, chunk: DocumentChunk): Promise<void>;
+    /**
+     * Index a document chunk with the CORPORATE sentinel userId.
+     * Reserved for the Upload Worker only — sub-agents must not call this directly.
+     * Requirements: 1.1, 7.1
+     */
+    indexCorporateDocument(chunk: DocumentChunk): Promise<void>;
     hybridSearch(userId: string, query: string, vector: number[], topK: number): Promise<SearchResult[]>;
     deleteUserDocuments(userId: string, filename?: string): Promise<void>;
 

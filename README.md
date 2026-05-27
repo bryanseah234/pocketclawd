@@ -139,7 +139,8 @@ Copy-Item .env.example .env
 # then edit .env — at minimum fill in:
 #   TELEGRAM_BOT_TOKEN=...
 #   TELEGRAM_ALLOWED_CHAT_ID=...
-#   (Claude is auth'd through the Claude Code subscription path - no API key in .env)
+#   (For local host-mode: Claude is auth'd through the Claude Code subscription path - no API key in .env.
+#    For AWS Bedrock deployment: see docs/AWS-DEPLOYMENT.md - the agent uses bedrock-runtime in ap-southeast-1.)
 # and update the path env-vars to point at your data drive (see "Where data lives")
 
 # 4. Create your data root

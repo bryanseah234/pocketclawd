@@ -455,6 +455,44 @@ export function getDashboardHtml(): string {
             font-size: 0.85rem;
         }
 
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
         @media (max-width: 768px) {
             .grid { grid-template-columns: 1fr; }
             .container { padding: 16px; }
@@ -475,6 +513,12 @@ export function getDashboardHtml(): string {
             </div>
         </header>
 
+        <nav class="tab-nav" id="tab-nav">
+            <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+            <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+        </nav>
+
+        <div class="tab-panel active" id="tab-overview">
         <div class="grid">
             <!-- WhatsApp QR Code / Status -->
             <div class="card">
@@ -606,6 +650,11 @@ export function getDashboardHtml(): string {
                 <div class="upload-list" id="upload-list"></div>
             </div>
         </div>
+        </div><!-- /tab-overview -->
+
+        <div class="tab-panel" id="tab-settings">
+            <!-- Settings panel content injected server-side -->
+        </div>
     </div>
 
     <div class="toast" id="toast"></div>
@@ -615,6 +664,25 @@ export function getDashboardHtml(): string {
         let eventSource = null;
         let qrState = null;
         let qrCountdownInterval = null;
+
+        // Expose eventSource on window for cross-panel SSE listeners (e.g. settings panel)
+        Object.defineProperty(window, 'eventSource', {
+            get() { return eventSource; },
+            set(v) { eventSource = v; },
+            configurable: true,
+        });
+
+        // ── Tab Navigation ──
+        function switchTab(tabId) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabId);
+            });
+            // Update tab panels
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+            });
+        }
 
         // ── SSE Connection ──
         function connectSSE() {

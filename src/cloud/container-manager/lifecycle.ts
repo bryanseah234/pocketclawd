@@ -40,6 +40,8 @@ interface ContainerConfig {
     redisPassword?: string;
     /** AWS region */
     awsRegion: string;
+    /** Bedrock model id for the sub-agent (per-user worker). Typically Sonnet. */
+    bedrockLlmModelId?: string;
 }
 
 interface ManagedContainer {
@@ -70,6 +72,8 @@ export function initContainerManager(services: CloudServices): void {
         redisPort: cloudConfig.redis.port,
         redisPassword: cloudConfig.redis.password,
         awsRegion: 'ap-southeast-1',
+        // Sub-agent (per-user worker) model. Falls back to llm.modelId in the secret parser.
+        bedrockLlmModelId: cloudConfig.llm?.subagentModelId ?? cloudConfig.llm?.modelId,
     };
 
     // Sweep for idle containers every 60s
@@ -143,6 +147,9 @@ async function spawnContainer(userId: string): Promise<string> {
         `-e AWS_REGION=${config.awsRegion}`,
         `-e QUEUE_POLL_TIMEOUT=5`,
     ];
+    if (config.bedrockLlmModelId) {
+        envArgs.push(`-e BEDROCK_LLM_MODEL_ID=${config.bedrockLlmModelId}`);
+    }
     if (config.redisPassword) {
         envArgs.push(`-e REDIS_PASSWORD=${config.redisPassword}`);
     }

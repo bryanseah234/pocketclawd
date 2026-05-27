@@ -368,7 +368,23 @@ The agent container talks to the host-side `KnowledgeBase` through five MCP tool
 
 ### Claude provider
 
-PocketClaw uses the **Claude Code subscription** path (nanoclaw default). Bedrock is removed: no `CLAUDE_CODE_USE_BEDROCK`, no AWS env vars, no `aws bedrock-runtime` shell-outs. The wiki-regen and morning-digest crons are currently host-side no-ops (audit log: `SKIP | no-provider` / `SKIP | no-handler`); re-wiring them through the agent container is a follow-on project.
+**Active deployment: AWS Bedrock in `ap-southeast-1`.** PocketClaw is deployed on AWS as a multi-user WhatsApp AI assistant. Bedrock is the runtime LLM provider; the agent calls Claude (Sonnet/Haiku/Opus 4.x) via `bedrock-runtime` and Titan v2 for embeddings. See [`docs/AWS-DEPLOYMENT.md`](docs/AWS-DEPLOYMENT.md) for the full procedure and [`docs/aws-resource-inventory.md`](docs/aws-resource-inventory.md) for live resource names.
+
+Live resources (account `709609992277`, region `ap-southeast-1`):
+- DynamoDB: `nanoclaw-chat-messages`, `nanoclaw-user-preferences`, `nanoclaw-system-errors`, `nanoclaw-webhook-tokens`
+- S3: `nanoclaw-data-709609992277`
+- OpenSearch Serverless: collection `nanoclaw-documents`
+- ElastiCache Redis: `nanoclaw-redis` (7.1.0) at `nanoclaw-redis.sipa0z.0001.apse1.cache.amazonaws.com:6379`
+- Secrets Manager: `nanoclaw/app-config` (LLM model id, embedding model, infra refs, rate limits)
+- ECR: `nanoclaw/orchestrator`, `nanoclaw/agent` (`latest` published, plus per-commit SHA tags)
+
+All runtime config (model id, table names, endpoints, limits) is read from `nanoclaw/app-config` — do **not** hard-code values; resolve them at boot via `secretsmanager:GetSecretValue`. The Kiro spec at `.kiro/specs/nanoclaw-aws-deployment/` is the source of truth for the architecture; the corresponding code lives under `src/cloud/`.
+
+**Legacy / future-option providers:**
+- The original NanoClaw v2 Claude Code subscription path is still functional for local-host runs but is no longer the deployed surface.
+- An **Azure** variant of the same architecture (Cosmos DB, AI Search, gpt-4o, Blob Storage) is documented in `nanoclaw-prd.html` as a future build option — kept intentionally as a parallel reference, not the active target.
+
+The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provider` / `SKIP | no-handler`; re-wiring them through the AWS Bedrock agent container is a follow-on project.
 
 ### Skills installed for PocketClaw
 

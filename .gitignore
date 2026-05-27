@@ -225,3 +225,6 @@ _q*.cjs
 .claude/settings.json
 .claude/scheduled_tasks.lock
 
+
+# Hermes local agent context (never commit)
+.hermes/

@@ -260,6 +260,10 @@ export class DataGateway implements IDataGateway {
             slideTemplate: result.Item.slideTemplate as UserPreferences['slideTemplate'],
             consentGiven: result.Item.consentGiven as boolean,
             consentTimestamp: result.Item.consentTimestamp as string | undefined,
+            technical_depth: result.Item.technical_depth as UserPreferences['technical_depth'],
+            primary_domain: result.Item.primary_domain as UserPreferences['primary_domain'],
+            discoveryCompleted: result.Item.discoveryCompleted as boolean | undefined,
+            discoveryCompletedAt: result.Item.discoveryCompletedAt as string | undefined,
         };
     }
 

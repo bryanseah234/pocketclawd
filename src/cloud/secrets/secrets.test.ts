@@ -71,10 +71,27 @@ describe('SecretsLoader', () => {
             expect(config.openSearch.endpoint).toBe('https://search.example.com');
             expect(config.openSearch.indexName).toBe('prod-documents');
             expect(config.s3.dataBucket).toBe('prod-nanoclaw-data');
-            expect(config.llm?.modelId).toBe('anthropic.claude-3-5-sonnet');
+            expect(config.llm?.modelId).toBe('anthropic.claude-3-5-sonnet');
+            // Sub-agent model falls back to llm_model_id when llm_subagent_model_id is not set
+            expect(config.llm?.subagentModelId).toBe('anthropic.claude-3-5-sonnet');
             expect(config.ecr?.registryUrl).toBe('123456789.dkr.ecr.ap-southeast-1.amazonaws.com');
         });
 
+        it('uses llm_subagent_model_id when explicitly set', async () => {
+            mockSend.mockResolvedValueOnce({
+                SecretString: JSON.stringify({
+                    llm_model_id: 'anthropic.claude-opus-4-7',
+                    llm_subagent_model_id: 'anthropic.claude-sonnet-4-6',
+                }),
+            });
+
+            const loader = new SecretsLoader();
+            const config = await loader.loadConfig();
+
+            expect(config.llm?.modelId).toBe('anthropic.claude-opus-4-7');
+            expect(config.llm?.subagentModelId).toBe('anthropic.claude-sonnet-4-6');
+        });
+
         it('uses default values when fields are missing', async () => {
             mockSend.mockResolvedValueOnce({
                 SecretString: JSON.stringify({}),

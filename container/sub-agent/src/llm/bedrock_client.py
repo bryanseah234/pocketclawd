@@ -13,6 +13,7 @@ Requirements: REQ-3.1
 import asyncio
 import json
 import logging
+import os
 import time
 from collections import deque
 from enum import Enum
@@ -244,6 +245,10 @@ class BedrockClient:
         boto_client: Any = None,
     ) -> None:
         self.region = region
+        # Honour env override for the deployed model when caller did not pass an explicit one.
+        env_model = os.environ.get("BEDROCK_LLM_MODEL_ID")
+        if model_id == DEFAULT_MODEL_ID and env_model:
+            model_id = env_model
         self.model_id = model_id
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 

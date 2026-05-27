@@ -21,6 +21,10 @@ import { log } from '../../log.js';
 
 import { getDashboardHtml } from './html.js';
 import { getWhatsAppState } from './whatsapp-bridge.js';
+import { createSettingsRoutes } from './settings/routes.js';
+import { createSettingsManager } from './settings/settings-manager.js';
+import { getSettingsHtml } from './settings/html.js';
+import { triggerGracefulRestart } from './settings/restart.js';
 
 import type { DashboardDataProvider } from './types.js';
 
@@ -59,6 +63,24 @@ let sseInterval: ReturnType<typeof setInterval> | null = null;
 /** Track failed login attempts per IP */
 const failedAttempts = new Map<string, FailedAttempt>();
 
+// ── Settings (lazy — needs initDb() to have run before first use) ──
+
+let _settingsManager: ReturnType<typeof createSettingsManager> | null = null;
+let _settingsHandler: ReturnType<typeof createSettingsRoutes> | null = null;
+function getSettingsManager(): ReturnType<typeof createSettingsManager> {
+    if (_settingsManager === null) {
+        _settingsManager = createSettingsManager();
+        _getSettingsManager().setBroadcast((...args) => broadcastSse(...args));
+    }
+    return _settingsManager;
+}
+function getSettingsHandler(): ReturnType<typeof createSettingsRoutes> {
+    if (_settingsHandler === null) {
+        _settingsHandler = createSettingsRoutes({ manager: getSettingsManager(), triggerRestart: triggerGracefulRestart });
+    }
+    return _settingsHandler;
+}
+
 // ── Auth: HTTP Basic Auth + Rate Limiting ──
 
 function getCredentials(): { username: string; password: string } {
@@ -71,7 +93,7 @@ function getCredentials(): { username: string; password: string } {
 function getClientIp(req: http.IncomingMessage): string {
     const forwarded = req.headers['x-forwarded-for'];
     if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
-    return req.socket.remoteAddress || 'unknown';
+    return req.socket?.remoteAddress || 'unknown';
 }
 
 function isRateLimited(ip: string): boolean {
@@ -392,9 +414,47 @@ export async function handleAdminRequest(
     clearFailedAttempts(clientIp);
 
     try {
-        // GET /admin — serve HTML dashboard
+        // ── Settings API delegation ──
+        // Delegate /admin/api/settings routes to the settings handler.
+        // Auth and rate limiting are already verified above.
+        if (url.startsWith('/admin/api/settings')) {
+            const handled = await getSettingsHandler()(req, res);
+            if (handled) return true;
+        }
+
+        // GET /admin — serve HTML dashboard with settings panel
         if ((path === '/admin' || path === '/admin/') && method === 'GET') {
-            sendHtml(res, getDashboardHtml());
+            const baseHtml = getDashboardHtml();
+            const categories = getSettingsManager().getAllSettings();
+            const settingsHtml = getSettingsHtml(categories);
+            // Inject settings panel content into the settings tab placeholder
+            const page = baseHtml.replace(
+                '<!-- Settings panel content injected server-side -->',
+                settingsHtml,
+            );
+            sendHtml(res, page);
+            return true;
+        }
+
+        // GET /admin/settings — serve HTML dashboard with settings tab active
+        if (path === '/admin/settings' && method === 'GET') {
+            const baseHtml = getDashboardHtml();
+            const categories = getSettingsManager().getAllSettings();
+            const settingsHtml = getSettingsHtml(categories);
+            // Inject settings panel and activate the settings tab by default
+            let page = baseHtml.replace(
+                '<!-- Settings panel content injected server-side -->',
+                settingsHtml,
+            );
+            // Switch active tab to settings
+            page = page.replace(
+                'data-tab="overview" onclick="switchTab(\'overview\')">Overview</button>',
+                'data-tab="overview" onclick="switchTab(\'overview\')">Overview</button>',
+            );
+            page = page.replace('id="tab-overview">\n', 'id="tab-overview">\n');
+            // Use a script snippet to switch to settings tab on load
+            page = page.replace('</body>', '<script>switchTab("settings");<\/script>\n</body>');
+            sendHtml(res, page);
             return true;
         }
 

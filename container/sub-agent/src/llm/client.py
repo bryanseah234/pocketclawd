@@ -10,6 +10,7 @@ Requirements: REQ-8.1
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 import boto3
@@ -49,7 +50,7 @@ class BedrockClaude:
         temperature: float = DEFAULT_TEMPERATURE,
         boto_client: Any = None,
     ) -> None:
-        self.model_id = model_id or DEFAULT_MODEL_ID
+        self.model_id = model_id or os.environ.get("BEDROCK_LLM_MODEL_ID") or DEFAULT_MODEL_ID
         self.max_tokens = max_tokens
         self.temperature = temperature
 

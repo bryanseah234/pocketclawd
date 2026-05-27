@@ -16,6 +16,7 @@
  *   - create_webhook_token: create a save confirmation token in DynamoDB
  *   - validate_webhook_token: validate and consume a token
  *   - get_user_preference: fetch user preferences from DynamoDB
+ *   - put_user_preference: merge and store user preferences in DynamoDB (validates persona enum fields)
  *
  * Requirements: REQ-7.1 (Data Gateway), REQ-2.1 (Data Isolation)
  */
@@ -23,7 +24,7 @@
 import { log } from '../../log.js';
 
 import type { CloudServices } from '../bootstrap.js';
-import type { DocumentChunk } from '../data-gateway/types.js';
+import type { DocumentChunk, UserPreferences } from '../data-gateway/types.js';
 
 // ── Config ──
 
@@ -139,6 +140,10 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
 
             case 'get_user_preference':
                 await handleGetUserPreference(services, userId, requestId);
+                break;
+
+            case 'put_user_preference':
+                await handlePutUserPreference(services, userId, request);
                 break;
 
             case 'get_chat_history':
@@ -362,6 +367,39 @@ async function handleGetUserPreference(
         preferences: prefs,
     }));
     await services.redis.expire(responseKey, 60);
+}
+
+// ── Validation constants ──
+
+const VALID_TECHNICAL_DEPTH = new Set(['detailed', 'high-level']);
+const VALID_PRIMARY_DOMAIN = new Set(['frontend', 'infrastructure', 'data']);
+
+async function handlePutUserPreference(
+    services: CloudServices,
+    userId: string,
+    request: Record<string, unknown>,
+): Promise<void> {
+    if (!userId) return;
+
+    const preferences = request.preferences as Partial<UserPreferences> | undefined;
+    if (!preferences) return;
+
+    // Validate persona enum fields before persisting
+    if (preferences.technical_depth !== undefined && !VALID_TECHNICAL_DEPTH.has(preferences.technical_depth)) {
+        log.warn('DataGateway worker: invalid technical_depth value', { userId, value: preferences.technical_depth });
+        return;
+    }
+    if (preferences.primary_domain !== undefined && !VALID_PRIMARY_DOMAIN.has(preferences.primary_domain)) {
+        log.warn('DataGateway worker: invalid primary_domain value', { userId, value: preferences.primary_domain });
+        return;
+    }
+
+    // Merge with existing preferences (non-destructive — don't overwrite unrelated fields)
+    const existing = await services.dataGateway.getUserPreference(userId);
+    const merged = { ...existing, ...preferences } as UserPreferences;
+
+    await services.dataGateway.putUserPreference(userId, merged);
+    log.debug('Stored user preferences', { userId });
 }
 
 async function handleHybridSearch(

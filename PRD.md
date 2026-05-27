@@ -10,6 +10,22 @@
 
 ---
 
+---
+
+## Deployment status (added 2026-05-27)
+
+This PRD documents the **PocketClaw single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for local development, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two are deliberately co-existing:
+
+| Surface | Source of truth | Provider |
+|---|---|---|
+| Local single-user host (this PRD) | `PRD.md`, `docs/POCKETCLAW.md` | Claude Code subscription |
+| AWS multi-user cloud | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `src/cloud/` | AWS Bedrock |
+| Azure variant (future option) | `nanoclaw-prd.html` | Azure OpenAI gpt-4o |
+
+When this PRD says *“no Bedrock, no AWS env vars,”* it is describing the host-mode invariant — not a global policy. The cloud surface is governed by the Kiro AWS spec and uses Bedrock by design.
+
+---
+
 ## 1. Product Vision
 
 PocketClaw is a personal AI assistant for one user (Bryan Tan), running on his
@@ -228,8 +244,10 @@ Diverges in:
   many-users. PocketClaw is one always-on `pocketclaw` agent group,
   one user (`telegram:bryanb_t`, `whatsapp:6592348112`, etc), one
   Obsidian vault.
-- **Provider.** NanoClaw default ships Claude Code subscription;
-  PocketClaw locks that in (no Bedrock fallback, no AWS env vars).
+- **Provider (host mode).** NanoClaw default ships Claude Code subscription;
+  PocketClaw host-mode locks that in (no Bedrock fallback, no AWS env vars in `.env.sample`).
+  The AWS cloud deployment uses Bedrock by design — see `docs/AWS-DEPLOYMENT.md` and the
+  Deployment status banner above. The host vs cloud surface choice is intentional, not contradictory.
 - **KnowledgeBase.** NanoClaw has no persistent cross-session memory
   beyond per-session DBs. PocketClaw adds the `KnowledgeBase` module
   family and its Postgres+pgvector backing store as first-class.
@@ -418,7 +436,7 @@ gotcha around new agents starting in `selective` secret mode.
 The agent provider is Claude Code subscription, accessed via
 `ANTHROPIC_BASE_URL` pointing at the OneCLI proxy. OneCLI rewrites
 the auth header so the container never sees the raw subscription
-token. There is no Bedrock fallback (removed in P5). A future
+token. In host mode there is no Bedrock fallback (removed in P5); the AWS cloud surface uses Bedrock natively (see `docs/AWS-DEPLOYMENT.md`). A future
 provider swap (e.g. local model via `add-opencode`) is mechanical:
 install the provider skill, change `container_configs.provider`
 in the central DB.
