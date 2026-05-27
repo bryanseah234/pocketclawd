@@ -81,6 +81,27 @@ function getSettingsHandler(): ReturnType<typeof createSettingsRoutes> {
     return _settingsHandler;
 }
 
+
+// ── Session cookie ──
+// Generated once per process. Sent as HttpOnly cookie on successful Basic Auth login.
+// EventSource and subsequent fetch calls use the cookie automatically — no headers needed.
+const SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
+const SESSION_COOKIE_NAME = 'nanoclaw_admin_session';
+
+function setSessionCookie(res: http.ServerResponse): void {
+    res.setHeader('Set-Cookie',
+        `${SESSION_COOKIE_NAME}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=86400`
+    );
+}
+
+function hasValidSessionCookie(req: http.IncomingMessage): boolean {
+    const cookieHeader = req.headers.cookie || '';
+    return cookieHeader.split(';').some(c => {
+        const [k, v] = c.trim().split('=');
+        return k === SESSION_COOKIE_NAME && v === SESSION_TOKEN;
+    });
+}
+
 // ── Auth: HTTP Basic Auth + Rate Limiting ──
 
 function getCredentials(): { username: string; password: string } {
@@ -135,6 +156,9 @@ function clearFailedAttempts(ip: string): void {
 }
 
 function isAuthenticated(req: http.IncomingMessage): boolean {
+    // Fast path: valid session cookie (set by prior Basic Auth)
+    if (hasValidSessionCookie(req)) return true;
+
     const { username, password } = getCredentials();
 
     // Dev / test mode: when no auth is configured at all (no config.token,
@@ -498,6 +522,8 @@ export async function handleAdminRequest(
         if ((path === '/admin' || path === '/admin/') && method === 'GET') {
             const adminPath = [nodePath.join(process.cwd(), 'dist', 'static', 'admin.html'), nodePath.join(process.cwd(), 'src', 'static', 'admin.html')].find(fs.existsSync) ?? '';
             if (fs.existsSync(adminPath)) {
+                // Issue session cookie so EventSource/fetch don't need explicit auth headers
+                setSessionCookie(res);
                 sendHtml(res, fs.readFileSync(adminPath, 'utf-8'));
             } else {
                 res.writeHead(503, { 'Content-Type': 'text/plain' });
