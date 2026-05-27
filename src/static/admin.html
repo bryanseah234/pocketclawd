@@ -509,6 +509,21 @@
             margin: 0 auto;
         }
 
+        
+        /* Toggle switch */
+        .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--border); border-radius: 26px; transition: .2s;
+        }
+        .toggle-slider:before {
+            position: absolute; content: ""; height: 20px; width: 20px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .2s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+
         </style>
 </head>
 <body>
@@ -925,7 +940,7 @@
         // ── WhatsApp Actions ──
         async function reconnectWhatsApp() {
             try {
-                const res = await fetch('/admin/api/whatsapp/reconnect', { method: 'POST' });
+                const res = await fetch('/admin/api/whatsapp/reconnect', { method: 'POST', credentials: 'include' });
                 const data = await res.json();
                 showToast(data.message || 'Reconnecting...', data.success ? 'success' : 'error');
             } catch (e) {
@@ -935,7 +950,7 @@
 
         async function disconnectWhatsApp() {
             try {
-                const res = await fetch('/admin/api/whatsapp/disconnect', { method: 'POST' });
+                const res = await fetch('/admin/api/whatsapp/disconnect', { method: 'POST', credentials: 'include' });
                 const data = await res.json();
                 showToast(data.message || 'Disconnected', data.success ? 'success' : 'error');
             } catch (e) {
@@ -953,7 +968,7 @@
             }
             if (action === 'clear-limits') {
                 try {
-                    const res = await fetch('/admin/api/actions/clear-rate-limits', { method: 'POST' });
+                    const res = await fetch('/admin/api/actions/clear-rate-limits', { method: 'POST', credentials: 'include' });
                     const data = await res.json();
                     showToast(data.message || 'Done', 'success');
                 } catch (e) {
@@ -1035,6 +1050,7 @@
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/admin/api/upload');
+                xhr.withCredentials = true;
 
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
@@ -1087,7 +1103,7 @@
                     return;
                 }
                 try {
-                    const res = await fetch('/admin/api/uploads');
+                    const res = await fetch('/admin/api/uploads', { credentials: 'include' });
                     const data = await res.json();
                     const upload = data.uploads && data.uploads.find(u => u.status === 'completed' || u.status === 'failed');
                     if (upload) {
@@ -1143,7 +1159,7 @@
         connectSSE();
 
         // Load recent uploads on page load
-        fetch('/admin/api/uploads').then(r => r.json()).then(data => {
+        fetch('/admin/api/uploads', { credentials: 'include' }).then(r => r.json()).then(data => {
             if (data.uploads && data.uploads.length > 0) {
                 for (const u of data.uploads.slice(0, 10)) {
                     const item = document.createElement('div');
