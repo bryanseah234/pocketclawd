@@ -1,3 +1,17 @@
+<!-- AUDIT VERDICT (updated by Hermes Agent ralph loop, 2026-05-27)
+Trust: MIXED. Many tasks claimed [x] by Kiro had no code.
+Verified DONE (files exist + tests pass):
+  - system-prompt-loader.ts + loader.test.ts
+  - system-prompt-assembler.ts + assembler.test.ts + assembler.property.test.ts (bun: 36 pass)
+  - container/sub-agent/src/persona/preference_probe.py
+  - container/sub-agent/src/persona/escalation.py + tests/test_escalation.py
+NOT IMPLEMENTED ([ ]):
+  - Task 5.1: discovery_skill.py
+  - Task 8: threaded reply routing wire-up
+  - Task 9: session init wire-up
+  - Task 10.1: system prompt template content (needs user editorial input)
+-->
+
 # Implementation Plan: Clawd Bot Persona
 
 ## Overview

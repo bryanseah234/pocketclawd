@@ -1,3 +1,20 @@
+<!-- AUDIT VERDICT (updated by Hermes Agent ralph loop, 2026-05-27)
+Trust: HIGH. All 51 tasks verified against live AWS infra + codebase.
+Live resources (account 709609992277, ap-southeast-1):
+  - ECR: nanoclaw/orchestrator:latest + nanoclaw/agent:latest (tag 7eca6874, pushed 2026-05-26)
+  - EC2: i-0f9cd20350cfdc1a6 (r6i.4xlarge, systemd service)
+  - DynamoDB: 4 tables (chat-messages, user-preferences, system-errors, webhook-tokens)
+  - S3: nanoclaw-data-709609992277
+  - OpenSearch Serverless: nanoclaw-documents
+  - ElastiCache Redis: nanoclaw-redis-ec2vpc (live secret points here, NOT nanoclaw-redis)
+  - Secrets Manager: nanoclaw/app-config (lowercase keys, lifecycle{ignore_changes} patched)
+Model split (Bedrock inference profiles):
+  - llm_model_id = global.anthropic.claude-opus-4-7 (orchestrator + LLM endpoint)
+  - llm_subagent_model_id = global.anthropic.claude-sonnet-4-6 (per-user sub-agent)
+  - Both verified PONG via aws bedrock-runtime invoke-model
+Terraform: secrets.tf realigned to lowercase keys matching TS parser.
+-->
+
 # Implementation Plan: NanoClaw AWS Deployment
 
 ## Overview

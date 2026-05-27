@@ -219,13 +219,33 @@ describe('DataGateway OpenSearch operations', () => {
             // First call: knn search — verify userId filter
             const knnCall = mockSearch.mock.calls[0][0];
             expect(knnCall.index).toBe('documents');
-            expect(knnCall.body.query.bool.filter).toEqual([{ term: { userId: 'user-abc' } }]);
+            expect(knnCall.body.query.bool.filter).toEqual([
+                {
+                    bool: {
+                        should: [
+                            { term: { userId: 'user-abc' } },
+                            { term: { userId: 'CORPORATE' } },
+                        ],
+                        minimum_should_match: 1,
+                    },
+                },
+            ]);
             expect(knnCall.body.query.bool.must[0].knn).toBeDefined();
 
             // Second call: BM25 search — verify userId filter
             const bm25Call = mockSearch.mock.calls[1][0];
             expect(bm25Call.index).toBe('documents');
-            expect(bm25Call.body.query.bool.filter).toEqual([{ term: { userId: 'user-abc' } }]);
+            expect(bm25Call.body.query.bool.filter).toEqual([
+                {
+                    bool: {
+                        should: [
+                            { term: { userId: 'user-abc' } },
+                            { term: { userId: 'CORPORATE' } },
+                        ],
+                        minimum_should_match: 1,
+                    },
+                },
+            ]);
             expect(bm25Call.body.query.bool.must[0].match).toBeDefined();
 
             // Verify results are combined and sorted

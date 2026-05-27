@@ -42,6 +42,15 @@ export type { IDataGateway } from './types.js';
 export * from './types.js';
 
 export class DataGateway implements IDataGateway {
+    /**
+     * Reserved sentinel userId for corporate (admin-uploaded) documents that are
+     * searchable by every user but writable only via the upload-worker path.
+     * `assertUserId` rejects this value as a regular userId; only
+     * `indexCorporateDocument` is allowed to use it for writes.
+     * See data-isolation-corporate-docs spec, Requirements 1.x / 7.x.
+     */
+    public static readonly CORPORATE_SENTINEL = 'CORPORATE';
+
     private dynamoClient: DynamoDBDocumentClient;
     private s3Client: S3Client;
     private openSearchClient: OpenSearchClient;
@@ -412,6 +421,38 @@ export class DataGateway implements IDataGateway {
     }
 
     /**
+     * Index a corporate document chunk that all users can search.
+     * This bypasses the regular per-user `assertUserId` check (since CORPORATE is
+     * the reserved sentinel) and is the ONLY method allowed to write under that userId.
+     * Caller (DataGateway Worker) must verify origin === 'upload_worker' before invoking.
+     * Requirements: data-isolation-corporate-docs Req 1.1 / 1.2 / 1.3.
+     */
+    async indexCorporateDocument(chunk: DocumentChunk): Promise<void> {
+        if (!chunk || !chunk.id) {
+            throw new Error('DataGateway.indexCorporateDocument: chunk.id is required');
+        }
+
+        const indexName = this.config.openSearch.indexName;
+
+        await this.openSearchClient.index({
+            index: indexName,
+            id: chunk.id,
+            body: {
+                id: chunk.id,
+                userId: DataGateway.CORPORATE_SENTINEL,
+                docType: chunk.docType,
+                content: chunk.content,
+                contentVector: chunk.contentVector,
+                filename: chunk.filename,
+                pageNumber: chunk.pageNumber,
+                chunkIndex: chunk.chunkIndex,
+                uploadedAt: chunk.uploadedAt,
+            },
+            refresh: 'wait_for',
+        });
+    }
+
+    /**
      * Hybrid search combining 70% knn vector similarity + 30% BM25 text matching.
      * Enforces userId filter on ALL queries for data isolation.
      * Requirements: REQ-2.2, REQ-3.3, REQ-7.1
@@ -439,7 +480,15 @@ export class DataGateway implements IDataGateway {
                             },
                         ],
                         filter: [
-                            { term: { userId } },
+                            {
+                                bool: {
+                                    should: [
+                                        { term: { userId } },
+                                        { term: { userId: DataGateway.CORPORATE_SENTINEL } },
+                                    ],
+                                    minimum_should_match: 1,
+                                },
+                            },
                         ],
                     },
                 },
@@ -464,7 +513,15 @@ export class DataGateway implements IDataGateway {
                             },
                         ],
                         filter: [
-                            { term: { userId } },
+                            {
+                                bool: {
+                                    should: [
+                                        { term: { userId } },
+                                        { term: { userId: DataGateway.CORPORATE_SENTINEL } },
+                                    ],
+                                    minimum_should_match: 1,
+                                },
+                            },
                         ],
                     },
                 },
@@ -628,7 +685,7 @@ export class DataGateway implements IDataGateway {
      */
     async getFile(userId: string, bucket: string, key: string): Promise<ReadableStream> {
         this.assertUserId(userId);
-        this.assertKeyBelongsToUser(userId, key);
+        this.assertKeyBelongsToUser(userId, key, 'read');
 
         const targetBucket = this.config.s3.dataBucket;
 
@@ -906,6 +963,9 @@ export class DataGateway implements IDataGateway {
         if (!userId || typeof userId !== 'string' || userId.trim().length === 0) {
             throw new Error('DataGateway: userId is required for all operations (data isolation enforcement)');
         }
+        if (userId === DataGateway.CORPORATE_SENTINEL) {
+            throw new Error('DataGateway: CORPORATE sentinel cannot be used as a regular userId (data isolation enforcement)');
+        }
     }
 
     /**
@@ -913,15 +973,29 @@ export class DataGateway implements IDataGateway {
      * The key MUST start with `{userId}/` and MUST NOT contain path traversal sequences.
      * This prevents cross-user data access via crafted keys.
      */
-    private assertKeyBelongsToUser(userId: string, key: string): void {
-        // Reject path traversal attempts
+    private assertKeyBelongsToUser(userId: string, key: string, mode: 'read' | 'write' = 'write'): void {
+        // Reject path traversal attempts (always)
         if (key.includes('../') || key.includes('..\\')) {
             throw new Error('DataGateway: path traversal detected in key (data isolation enforcement)');
         }
 
-        // Enforce userId prefix
+        // Enforce userId prefix; in read mode also allow `corporate/` for shared docs.
         const expectedPrefix = `${userId}/`;
-        if (!key.startsWith(expectedPrefix)) {
+        const corporatePrefix = 'corporate/';
+        const startsWithUser = key.startsWith(expectedPrefix);
+        const startsWithCorporate = key.startsWith(corporatePrefix);
+
+        if (mode === 'read') {
+            if (!startsWithUser && !startsWithCorporate) {
+                throw new Error(
+                    `DataGateway: key "${key}" does not start with userId prefix "${expectedPrefix}" or corporate prefix "${corporatePrefix}" (data isolation enforcement)`,
+                );
+            }
+            return;
+        }
+
+        // write mode: only userId prefix allowed (regular users cannot write to corporate/).
+        if (!startsWithUser) {
             throw new Error(
                 `DataGateway: key "${key}" does not start with userId prefix "${expectedPrefix}" (data isolation enforcement)`,
             );

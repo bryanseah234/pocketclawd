@@ -183,8 +183,47 @@ async function handleIndexDocument(
     request: Record<string, unknown>,
 ): Promise<void> {
     const chunk = request.chunk as DocumentChunk;
+    const origin = request.origin as string | undefined;
+
     if (!chunk || !userId) {
         log.warn('DataGateway worker: index_document missing chunk or userId');
+        return;
+    }
+
+    // ── Corporate sentinel path ──
+    // CORPORATE writes are allowed ONLY when origin === 'upload_worker'.
+    // Any other origin attempting to write under userId='CORPORATE' is logged as abuse.
+    // Requirements: data-isolation-corporate-docs Req 3.1, 3.2, 3.3.
+    if (userId === 'CORPORATE') {
+        if (origin !== 'upload_worker') {
+            log.error('SECURITY: corporate_sentinel_abuse detected — rejecting index_document', {
+                event: 'corporate_sentinel_abuse',
+                origin: origin ?? '<unset>',
+                chunkId: chunk.id,
+                filename: chunk.filename,
+            });
+            return;
+        }
+        await services.dataGateway.indexCorporateDocument(chunk);
+        log.debug('Indexed corporate document chunk', {
+            chunkId: chunk.id,
+            filename: chunk.filename,
+        });
+        return;
+    }
+
+    // ── Per-user path ──
+    // Cross-user-access detection: if request claims a userId different from the
+    // sub-agent's assigned userId, log the mismatch. The DataGateway itself enforces
+    // isolation at the call boundary; this is an additional defence-in-depth log.
+    const expectedUserId = request.expected_user_id as string | undefined;
+    if (expectedUserId && expectedUserId !== userId) {
+        log.error('SECURITY: cross_user_access detected on index_document — rejecting', {
+            event: 'cross_user_access',
+            requestUserId: userId,
+            expectedUserId,
+            chunkId: chunk.id,
+        });
         return;
     }
 

@@ -32,6 +32,14 @@ interface PendingUpload {
     bucket: string;
     timestamp: string;
     userId?: string; // Set if upload came from a specific user context
+    /**
+     * If true, this upload is a corporate document — admin-uploaded, searchable
+     * by every user via the CORPORATE sentinel. The upload-worker enforces:
+     *   - S3 key prefix `corporate/{uploadId}/{filename}` (overrides user-prefix scheme)
+     *   - downstream index_document messages carry userId='CORPORATE' + origin='upload_worker'
+     * See data-isolation-corporate-docs spec, Tasks 4.1 / 4.2.
+     */
+    corporate?: boolean;
 }
 
 interface UploadWorkerConfig {
@@ -124,9 +132,31 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
     });
 
     try {
-        const userId = upload.userId || config.defaultUserId;
+        // ── Corporate vs per-user routing ──
+        // data-isolation-corporate-docs Tasks 4.1, 4.2:
+        //   corporate=true  → s3 key under corporate/{uploadId}/{filename}, target userId='CORPORATE',
+        //                     downstream index_document calls MUST carry origin='upload_worker'
+        //   corporate=false → unchanged: dispatch to the supplied userId's queue,
+        //                     storing under {userId}/documents/{filename}
+        const isCorporate = upload.corporate === true;
+        let userId: string;
+        let s3Key: string;
 
-        // Enqueue a document_upload message to the user's sub-agent queue
+        if (isCorporate) {
+            userId = 'CORPORATE';
+            s3Key = `corporate/${upload.uploadId}/${upload.filename}`;
+        } else {
+            userId = upload.userId || config.defaultUserId;
+            s3Key = upload.s3Key && upload.s3Key.startsWith(`${userId}/`)
+                ? upload.s3Key
+                : `${userId}/documents/${upload.filename}`;
+        }
+
+        // Enqueue a document_upload message to the user's sub-agent queue.
+        // For corporate uploads, the message is dispatched to the admin queue
+        // (userId='CORPORATE'), and the receiving processor MUST set
+        // origin='upload_worker' when calling index_document on the
+        // DataGateway Worker (enforced in data-gateway-worker/index.ts).
         await services.messageQueue.enqueueForAgent(userId, {
             id: `upload-${upload.uploadId}`,
             userId,
@@ -135,9 +165,12 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
                 uploadId: upload.uploadId,
                 filename: upload.filename,
                 contentType: upload.contentType,
-                s3Key: upload.s3Key,
+                s3Key,
                 bucket: upload.bucket,
                 timestamp: upload.timestamp,
+                corporate: isCorporate,
+                // Propagate origin so the downstream data-gateway-worker call carries it.
+                origin: 'upload_worker',
             },
             timestamp: new Date().toISOString(),
         });
@@ -145,6 +178,8 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
         log.info('Upload worker: dispatched to sub-agent queue', {
             uploadId: upload.uploadId,
             userId,
+            corporate: isCorporate,
+            s3Key,
             filename: upload.filename,
         });
 

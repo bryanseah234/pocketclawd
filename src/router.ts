@@ -20,6 +20,21 @@
  * `dropped_messages` is core audit infra. Core writes rows for structural
  * drops (no agent wired, no trigger match); the access gate writes rows
  * for policy refusals.
+ *
+ * -- Isolation guarantees (data-isolation-corporate-docs Req 5) --
+ *  1. The router NEVER infers userId from message content; it is derived
+ *     ONLY from `senderResolver(event)`, which inspects the channel-level
+ *     sender identity (e.g. WhatsApp phone number). A spoofed inline
+ *     'I am user-X' payload cannot redirect routing.
+ *  2. Unrecognized senders yield userId=null, and downstream cloud-mode
+ *     enqueue is gated by `if (isCloudMode() && wake && userId)` -- so
+ *     unknown senders are NEVER routed to any per-user sub-agent queue.
+ *  3. `enqueueForAgent(userId, ...)` writes to `agent:{userId}:inbound`.
+ *     Each sub-agent only consumes its own queue (assigned at container
+ *     startup). There is no cross-user fan-out.
+ *  4. Sub-agents calling DataGateway carry their assigned userId; the
+ *     gateway's `assertUserId` rejects empty/CORPORATE values, and
+ *     `assertKeyBelongsToUser` enforces the userId/ S3 prefix on writes.
  */
 import { getChannelAdapter } from './channels/channel-registry.js';
 import { isCloudMode, getCloudServices } from './cloud/bootstrap.js';

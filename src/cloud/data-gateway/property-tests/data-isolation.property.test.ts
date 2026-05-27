@@ -220,14 +220,19 @@ describe('Feature: nanoclaw-aws-deployment, Property 1: Data isolation enforceme
                 expect(newSearches.length).toBe(2);
 
                 // Verify BOTH search calls include userA's userId filter
+                // (with the corporate-inclusive bool.should pattern from data-isolation-corporate-docs spec)
                 for (const search of newSearches) {
-                    const body = search.body as { query: { bool: { filter: Array<Record<string, unknown>> } } };
+                    const body = search.body as { query: { bool: { filter: Array<{ bool?: { should: Array<Record<string, unknown>>; minimum_should_match: number } }> } } };
                     const filters = body.query.bool.filter;
 
-                    // Must contain { term: { userId: userA } }
-                    expect(filters).toContainEqual({ term: { userId: userA } });
+                    // The filter is now [ { bool: { should: [userA, CORPORATE], minimum_should_match: 1 } } ]
+                    expect(filters).toHaveLength(1);
+                    const boolShould = filters[0].bool;
+                    expect(boolShould?.minimum_should_match).toBe(1);
+                    expect(boolShould?.should).toContainEqual({ term: { userId: userA } });
+                    expect(boolShould?.should).toContainEqual({ term: { userId: 'CORPORATE' } });
 
-                    // Must NOT contain userB's ID in the filter
+                    // Must NOT contain userB's ID anywhere in the filter
                     const filterStr = JSON.stringify(filters);
                     expect(filterStr).not.toContain(`"${userB}"`);
                 }
