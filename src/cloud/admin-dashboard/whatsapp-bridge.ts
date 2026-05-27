@@ -18,6 +18,7 @@ export interface WhatsAppBridgeState {
     qrDataUrl: string | null;
     qrGeneratedAt: number | null; // epoch ms
     connectedAt: number | null; // epoch ms
+    pairingCode: string | null;
 }
 
 // ── State ──
@@ -29,6 +30,7 @@ const state: WhatsAppBridgeState = {
     qrDataUrl: null,
     qrGeneratedAt: null,
     connectedAt: null,
+    pairingCode: null,
 };
 
 // ── Public API (called by WhatsApp adapter) ──
@@ -82,6 +84,12 @@ export function setWhatsAppDisconnected(): void {
 /**
  * Returns the current WhatsApp bridge state for the SSE broadcast / API responses.
  */
+/** Called when a pairing code is generated. */
+export function setPairingCode(code: string | null): void {
+    state.pairingCode = code;
+    if (code) setTimeout(() => { if (state.pairingCode === code) state.pairingCode = null; }, 60_000);
+}
+
 export function getWhatsAppState(): WhatsAppBridgeState {
     return { ...state };
 }

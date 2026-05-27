@@ -8,6 +8,7 @@
  * Data Gateway, Redis queue, rate limiter, CloudWatch logger) and uses Redis
  * for message passing instead of SQLite session DBs.
  */
+import fs from 'node:fs';
 import path from 'path';
 
 import { backfillContainerConfigs } from './backfill-container-configs.js';
@@ -108,6 +109,8 @@ async function main(): Promise<void> {
     const http = await import('node:http');
     const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
     const { getWhatsAppState, setWhatsAppConnected, setWhatsAppDisconnected, setQrCode } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
+    const { registerWaStateProvider } = await import('./cloud/admin-dashboard/wa-state.js');
+    registerWaStateProvider(getWhatsAppState);
 
     const services = getCloudServices();
 
@@ -161,10 +164,24 @@ async function main(): Promise<void> {
     });
 
     const server = http.createServer(async (req, res) => {
-      // Landing page — served at GET / without authentication
+      // Landing page -- static file
       if (req.url === '/' && req.method === 'GET') {
-        const { handleLandingPageRequest } = await import('./cloud/landing-page/index.js');
-        handleLandingPageRequest(req, res);
+        const { handleWaStateRequest } = await import('./cloud/admin-dashboard/wa-state.js');
+        if (handleWaStateRequest(req, res)) return;
+        const lpPath = path.join(process.cwd(), 'src', 'static', 'landing.html');
+        if (fs.existsSync(lpPath)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+          res.end(fs.readFileSync(lpPath));
+        } else {
+          res.writeHead(503, { 'Content-Type': 'text/plain' });
+          res.end('Landing page not built. Run: pnpm exec tsx scripts/render-static.ts');
+        }
+        return;
+      }
+      // WA state API -- must be before admin auth gate
+      if (req.url === '/api/wa-state' && req.method === 'GET') {
+        const { handleWaStateRequest } = await import('./cloud/admin-dashboard/wa-state.js');
+        handleWaStateRequest(req, res);
         return;
       }
 

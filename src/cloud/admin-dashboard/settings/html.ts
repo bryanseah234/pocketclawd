@@ -26,6 +26,8 @@ const CATEGORY_LABELS: Record<string, string> = {
     knowledge_base: 'Knowledge Base',
     notifications: 'Notifications',
     scheduling: 'Scheduling',
+    credentials: 'Credentials',
+    setup: 'Set Up',
 };
 
 /**
@@ -38,15 +40,13 @@ export function getSettingsHtml(categories: CategoryGroup[]): string {
     return `
 <div class="settings-panel" id="settings-panel">
     ${getSettingsStyles()}
-    <div class="settings-header">
-        <h2 class="settings-title">Settings</h2>
-        <div class="settings-actions">
-            <button class="btn btn-primary" id="settings-save-btn" onclick="saveSettings()">Save</button>
-            <button class="btn btn-danger" id="settings-apply-btn" onclick="applyAndRestart()">Apply &amp; Restart</button>
-        </div>
-    </div>
     <div class="settings-body">
         ${renderCategories(categories)}
+    </div>
+    <div class="settings-action-bar">
+        <button class="btn btn-ghost" onclick="revertSettings()">Revert</button>
+        <button class="btn btn-primary" id="settings-save-btn" onclick="saveSettings()">Save</button>
+        <button class="btn btn-danger" id="settings-apply-btn" onclick="applyAndRestart()">Apply &amp; Restart</button>
     </div>
     ${renderChangeHistory()}
     <div class="settings-toast" id="settings-toast"></div>
@@ -203,22 +203,6 @@ function getSettingsStyles(): string {
     return `<style>
     .settings-panel {
         position: relative;
-    }
-    .settings-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 24px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid var(--border);
-    }
-    .settings-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-    }
-    .settings-actions {
-        display: flex;
-        gap: 8px;
     }
     .settings-body {
         display: flex;
@@ -576,6 +560,12 @@ function getSettingsStyles(): string {
         .setting-row { flex-direction: column; gap: 12px; }
         .setting-control { width: 100%; }
     }
+
+        .settings-action-bar { display:flex; justify-content:center; gap:12px; padding:24px 0 48px; border-top:1px solid var(--border); margin-top:32px; }
+        .btn-ghost { background:transparent; color:var(--text-muted); border:1px solid var(--border); padding:8px 20px; border-radius:6px; cursor:pointer; font-size:0.875rem; font-family:inherit; }
+        .btn-ghost:hover { background:rgba(61,43,31,0.05); }
+        .settings-panel { padding-bottom: 80px; }
+        .history-section { margin-bottom: 48px; }
 </style>`;
 }
 
@@ -756,6 +746,15 @@ function getSettingsScript(categories: CategoryGroup[]): string {
     };
 
     // ── Save / Apply ──
+
+    window.revertSettings = function() {
+        const panel = document.getElementById('settings-panel-content');
+        if (!panel) { location.reload(); return; }
+        fetch('/admin/api/settings/html', { credentials: 'include' })
+            .then(r => r.text())
+            .then(html => { panel.innerHTML = html; showSettingsToast('Reverted to saved values', 'success'); })
+            .catch(() => location.reload());
+    };
 
     window.saveSettings = async function() {
         if (Object.keys(validationErrors).length > 0) {

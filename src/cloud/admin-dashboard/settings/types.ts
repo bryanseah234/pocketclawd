@@ -29,7 +29,7 @@ export type SettingCategory =
     | 'channels'
     | 'container'
     | 'knowledge_base'
-    | 'credentials';
+    | 'credentials' | 'setup';
 
 // ── Core Interfaces ──
 
