@@ -156,7 +156,7 @@ jobs:
       - name: Build & push agent image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: container/sub-agent
           file: container/sub-agent/Dockerfile.production
           push: true
           tags: |
