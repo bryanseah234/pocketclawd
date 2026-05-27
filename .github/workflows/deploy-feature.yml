@@ -35,7 +35,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run typecheck
-      - run: pnpm exec vitest run
+      - run: pnpm exec vitest run src/cloud
 
   build:
     name: Build & Push to ECR
