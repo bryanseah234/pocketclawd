@@ -162,9 +162,9 @@ describe('getLandingPageHtml — How It Works section', () => {
 describe('getLandingPageHtml — pricing section', () => {
     const html = getLandingPageHtml();
 
-    it('has "Free Trial" and "Pro" tiers', () => {
-        expect(html).toContain('Free Trial');
-        expect(html).toContain('Pro');
+    it('has single early access tier', () => {
+        expect(html).toContain('Early Access');
+        expect(html).toContain('Free');
     });
 });
 

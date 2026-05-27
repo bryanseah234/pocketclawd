@@ -370,13 +370,14 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
 
         /* ─── Pricing ────────────────────────────────────────── */
         .pricing-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
+            display: flex;
+            justify-content: center;
             margin-top: 32px;
         }
 
         .pricing-card {
+            max-width: 480px;
+            width: 100%;
             background: rgba(255, 255, 255, 0.6);
             border: 1px solid rgba(61, 43, 31, 0.1);
             border-radius: 8px;
@@ -552,7 +553,7 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
                 ${heroBadge}
                 <h1 class="highlight-swipe">${HERO_HEADLINE}</h1>
                 <p class="hero-subheadline">${HERO_SUBHEADLINE}</p>
-                ${ctaLabel ? `<a href="${waConnected ? waLink : '#pricing'}" class="cta-btn washi-tape">${ctaLabel}</a>` : `<span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist &rarr;</span>`}
+                ${ctaLabel ? `<a href="#pricing" class="cta-btn washi-tape">${ctaLabel}</a>` : `<span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist &rarr;</span>`}
             </div>
         </section>
 
@@ -642,7 +643,7 @@ export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: bool
                         <ul class="pricing-features">
                             ${tier.features.map((f) => `<li>${f}</li>`).join('\n                            ')}
                         </ul>
-                        <a href="${waConnected ? waLink : '#pricing'}" class="cta-btn${tier.highlighted ? '' : ' cta-btn-outline'} washi-tape">${tier.ctaLabel}</a>
+                        <a href="${waConnected ? waLink : '#pricing'}" class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">${tier.ctaLabel}</a>
                     </div>`,
     ).join('\n                    ')}
                 </div>

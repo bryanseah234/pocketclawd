@@ -98,32 +98,18 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
 
 export const PRICING_TIERS: PricingTier[] = [
     {
-        name: 'Free Trial',
-        price: '$0',
-        description: 'Try Clawd free for 14 days. No credit card required.',
+        name: 'Early Access — Free',
+        price: 'Free',
+        description: 'Free to use while we’re in early access. No credit card, no commitment.',
         features: [
-            'Unlimited messages',
-            'Document uploads (up to 5)',
-            'Daily briefings',
+            'Unlimited WhatsApp messages',
             'Personal knowledge base',
+            'Document uploads & Q&A',
+            'Daily morning briefings',
+            'Calendar & email summaries',
         ],
-        ctaLabel: 'Start Free Trial',
-        ctaHref: WHATSAPP_LINK,
-        highlighted: false,
-    },
-    {
-        name: 'Pro',
-        price: '$19/mo',
-        description: 'Everything in Free Trial, plus unlimited power for professionals.',
-        features: [
-            'Unlimited document uploads',
-            'Priority response times',
-            'Advanced document analysis',
-            'Calendar integration',
-            'Custom daily briefing schedule',
-        ],
-        ctaLabel: 'Go Pro',
-        ctaHref: WHATSAPP_LINK,
+        ctaLabel: 'Join the Waitlist',
+        ctaHref: '#',
         highlighted: true,
     },
 ];

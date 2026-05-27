@@ -510,7 +510,14 @@ export function getDashboardHtml(): string {
             .container { padding: 16px; }
             .qr-container { flex-direction: column; align-items: flex-start; }
         }
-    </style>
+    
+        /* ─── Settings tab layout ─────────────────────────────── */
+        .settings-tab-inner {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        </style>
 </head>
 <body>
     <div class="container">
@@ -693,7 +700,7 @@ export function getDashboardHtml(): string {
         </div><!-- /tab-documents -->
 
 <div class="tab-panel" id="tab-settings">
-            <!-- Settings panel content injected server-side -->
+            <div class="settings-tab-inner"><!-- Settings panel content injected server-side --></div>
         </div>
     </div>
 
