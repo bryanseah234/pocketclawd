@@ -475,6 +475,20 @@ export async function handleAdminRequest(
         // ── Settings API delegation ──
         // Delegate /admin/api/settings routes to the settings handler.
         // Auth and rate limiting are already verified above.
+        // GET /admin/api/settings/html -- lazy-loaded settings form fragment
+        if (path === '/admin/api/settings/html' && method === 'GET') {
+            try {
+                const { getSettingsHtml } = await import('./settings/html.js');
+                const cats = getSettingsManager().getAllSettings();
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(getSettingsHtml(cats));
+            } catch (_e) {
+                res.writeHead(503, { 'Content-Type': 'text/plain' });
+                res.end('Settings unavailable');
+            }
+            return true;
+        }
+
         if (url.startsWith('/admin/api/settings')) {
             const handled = await getSettingsHandler()(req, res);
             if (handled) return true;
@@ -501,20 +515,6 @@ export async function handleAdminRequest(
 
         // GET /admin/api/health — system health JSON
 
-
-        // GET /admin/api/settings/html -- settings form fragment (lazy loaded)
-        if (path === '/admin/api/settings/html' && method === 'GET') {
-            try {
-                const { getSettingsHtml } = await import('./settings/html.js');
-                const cats = getSettingsManager().getAllSettings();
-                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(getSettingsHtml(cats));
-            } catch (_e) {
-                res.writeHead(503, { 'Content-Type': 'text/plain' });
-                res.end('Settings unavailable');
-            }
-            return true;
-        }
 
         if (path === '/admin/api/health' && method === 'GET') {
             const health = await config!.provider.getSystemHealth();
