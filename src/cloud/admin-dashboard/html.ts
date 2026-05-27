@@ -647,6 +647,22 @@ export function getDashboardHtml(): string {
                     <div class="upload-text">Drag &amp; drop files here, or click to select</div>
                     <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
                 </div>
+                <!-- Corporate toggle (data-isolation-corporate-docs req 6.1, 6.4) -->
+                <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:var(--bg-secondary,#1e1e2e);border-radius:6px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
+                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true"
+                               data-testid="corporate-toggle"
+                               style="width:16px;height:16px;cursor:pointer;">
+                        <span>Make available to <strong>all users</strong> (corporate document)</span>
+                    </label>
+                    <div id="target-user-row" style="margin-top:8px;">
+                        <label style="font-size:0.85rem;color:var(--text-muted);" for="target-user-id">Target user (phone number):</label>
+                        <input type="text" id="target-user-id" name="targetUserId"
+                               data-testid="target-user-id"
+                               placeholder="e.g. 6281234567890"
+                               style="width:100%;margin-top:4px;padding:6px;background:var(--bg-primary,#13131a);border:1px solid var(--border,#333);border-radius:4px;color:inherit;font-size:0.9rem;">
+                    </div>
+                </div>
                 <div class="upload-list" id="upload-list"></div>
             </div>
         </div>
@@ -864,6 +880,17 @@ export function getDashboardHtml(): string {
         const fileInput = document.getElementById('file-input');
         const uploadList = document.getElementById('upload-list');
 
+        // Corporate toggle - show/hide target-user-row (req 6.4)
+        const corpToggleEl = document.getElementById('corporate-toggle');
+        const targetUserRow = document.getElementById('target-user-row');
+        function updateCorporateToggle() {
+            if (corpToggleEl && targetUserRow) {
+                targetUserRow.style.display = corpToggleEl.checked ? 'none' : 'block';
+            }
+        }
+        if (corpToggleEl) corpToggleEl.addEventListener('change', updateCorporateToggle);
+        updateCorporateToggle(); // init state: toggle unchecked -> show user row
+
         uploadZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadZone.classList.add('dragover');
@@ -909,6 +936,15 @@ export function getDashboardHtml(): string {
             try {
                 const formData = new FormData();
                 formData.append('file', file);
+                // Corporate toggle fields
+                const corpToggle = document.getElementById('corporate-toggle');
+                const isCorporate = corpToggle && corpToggle.checked;
+                formData.append('corporate', isCorporate ? 'true' : 'false');
+                if (!isCorporate) {
+                    const targetUser = document.getElementById('target-user-id');
+                    const targetUserId = targetUser ? targetUser.value.trim() : '';
+                    if (targetUserId) formData.append('targetUserId', targetUserId);
+                }
 
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/admin/api/upload');

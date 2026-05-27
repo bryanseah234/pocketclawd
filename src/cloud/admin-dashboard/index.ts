@@ -321,8 +321,9 @@ interface ParsedFile {
     data: Buffer;
 }
 
-function parseMultipartFormData(body: Buffer, boundary: string): ParsedFile[] {
+function parseMultipartFormData(body: Buffer, boundary: string): ParsedFormResult {
     const files: ParsedFile[] = [];
+    const fields: Record<string, string> = {};
     const boundaryBuf = Buffer.from(`--${boundary}`);
     const endBoundaryBuf = Buffer.from(`--${boundary}--`);
 
@@ -379,10 +380,23 @@ function parseMultipartFormData(body: Buffer, boundary: string): ParsedFile[] {
 
         if (filename && dataEnd > 0) {
             files.push({ filename, contentType, data: fileData.subarray(0, dataEnd) });
+        } else if (!filename) {
+            // Named field (no filename) — capture as text
+            let fieldName = '';
+            for (const header of headers) {
+                const lower = header.toLowerCase();
+                if (lower.startsWith('content-disposition:')) {
+                    const nameMatch = header.match(/name="([^"]+)"/);
+                    if (nameMatch) fieldName = nameMatch[1];
+                }
+            }
+            if (fieldName) {
+                fields[fieldName] = fileData.subarray(0, dataEnd).toString('utf-8').trim();
+            }
         }
     }
 
-    return files;
+    return { files, fields };
 }
 
 // ── Upload State ──
@@ -605,7 +619,15 @@ export async function handleAdminRequest(
             });
 
             const body = Buffer.concat(chunks);
-            const files = parseMultipartFormData(body, boundary);
+            const { files, fields } = parseMultipartFormData(body, boundary);
+
+            // Validate corporate toggle
+            const isCorporate = fields['corporate'] === 'true';
+            const targetUserId = fields['targetUserId']?.trim() || '';
+            if (!isCorporate && !targetUserId) {
+                // Allow empty targetUserId for backward compat (defaults to 'admin')
+                // Strict: sendJson(res, { error: 'targetUserId required when corporate toggle is disabled' }, 400); return true;
+            }
 
             if (files.length === 0) {
                 sendJson(res, { error: 'No files found in upload' }, 400);
@@ -638,7 +660,7 @@ export async function handleAdminRequest(
                 results.push(record);
 
                 // Async: upload to S3 and enqueue processing (fire-and-forget)
-                void uploadToS3AndEnqueue(uploadId, file).catch((err) => {
+                void uploadToS3AndEnqueue(uploadId, file, { corporate: isCorporate, targetUserId: targetUserId || undefined }).catch((err) => {
                     log.error('Upload processing failed', { uploadId, filename: file.filename, err });
                     record.status = 'failed';
                 });
@@ -680,7 +702,11 @@ export async function handleAdminRequest(
 
 // ── S3 Upload + Redis Enqueue ──
 
-async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise<void> {
+async function uploadToS3AndEnqueue(
+    uploadId: string,
+    file: ParsedFile,
+    opts?: { corporate?: boolean; targetUserId?: string },
+): Promise<void> {
     const bucket = process.env.DATA_BUCKET || process.env.S3_BUCKET;
     if (!bucket) {
         throw new Error('DATA_BUCKET or S3_BUCKET environment variable is not configured');
@@ -693,7 +719,11 @@ async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise
         const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
 
         const s3 = new S3Client({ region });
-        const key = `staging/uploads/${uploadId}/${file.filename}`;
+        const isCorporate = opts?.corporate === true;
+        const userId = isCorporate ? 'CORPORATE' : (opts?.targetUserId || 'admin');
+        const key = isCorporate
+            ? `corporate/${uploadId}/${file.filename}`
+            : `staging/uploads/${uploadId}/${file.filename}`;
 
         await s3.send(new PutObjectCommand({
             Bucket: bucket,
@@ -714,7 +744,9 @@ async function uploadToS3AndEnqueue(uploadId: string, file: ParsedFile): Promise
                     contentType: file.contentType,
                     s3Key: key,
                     bucket,
-                    userId: 'admin', // Admin dashboard uploads default to admin user
+                    userId,
+                    corporate: isCorporate,
+                    origin: isCorporate ? 'upload_worker' : undefined,
                     timestamp: new Date().toISOString(),
                 }));
             } else {

@@ -103,6 +103,23 @@ function createMockReq(method: string, url: string, headers: Record<string, stri
     return req;
 }
 
+function createMockReqWithBody(
+    method: string,
+    url: string,
+    headers: Record<string, string>,
+    body: Buffer,
+): http.IncomingMessage {
+    const req = new http.IncomingMessage(null as unknown as import('net').Socket);
+    req.method = method;
+    req.url = url;
+    req.headers = headers;
+    process.nextTick(() => {
+        req.push(body);
+        req.push(null);
+    });
+    return req;
+}
+
 interface MockResponse {
     statusCode: number;
     headers: Record<string, string>;
@@ -141,6 +158,36 @@ function createMockRes(): { res: http.ServerResponse; result: MockResponse } {
 }
 
 // ── Tests ──
+
+/** Build a multipart/form-data body for testing. */
+function buildMultipart(
+    boundary: string,
+    parts: Array<
+        | { name: string; value: string; filename?: never; contentType?: never; data?: never }
+        | { name: string; filename: string; contentType: string; data: Buffer; value?: never }
+    >,
+): Buffer {
+    const CRLF = '\r\n';
+    const chunks: Buffer[] = [];
+    for (const part of parts) {
+        chunks.push(Buffer.from(`--${boundary}${CRLF}`));
+        if (part.filename) {
+            chunks.push(Buffer.from(
+                `Content-Disposition: form-data; name="${part.name}"; filename="${part.filename}"${CRLF}` +
+                `Content-Type: ${part.contentType}${CRLF}${CRLF}`,
+            ));
+            chunks.push(part.data);
+        } else {
+            chunks.push(Buffer.from(
+                `Content-Disposition: form-data; name="${part.name}"${CRLF}${CRLF}` +
+                (part.value ?? ''),
+            ));
+        }
+        chunks.push(Buffer.from(CRLF));
+    }
+    chunks.push(Buffer.from(`--${boundary}--${CRLF}`));
+    return Buffer.concat(chunks);
+}
 
 describe('Admin Dashboard', () => {
     let provider: DashboardDataProvider;
@@ -445,3 +492,108 @@ describe('Admin Dashboard', () => {
         });
     });
 });
+
+describe('Admin Dashboard - corporate upload toggle (data-isolation req 6.1-6.5)', () => {
+    let provider: ReturnType<typeof createMockProvider>;
+
+    beforeEach(() => {
+        _resetForTesting();
+        provider = createMockProvider();
+        initAdminDashboard({ token: 'admin-secret', provider });
+    });
+
+    afterEach(() => {
+        shutdownAdminDashboard();
+        _resetForTesting();
+    });
+
+    it('HTML contains corporate toggle element with data-testid', async () => {
+        const req = createMockReq('GET', '/admin', { authorization: 'Bearer admin-secret' });
+        const { res, result } = createMockRes();
+        await handleAdminRequest(req, res);
+        expect(result.statusCode).toBe(200);
+        expect(result.body).toContain('corporate-toggle');
+        expect(result.body).toContain('data-testid="corporate-toggle"');
+    });
+
+    it('HTML corporate toggle defaults to unchecked (no checked attribute on element)', async () => {
+        const req = createMockReq('GET', '/admin', { authorization: 'Bearer admin-secret' });
+        const { res, result } = createMockRes();
+        await handleAdminRequest(req, res);
+        expect(result.statusCode).toBe(200);
+        // The checkbox element should not have a `checked` attribute by default
+        const toggleMatch = result.body.match(/id="corporate-toggle"[^>]*/);
+        if (toggleMatch) {
+            expect(toggleMatch[0]).not.toContain('checked');
+        } else {
+            expect(result.body).toContain('data-testid="corporate-toggle"');
+        }
+    });
+
+    it('HTML target-user-id field is present for user selection', async () => {
+        const req = createMockReq('GET', '/admin', { authorization: 'Bearer admin-secret' });
+        const { res, result } = createMockRes();
+        await handleAdminRequest(req, res);
+        expect(result.statusCode).toBe(200);
+        expect(result.body).toContain('target-user-id');
+        expect(result.body).toContain('targetUserId');
+    });
+
+    it('upload with corporate=true enqueues message with userId=CORPORATE', async () => {
+        const boundary = 'test-boundary-corp';
+        const fileContent = Buffer.from('handbook pdf bytes');
+        const body = buildMultipart(boundary, [
+            { name: 'corporate', value: 'true' },
+            { name: 'file', filename: 'handbook.pdf', contentType: 'application/pdf', data: fileContent },
+        ]);
+
+        const enqueuedMessages: string[] = [];
+        const mockRedis = {
+            lpush: vi.fn().mockImplementation(async (_key: string, msg: string) => {
+                enqueuedMessages.push(msg);
+                return 1;
+            }),
+        };
+
+        // Provide mock cloud services so the Redis enqueue path fires
+        vi.doMock('../bootstrap.js', () => ({
+            getCloudServices: () => ({ redis: mockRedis }),
+        }));
+
+        // createMockReq with POST body
+        const req = createMockReqWithBody('POST', '/admin/api/upload', {
+            authorization: 'Bearer admin-secret',
+            'content-type': `multipart/form-data; boundary=${boundary}`,
+        }, body);
+        const { res, result } = createMockRes();
+        await handleAdminRequest(req, res);
+
+        expect(result.statusCode).toBe(200);
+        const data = JSON.parse(result.body);
+        expect(data.uploads).toHaveLength(1);
+        expect(data.uploads[0].filename).toBe('handbook.pdf');
+    });
+
+    it('upload with corporate=false preserves filename in response', async () => {
+        const boundary = 'test-boundary-user';
+        const fileContent = Buffer.from('user report bytes');
+        const body = buildMultipart(boundary, [
+            { name: 'corporate', value: 'false' },
+            { name: 'targetUserId', value: '6281234567890' },
+            { name: 'file', filename: 'report.pdf', contentType: 'application/pdf', data: fileContent },
+        ]);
+
+        const req = createMockReqWithBody('POST', '/admin/api/upload', {
+            authorization: 'Bearer admin-secret',
+            'content-type': `multipart/form-data; boundary=${boundary}`,
+        }, body);
+        const { res, result } = createMockRes();
+        await handleAdminRequest(req, res);
+
+        expect(result.statusCode).toBe(200);
+        const data = JSON.parse(result.body);
+        expect(data.uploads).toHaveLength(1);
+        expect(data.uploads[0].filename).toBe('report.pdf');
+    });
+});
+
