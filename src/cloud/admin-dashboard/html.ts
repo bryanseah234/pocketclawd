@@ -16,27 +16,39 @@ export function getDashboardHtml(): string {
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg-primary: #0f172a;
-            --bg-card: #1e293b;
-            --bg-card-hover: #334155;
-            --border: #334155;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --success: #22c55e;
-            --warning: #eab308;
-            --danger: #ef4444;
+    
+
+        h1, h2, h3, .brand-font { font-family: var(--font-heading); }
+
+        /* ── Clawd brand tokens (mirrors landing page) ── */
+            --bg-oatmeal: #F5F0E8;
+            --bg-card: rgba(255, 255, 255, 0.7);
+            --bg-card-hover: rgba(255, 255, 255, 0.9);
+            --bg-sidebar: #EDE8DF;
+            --border: rgba(61, 43, 31, 0.12);
+            --border-strong: rgba(61, 43, 31, 0.22);
+            --text-primary: #3D2B1F;
+            --text-secondary: rgba(61, 43, 31, 0.7);
+            --text-muted: rgba(61, 43, 31, 0.45);
+            --accent: #C4A35A;
+            --accent-hover: #b08d45;
+            --success: #2d8a4e;
+            --warning: #b57d2b;
+            --danger: #c0392b;
             --radius: 8px;
+            --font-heading: 'Playfair Display', Georgia, serif;
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --shadow-sm: 0 1px 3px rgba(61,43,31,0.08);
+            --shadow-md: 0 4px 12px rgba(61,43,31,0.10);
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg-primary);
+            font-family: var(--font-body);
+            background: var(--bg-oatmeal);
             color: var(--text-primary);
             line-height: 1.6;
             min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
 
         .container {
@@ -213,7 +225,7 @@ export function getDashboardHtml(): string {
             align-items: center;
             justify-content: space-between;
             padding: 10px 12px;
-            background: var(--bg-primary);
+            background: rgba(61,43,31,0.04);
             border-radius: 6px;
         }
 
@@ -279,7 +291,7 @@ export function getDashboardHtml(): string {
         .stat-item {
             text-align: center;
             padding: 12px;
-            background: var(--bg-primary);
+            background: rgba(61,43,31,0.04);
             border-radius: 6px;
         }
 
@@ -332,7 +344,7 @@ export function getDashboardHtml(): string {
 
         .action-btn {
             padding: 12px 16px;
-            background: var(--bg-primary);
+            background: rgba(61,43,31,0.04);
             border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-primary);
@@ -390,7 +402,7 @@ export function getDashboardHtml(): string {
             align-items: center;
             gap: 12px;
             padding: 10px 12px;
-            background: var(--bg-primary);
+            background: rgba(61,43,31,0.04);
             border-radius: 6px;
             font-size: 0.8rem;
         }

@@ -26,8 +26,17 @@ import {
  * Returns the complete landing page HTML string.
  * Includes embedded CSS, inline SVGs, and vanilla JS for scroll animations.
  */
-export function getLandingPageHtml(): string {
-    return `<!DOCTYPE html>
+export function getLandingPageHtml(opts?: { waPhone?: string; waConnected?: boolean }): string {
+    const DEFAULT_PHONE = '6581234567';
+    const phone = opts?.waPhone ?? DEFAULT_PHONE;
+    const waConnected = opts?.waConnected ?? false;
+    const waLink = \`https://wa.me/\${phone}?text=Hi%20Clawd!\`;
+    const ctaLabel = waConnected ? 'Chat with Clawd on WhatsApp' : 'Get Early Access';
+    const heroBadge = waConnected
+        ? \`<span class="status-badge status-live">● Live</span>\`
+        : \`<span class="status-badge status-coming-soon">Coming Soon</span>\`;
+
+        return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -498,7 +507,37 @@ export function getLandingPageHtml(): string {
 
             .nav-brand { font-size: 1.25rem; }
         }
-    </style>
+    
+        /* ─── Section heading centering ─────────────────────── */
+        .section-heading {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        /* ─── Status badge ────────────────────────────────────── */
+        .status-badge {
+            display: inline-block;
+            font-family: var(--font-body);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 4px 12px;
+            border-radius: 100px;
+            margin-bottom: 1rem;
+        }
+        .status-live {
+            background: rgba(34, 197, 94, 0.12);
+            color: #16a34a;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+        .status-coming-soon {
+            background: rgba(196, 163, 90, 0.12);
+            color: var(--accent-mustard);
+            border: 1px solid rgba(196, 163, 90, 0.3);
+        }
+
+        </style>
 </head>
 <body>
     <header>
@@ -512,9 +551,10 @@ export function getLandingPageHtml(): string {
         <!-- Hero Section -->
         <section class="hero" id="hero">
             <div class="container">
+                ${heroBadge}
                 <h1 class="highlight-swipe">${HERO_HEADLINE}</h1>
                 <p class="hero-subheadline">${HERO_SUBHEADLINE}</p>
-                <a href="${WHATSAPP_LINK}" class="cta-btn washi-tape">${HERO_CTA_LABEL}</a>
+                <a href="${waLink}" class="cta-btn washi-tape">${ctaLabel}</a>
             </div>
         </section>
 
@@ -526,7 +566,7 @@ export function getLandingPageHtml(): string {
         <!-- Features Section -->
         <section id="features">
             <div class="container">
-                <h2 class="highlight-swipe">What Clawd Does For You</h2>
+                <h2 class="highlight-swipe section-heading">What Clawd Does For You</h2>
                 <div class="features-grid">
                     ${FEATURES.map(
         (f) => `<div class="feature-item">
@@ -547,7 +587,7 @@ export function getLandingPageHtml(): string {
         <!-- How It Works Section -->
         <section id="how-it-works">
             <div class="container">
-                <h2 class="highlight-swipe">How It Works</h2>
+                <h2 class="highlight-swipe section-heading">How It Works</h2>
                 <div class="steps-container">
                     ${HOW_IT_WORKS_STEPS.map(
         (step, i) => `<div class="step">
@@ -594,7 +634,7 @@ export function getLandingPageHtml(): string {
         <!-- Pricing Section -->
         <section id="pricing">
             <div class="container">
-                <h2 class="highlight-swipe" style="text-align:center;">Simple, Transparent Pricing</h2>
+                <h2 class="highlight-swipe section-heading">Simple, Transparent Pricing</h2>
                 <div class="pricing-grid">
                     ${PRICING_TIERS.map(
         (tier) => `<div class="pricing-card${tier.highlighted ? ' highlighted' : ''}">
@@ -604,7 +644,7 @@ export function getLandingPageHtml(): string {
                         <ul class="pricing-features">
                             ${tier.features.map((f) => `<li>${f}</li>`).join('\n                            ')}
                         </ul>
-                        <a href="${tier.ctaHref}" class="cta-btn${tier.highlighted ? '' : ' cta-btn-outline'} washi-tape">${tier.ctaLabel}</a>
+                        <a href="${waLink}" class="cta-btn${tier.highlighted ? '' : ' cta-btn-outline'} washi-tape">${tier.ctaLabel}</a>
                     </div>`,
     ).join('\n                    ')}
                 </div>
