@@ -536,6 +536,8 @@ export function getDashboardHtml(): string {
                         <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
             <button class="tab-btn" data-tab="whatsapp" onclick="switchTab('whatsapp')">WhatsApp</button>
             <button class="tab-btn" data-tab="documents" onclick="switchTab('documents')">Documents</button>
+            <button class="tab-btn" data-tab="users" onclick="switchTab('users')">Users</button>
+            <button class="tab-btn" data-tab="system" onclick="switchTab('system')">System</button>
             <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
@@ -698,6 +700,33 @@ export function getDashboardHtml(): string {
         </div><!-- /tab-overview -->
         </div>
         </div><!-- /tab-documents -->
+
+<div class="tab-panel" id="tab-users">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header"><span class="card-title">User Profiles</span>
+                <button onclick="loadUsers()" style="padding:4px 12px;background:rgba(61,43,31,0.1);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:0.85rem;">Refresh</button></div>
+                <div id="users-list" style="display:flex;flex-direction:column;gap:8px;font-size:0.9rem;">Click Refresh to load users.</div>
+                <div id="user-detail" style="margin-top:16px;padding:12px;background:rgba(61,43,31,0.05);border-radius:6px;display:none;">
+                    <h3 style="margin:0 0 8px 0;font-size:1rem;">User detail</h3>
+                    <pre id="user-detail-json" style="white-space:pre-wrap;font-size:0.8rem;font-family:monospace;background:rgba(0,0,0,0.04);padding:8px;border-radius:4px;overflow-x:auto;"></pre>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <button id="user-forget-btn" style="padding:6px 12px;background:#c0392b;color:white;border:0;border-radius:4px;cursor:pointer;">/forget this user</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div><!-- /tab-users -->
+
+        <div class="tab-panel" id="tab-system">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header"><span class="card-title">System errors</span>
+                <button onclick="loadSystemErrors()" style="padding:4px 12px;background:rgba(61,43,31,0.1);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:0.85rem;">Refresh</button></div>
+                <div id="system-errors" style="font-family:monospace;font-size:0.78rem;background:rgba(0,0,0,0.04);padding:10px;border-radius:6px;max-height:60vh;overflow:auto;">Click Refresh to load.</div>
+            </div>
+        </div>
+        </div><!-- /tab-system -->
 
 <div class="tab-panel" id="tab-settings">
             <div class="settings-tab-inner"><!-- Settings panel content injected server-side --></div>
@@ -1076,7 +1105,50 @@ export function getDashboardHtml(): string {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
 
-        function showToast(message, type) {
+        async function loadUsers() {
+  const el = document.getElementById("users-list");
+  el.textContent = "Loading...";
+  try {
+    const r = await fetch("/admin/api/data/users");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    if (!d.users || d.users.length === 0) { el.textContent = "No users yet."; return; }
+    el.innerHTML = d.users.map(u => "<div style=\"display:flex;justify-content:space-between;padding:8px;background:rgba(61,43,31,0.04);border-radius:4px;\"><span><strong>" + esc(u.userId) + "</strong> <span style=\"color:var(--text-muted);font-size:0.8rem;\">" + esc(u.consent || "no-consent") + " &middot; " + (u.messageCount||0) + " msgs &middot; " + (u.docCount||0) + " docs</span></span><button onclick=\"showUserDetail('" + esc(u.userId) + "')\" style=\"padding:4px 10px;background:rgba(61,43,31,0.1);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:0.8rem;\">Detail</button></div>").join("");
+  } catch (e) { el.textContent = "Failed: " + e.message; }
+}
+async function showUserDetail(uid) {
+  const det = document.getElementById("user-detail");
+  const pre = document.getElementById("user-detail-json");
+  det.style.display = "block"; pre.textContent = "Loading " + uid + " ...";
+  document.getElementById("user-forget-btn").onclick = () => forgetUser(uid);
+  try {
+    const r = await fetch("/admin/api/data/users/" + encodeURIComponent(uid));
+    pre.textContent = JSON.stringify(await r.json(), null, 2);
+  } catch (e) { pre.textContent = "Failed: " + e.message; }
+}
+async function forgetUser(uid) {
+  if (!confirm("Delete ALL data for " + uid + "? This cannot be undone.")) return;
+  try {
+    const r = await fetch("/admin/api/data/users/" + encodeURIComponent(uid), { method: "DELETE" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    showToast("/forget queued for " + uid);
+    document.getElementById("user-detail").style.display = "none";
+    loadUsers();
+  } catch (e) { showToast("Failed: " + e.message); }
+}
+async function loadSystemErrors() {
+  const el = document.getElementById("system-errors");
+  el.textContent = "Loading...";
+  try {
+    const r = await fetch("/admin/api/data/system-errors?limit=50");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const d = await r.json();
+    if (!d.errors || d.errors.length === 0) { el.textContent = "No errors recorded."; return; }
+    el.innerHTML = d.errors.map(e => "<div style=\"margin-bottom:8px;padding:6px;border-left:3px solid #c0392b;background:rgba(192,57,43,0.06);\"><strong>" + esc(e.timestamp || "?") + "</strong> [" + esc(e.level || "error") + "] " + esc(e.errorMessage || e.message || "(no message)") + (e.stack ? "<details><summary>stack</summary><pre>" + esc(e.stack.substring(0, 800)) + "</pre></details>" : "") + "</div>").join("");
+  } catch (e) { el.textContent = "Failed: " + e.message; }
+}
+
+function showToast(message, type) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
             toast.className = 'toast show ' + (type || '');

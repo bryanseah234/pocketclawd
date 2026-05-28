@@ -20,6 +20,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 
 import { log } from '../../log.js';
+import { getCloudServices } from '../bootstrap.js';
 
 import { getWhatsAppState } from './whatsapp-bridge.js';
 import { createSettingsRoutes } from './settings/routes.js';
@@ -745,6 +746,159 @@ export async function handleAdminRequest(
 
             // Send initial data immediately
             void emitHealthUpdate();
+            return true;
+        }
+
+        // GET /admin/api/data/users — distinct users from chat-messages + per-user doc count
+        if (path === '/admin/api/data/users' && method === 'GET') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const ddb = services.dataGateway.dynamo;
+                const cfg = services.dataGateway.cfg;
+                const { ScanCommand: DDBScan } = await import('@aws-sdk/lib-dynamodb');
+                const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+                const counts = new Map<string, { messageCount: number }>();
+                let exclusiveStartKey: Record<string, unknown> | undefined = undefined;
+                do {
+                    const r: { Items?: Array<{ userId?: string }>; LastEvaluatedKey?: Record<string, unknown> } = await ddb.send(
+                        new DDBScan({
+                            TableName: cfg.dynamoDb.chatMessagesTable,
+                            ProjectionExpression: 'userId',
+                            ExclusiveStartKey: exclusiveStartKey,
+                        }) as never,
+                    ) as never;
+                    for (const it of r.Items ?? []) {
+                        if (!it.userId) continue;
+                        const cur = counts.get(it.userId) ?? { messageCount: 0 };
+                        cur.messageCount += 1;
+                        counts.set(it.userId, cur);
+                    }
+                    exclusiveStartKey = r.LastEvaluatedKey;
+                } while (exclusiveStartKey);
+                const users: Array<{ userId: string; messageCount: number; docCount: number }> = [];
+                for (const [uid, info] of counts.entries()) {
+                    let docCount = 0;
+                    try {
+                        const lr: { Contents?: Array<unknown> } = await services.dataGateway.s3.send(
+                            new ListObjectsV2Command({
+                                Bucket: cfg.s3.dataBucket,
+                                Prefix: `${uid}/documents/`,
+                                MaxKeys: 1000,
+                            }) as never,
+                        ) as never;
+                        docCount = (lr.Contents ?? []).length;
+                    } catch { /* swallow */ }
+                    users.push({ userId: uid, messageCount: info.messageCount, docCount });
+                }
+                users.sort((a, b) => b.messageCount - a.messageCount);
+                sendJson(res, { users, total: users.length });
+            } catch (err) {
+                log.error('admin /data/users failed', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // GET /admin/api/data/users/:id — full detail
+        if (path.startsWith('/admin/api/data/users/') && method === 'GET') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            const uid = decodeURIComponent(path.substring('/admin/api/data/users/'.length));
+            try {
+                const ddb = services.dataGateway.dynamo;
+                const cfg = services.dataGateway.cfg;
+                const { GetCommand: DDBGet, QueryCommand: DDBQuery } = await import('@aws-sdk/lib-dynamodb');
+                const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+                let preferences: unknown = null;
+                try {
+                    const pref = await ddb.send(new DDBGet({
+                        TableName: cfg.dynamoDb.userPreferencesTable,
+                        Key: { userId: uid },
+                    }) as never) as { Item?: unknown };
+                    preferences = pref.Item ?? null;
+                } catch { /* swallow */ }
+                let messages: Array<unknown> = [];
+                try {
+                    const q = await ddb.send(new DDBQuery({
+                        TableName: cfg.dynamoDb.chatMessagesTable,
+                        KeyConditionExpression: 'userId = :u',
+                        ExpressionAttributeValues: { ':u': uid },
+                        ScanIndexForward: false,
+                        Limit: 20,
+                    }) as never) as { Items?: Array<unknown> };
+                    messages = q.Items ?? [];
+                } catch { /* swallow */ }
+                let documents: Array<{ key: string; size: number; uploadedAt: string }> = [];
+                try {
+                    const lr: { Contents?: Array<{ Key?: string; Size?: number; LastModified?: Date }> } = await services.dataGateway.s3.send(
+                        new ListObjectsV2Command({
+                            Bucket: cfg.s3.dataBucket,
+                            Prefix: `${uid}/documents/`,
+                            MaxKeys: 200,
+                        }) as never,
+                    ) as never;
+                    documents = (lr.Contents ?? []).map(o => ({
+                        key: o.Key ?? '',
+                        size: o.Size ?? 0,
+                        uploadedAt: (o.LastModified ?? new Date()).toISOString(),
+                    }));
+                } catch { /* swallow */ }
+                sendJson(res, { userId: uid, preferences, recentMessages: messages, documents });
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // DELETE /admin/api/data/users/:id — admin-triggered /forget (PDPA right of erasure)
+        if (path.startsWith('/admin/api/data/users/') && method === 'DELETE') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            const uid = decodeURIComponent(path.substring('/admin/api/data/users/'.length));
+            try {
+                const redis = services.redis;
+                if (!redis) { sendJson(res, { error: 'redis unavailable' }, 503); return true; }
+                const requestId = `admin-forget-${Date.now()}`;
+                await redis.lpush('queue:orchestrator:data_gateway', JSON.stringify({
+                    action: 'delete_user_documents',
+                    user_id: uid,
+                    requestId,
+                }));
+                sendJson(res, { accepted: true, userId: uid, requestId }, 202);
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // GET /admin/api/data/system-errors — recent rows from nanoclaw-system-errors
+        if (path === '/admin/api/data/system-errors' && method === 'GET') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const ddb = services.dataGateway.dynamo;
+                const cfg = services.dataGateway.cfg;
+                if (!cfg.dynamoDb.systemErrorsTable) {
+                    sendJson(res, { errors: [], note: 'systemErrorsTable not configured' });
+                    return true;
+                }
+                const { ScanCommand: DDBScan } = await import('@aws-sdk/lib-dynamodb');
+                const u = new URL(req.url ?? '/', 'http://localhost');
+                const limit = Math.min(parseInt(u.searchParams.get('limit') ?? '50', 10) || 50, 200);
+                const r = await ddb.send(new DDBScan({
+                    TableName: cfg.dynamoDb.systemErrorsTable,
+                    Limit: limit,
+                }) as never) as { Items?: Array<unknown> };
+                const errors = (r.Items ?? []).slice().sort((a: unknown, b: unknown) => {
+                    const ta = String((a as { timestamp?: string }).timestamp ?? '');
+                    const tb = String((b as { timestamp?: string }).timestamp ?? '');
+                    return tb.localeCompare(ta);
+                });
+                sendJson(res, { errors, total: errors.length });
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
             return true;
         }
 
