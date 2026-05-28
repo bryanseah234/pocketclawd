@@ -159,6 +159,28 @@ export class MessageQueue implements IMessageQueue {
         return retriedCount;
     }
 
+    /**
+     * B3 (Wave 6): list DLQ entries across users for admin inspection.
+     * Returns all DLQ entries in (userId -> entries[]) form. Capped at
+     * `limit` per user so a runaway user can't blow up the response.
+     */
+    async listDLQ(limit = 25): Promise<Record<string, DLQEntry[]>> {
+        this.assertConnected();
+        const out: Record<string, DLQEntry[]> = {};
+        const pattern = this.keyWithPrefix('queue:dlq:*');
+        let cursor = '0';
+        do {
+            const [nextCursor, keys] = await this.redis!.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            cursor = nextCursor;
+            for (const dlqKey of keys) {
+                const userId = dlqKey.split(':').pop() ?? 'unknown';
+                const raws = await this.redis!.lrange(dlqKey, 0, limit - 1);
+                out[userId] = raws.map(raw => JSON.parse(raw) as DLQEntry);
+            }
+        } while (cursor !== '0');
+        return out;
+    }
+
     // ── Backpressure ──
 
     async getQueueDepth(userId: string): Promise<number> {

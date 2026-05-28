@@ -43,6 +43,14 @@ const SENSITIVE_PATTERNS: RegExp[] = [
 
     // Message content fields in JSON (WhatsApp message bodies should not be logged)
     /("(?:messageContent|message_content|body|messageBody|message_body)":\s*")([^"]+)(")/gi,
+
+    // B2 (Wave 6): PII redaction
+    // E.164 phone numbers (e.g. +6584731565), with or without spaces/dashes.
+    /\+\d{1,3}[\s-]?\d{4,14}/g,
+    // WhatsApp JID with phone (e.g. 6584731565@s.whatsapp.net)
+    /\b\d{8,15}@s\.whatsapp\.net\b/g,
+    // Email addresses (RFC 5322 simplified)
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
 ];
 
 /**
@@ -126,10 +134,36 @@ export class CloudWatchLogger {
     }
 
     /**
-     * Emit a custom CloudWatch metric.
+     * Emit a custom CloudWatch metric (B4 Wave 6).
+     *
+     * Uses fire-and-forget PutMetricData. Errors are swallowed so a failed
+     * metric publish never breaks the calling code. The CloudWatch client
+     * is created lazily so unit tests don't need the SDK.
      */
-    emitMetric(_metric: MetricUnit): void {
-        // CloudWatch PutMetricData integration — placeholder for AWS SDK call
+    emitMetric(metric: MetricUnit): void {
+        // Lazy import — keeps test imports lightweight.
+        import('@aws-sdk/client-cloudwatch')
+            .then(({ CloudWatchClient, PutMetricDataCommand }) => {
+                const client = new CloudWatchClient({ region: this.config.region });
+                const cmd = new PutMetricDataCommand({
+                    Namespace: this.config.metricsNamespace,
+                    MetricData: [
+                        {
+                            MetricName: metric.name,
+                            Value: metric.value,
+                            Unit: metric.unit,
+                            Timestamp: new Date(),
+                            Dimensions: metric.dimensions
+                                ? Object.entries(metric.dimensions).map(([Name, Value]) => ({ Name, Value }))
+                                : undefined,
+                        },
+                    ],
+                });
+                return client.send(cmd);
+            })
+            .catch(() => {
+                // Don't surface SDK errors to callers; metrics are best-effort.
+            });
     }
 }
 

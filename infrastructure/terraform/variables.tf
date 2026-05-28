@@ -124,3 +124,16 @@ variable "tags" {
     Application = "whatsapp-assistant"
   }
 }
+
+# ─── Wave 6: Alerting endpoints ─────────────────────────────────────────────
+variable "alerts_email" {
+  description = "Email to receive CloudWatch alarm notifications via SNS"
+  type        = string
+  default     = "shotsbyseah234@gmail.com"
+}
+
+variable "alerts_sms_phone" {
+  description = "Phone number for SMS alerts (E.164, e.g. +6584731565). Set empty to disable."
+  type        = string
+  default     = "+6584731565"
+}
