@@ -164,6 +164,7 @@ jobs:
             -e ASSISTANT_NAME=Clawd \
             -e DATA_BUCKET=nanoclaw-data-709609992277 \
             -e LOG_PATH=/app/data/logs \
+            -e USE_SUBAGENT=1 \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "\$(which docker)":/usr/local/bin/docker:ro \
             -v /opt/nanoclaw-data:/app/data \
