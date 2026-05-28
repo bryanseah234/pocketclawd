@@ -935,6 +935,10 @@
             document.querySelectorAll('.tab-panel').forEach(panel => {
                 panel.classList.toggle('active', panel.id === 'tab-' + tabId);
             });
+            // Lazy-load Settings panel HTML on first visit
+            if (tabId === 'settings') {
+                loadSettingsIfNeeded();
+            }
         }
 
         // ── SSE Connection ──

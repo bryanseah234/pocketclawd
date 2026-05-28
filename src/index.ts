@@ -28,7 +28,7 @@ import { runMigrations } from './db/migrations/index.js';
 import { ensureContainerRuntimeRunning, cleanupOrphans } from './container-runtime.js';
 import { startActiveDeliveryPoll, startSweepDeliveryPoll, setDeliveryAdapter, stopDeliveryPolls } from './delivery.js';
 import { startHostSweep, stopHostSweep } from './host-sweep.js';
-import { routeInbound } from './router.js';
+import { routeInbound, setChannelRequestGate } from './router.js';
 import { log } from './log.js';
 
 // Response + shutdown registries live in response-registry.ts to break the
@@ -236,6 +236,38 @@ async function main(): Promise<void> {
   // 2. Container runtime
   ensureContainerRuntimeRunning();
   cleanupOrphans();
+
+  // 3a. Cloud-mode fallback responder.
+  // When DATA_BUCKET is set we're running on AWS — register a Bedrock-backed
+  // gate that handles DMs the v2 router would otherwise drop because no agent
+  // group is wired. Group messages are NOT handled here (Clawd is DM-only).
+  if (process.env.DATA_BUCKET) {
+    setChannelRequestGate(async (mg, event) => {
+      if (event.channelType !== 'whatsapp') return;
+      if (event.message.isGroup) return;
+      const adapter = getChannelAdapter('whatsapp');
+      if (!adapter) {
+        log.warn('Cloud responder skipped — WhatsApp adapter not ready', { mgId: mg.id });
+        return;
+      }
+      // Reconstruct InboundMessage shape — router has already serialised content
+      let parsedContent: Record<string, unknown> = {};
+      try { parsedContent = JSON.parse(event.message.content); } catch { /* leave as {} */ }
+      const inbound = {
+        id: event.message.id,
+        kind: event.message.kind,
+        content: parsedContent,
+        timestamp: event.message.timestamp,
+        isMention: event.message.isMention,
+        isGroup: event.message.isGroup,
+      };
+      try {
+        await respondToDM(adapter, event.platformId, inbound);
+      } catch (err) {
+        log.error('Cloud responder threw', { platformId: event.platformId, err });
+      }
+    });
+  }
 
   // 3. Channel adapters
   await initChannelAdapters((adapter: ChannelAdapter): ChannelSetup => {
