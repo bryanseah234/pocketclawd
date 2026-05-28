@@ -8,31 +8,30 @@
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-    
+            --bg-oatmeal:     #F5F0E8;
+            --bg-card:        rgba(255, 255, 255, 0.7);
+            --bg-card-hover:  rgba(255, 255, 255, 0.9);
+            --bg-sidebar:     #EDE8DF;
+            --border:         rgba(61, 43, 31, 0.12);
+            --border-strong:  rgba(61, 43, 31, 0.22);
+            --text-primary:   #3D2B1F;
+            --text-secondary: rgba(61, 43, 31, 0.7);
+            --text-muted:     rgba(61, 43, 31, 0.45);
+            --accent:         #C9973A;
+            --accent-mustard: #C9973A;
+            --accent-hover:   #b08832;
+            --success:        #2d8a4e;
+            --warning:        #b57d2b;
+            --danger:         #c0392b;
+            --radius:         8px;
+            --radius-card:    12px;
+            --font-heading:   'Playfair Display', Georgia, serif;
+            --font-body:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --shadow-sm:      0 1px 3px rgba(61,43,31,0.08);
+            --shadow-md:      0 4px 12px rgba(61,43,31,0.10);
+        }
 
         h1, h2, h3, .brand-font { font-family: var(--font-heading); }
-
-        /* ── Clawd brand tokens (mirrors landing page) ── */
-            --bg-oatmeal: #F5F0E8;
-            --bg-card: rgba(255, 255, 255, 0.7);
-            --bg-card-hover: rgba(255, 255, 255, 0.9);
-            --bg-sidebar: #EDE8DF;
-            --border: rgba(61, 43, 31, 0.12);
-            --border-strong: rgba(61, 43, 31, 0.22);
-            --text-primary: #3D2B1F;
-            --text-secondary: rgba(61, 43, 31, 0.7);
-            --text-muted: rgba(61, 43, 31, 0.45);
-            --accent: #C4A35A;
-            --accent-hover: #b08d45;
-            --success: #2d8a4e;
-            --warning: #b57d2b;
-            --danger: #c0392b;
-            --radius: 8px;
-            --font-heading: 'Playfair Display', Georgia, serif;
-            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            --shadow-sm: 0 1px 3px rgba(61,43,31,0.08);
-            --shadow-md: 0 4px 12px rgba(61,43,31,0.10);
-        }
 
         body {
             font-family: var(--font-body);
@@ -129,7 +128,7 @@
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: var(--radius-card);
             padding: 20px;
         }
 
@@ -368,7 +367,7 @@
 
         .upload-zone:hover, .upload-zone.dragover {
             border-color: var(--accent);
-            background: rgba(59, 130, 246, 0.05);
+            background: rgba(201, 151, 58, 0.06);
         }
 
         .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
@@ -502,6 +501,21 @@
             .container { padding: 16px; }
             .qr-container { flex-direction: column; align-items: flex-start; }
         }
+
+        .btn:focus-visible,
+        .tab-btn:focus-visible,
+        .action-btn:focus-visible,
+        .doc-delete-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        input:focus-visible,
+        select:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+            border-color: var(--accent);
+        }
     
         /* ─── Settings tab layout ─────────────────────────────── */
         .settings-tab-inner {
@@ -544,7 +558,7 @@
             font-family: var(--font-heading, 'Playfair Display', serif);
             font-size: 1.6rem;
             font-weight: 700;
-            color: var(--text);
+            color: var(--text-primary);
             line-height: 1.1;
             margin-bottom: 6px;
         }
@@ -589,19 +603,19 @@
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }
-        .doc-badge-admin { background: rgba(196,163,90,0.15); color: var(--accent-mustard, #C4A35A); }
-        .doc-badge-user { background: rgba(34,197,94,0.12); color: #16a34a; }
+        .doc-badge-admin { background: rgba(201, 151, 58,0.15); color: var(--accent-mustard); }
+        .doc-badge-user { background: rgba(34,197,94,0.12); color: var(--success); }
         .doc-delete-btn {
             background: transparent;
             border: 1px solid var(--border);
-            color: #dc2626;
+            color: var(--danger);
             padding: 4px 10px;
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.8rem;
             transition: background 0.15s;
         }
-        .doc-delete-btn:hover { background: rgba(220,38,38,0.08); }
+        .doc-delete-btn:hover { background: rgba(192,57,43,0.08); }
         .doc-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .ingestion-row {
             display: flex;
@@ -624,8 +638,8 @@
     <div class="container">
         <header>
             <h1>
-                <span class="logo">N</span>
-                NanoClaw Admin
+                <span class="logo">C</span>
+                Clawd Admin
             </h1>
             <div class="connection-badge" id="sse-badge">
                 <span class="status-dot connecting" id="sse-dot"></span>
@@ -633,14 +647,14 @@
             </div>
         </header>
 
-        <nav class="tab-nav" id="tab-nav">
-                        <button class="tab-btn active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
-            <button class="tab-btn" data-tab="whatsapp" onclick="switchTab('whatsapp')">Set Up</button>
-            <button class="tab-btn" data-tab="data" onclick="switchTab('data')">Data</button>
-            <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+        <nav class="tab-nav" id="tab-nav" role="tablist">
+            <button class="tab-btn active" data-tab="overview" role="tab" id="tab-btn-overview" aria-selected="true" aria-controls="tab-overview" onclick="switchTab('overview')">Overview</button>
+            <button class="tab-btn" data-tab="whatsapp" role="tab" id="tab-btn-whatsapp" aria-selected="false" aria-controls="tab-whatsapp" onclick="switchTab('whatsapp')">Set Up</button>
+            <button class="tab-btn" data-tab="data" role="tab" id="tab-btn-data" aria-selected="false" aria-controls="tab-data" onclick="switchTab('data')">Data</button>
+            <button class="tab-btn" data-tab="settings" role="tab" id="tab-btn-settings" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
-                <div class="tab-panel active" id="tab-overview">
+                <div class="tab-panel active" id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview">
         <div class="grid">
             <!-- System Health -->
             <div class="card">
@@ -706,7 +720,7 @@
         </div>
         </div><!-- /tab-overview -->
 
-        <div class="tab-panel" id="tab-whatsapp">
+        <div class="tab-panel" id="tab-whatsapp" role="tabpanel" aria-labelledby="tab-btn-whatsapp">
         <div class="grid">
             <!-- WhatsApp QR Code / Status -->
             <div class="card">
@@ -731,7 +745,7 @@
                 </div>
                 <!-- Phone number + pairing code -->
                 <div class="card-section" style="padding:16px;border-top:1px solid var(--border);">
-                    <label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Or use phone number instead of QR scan</label>
+                    <label for="wa-phone-input" style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Or use phone number instead of QR scan</label>
                     <div style="display:flex;gap:8px;align-items:center;">
                         <input type="tel" id="wa-phone-input" placeholder="e.g. 6581234567" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:var(--bg-input,#fff);" />
                         <button class="btn btn-primary" onclick="requestPairingCode()" style="white-space:nowrap;">Request Pairing Code</button>
@@ -780,7 +794,7 @@
                 <div style="padding:16px;">
                     <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 12px;">Used to notify you when a new user messages Clawd (when auto-approve is off). Get from <strong>@BotFather</strong> on Telegram.</p>
                     <div style="display:flex;gap:8px;">
-                        <input type="password" id="tg-token-input" placeholder="Paste bot token here" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;" />
+                        <input type="password" id="tg-token-input" aria-label="Telegram bot token" placeholder="Paste bot token here" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;" />
                         <button class="btn btn-primary" onclick="saveTelegramToken()">Save</button>
                     </div>
                 </div>
@@ -804,7 +818,7 @@
         </div>
         </div><!-- /tab-whatsapp -->
 
-        <div class="tab-panel" id="tab-data">
+        <div class="tab-panel" id="tab-data" role="tabpanel" aria-labelledby="tab-btn-data">
         <div class="grid">
             <!-- ─────────── Database Stats ─────────── -->
             <div class="card card-full">
@@ -886,7 +900,7 @@
         </div>
         </div><!-- /tab-documents -->
 
-<div class="tab-panel" id="tab-settings">
+<div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
             <div class="settings-tab-inner"><div id="settings-panel-content"><p style="padding:24px;color:var(--text-muted)">Loading settings...</p></div></div>
         </div>
     </div>
@@ -927,15 +941,14 @@
                 });
         }
         function switchTab(tabId) {
-            // Update tab buttons
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.tab === tabId);
+                const isActive = btn.dataset.tab === tabId;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
             });
-            // Update tab panels
             document.querySelectorAll('.tab-panel').forEach(panel => {
                 panel.classList.toggle('active', panel.id === 'tab-' + tabId);
             });
-            // Lazy-load Settings panel HTML on first visit
             if (tabId === 'settings') {
                 loadSettingsIfNeeded();
             }
@@ -1457,7 +1470,7 @@
                 console.error('loadDataStats failed', e);
                 ['stats-dynamodb-detail','stats-opensearch-detail','stats-s3-detail'].forEach(id => {
                     const el = document.getElementById(id);
-                    if (el) el.innerHTML = '<span style="color:#dc2626;">Failed: ' + (e.message || e) + '</span>';
+                    if (el) el.innerHTML = '<span style="color:var(--danger);">Failed: ' + (e.message || e) + '</span>';
                 });
             }
         }
@@ -1493,7 +1506,7 @@
                 tbl.innerHTML = html;
             } catch (e) {
                 console.error('loadDocuments failed', e);
-                tbl.innerHTML = '<div style="color:#dc2626;padding:16px;">Failed to load: ' + (e.message || e) + '</div>';
+                tbl.innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load: ' + (e.message || e) + '</div>';
             }
         }
 
@@ -1527,7 +1540,7 @@
                 }
                 el.innerHTML = data.sources.map(s => {
                     const status = s.connected ? 'Connected' : (s.enabled ? 'Enabled (not connected)' : 'Disabled');
-                    const statusColor = s.connected ? '#16a34a' : (s.enabled ? '#C4A35A' : 'var(--text-muted)');
+                    const statusColor = s.connected ? 'var(--success)' : (s.enabled ? 'var(--accent)' : 'var(--text-muted)');
                     return '<div class="ingestion-row">' +
                         '<div><span class="ingestion-name">' + escapeHtml(s.name) + '</span>' +
                         '<span class="ingestion-status" style="color:' + statusColor + ';">' + status + '</span></div>' +
@@ -1538,7 +1551,7 @@
                 }).join('');
             } catch (e) {
                 console.error('loadIngestionSources failed', e);
-                el.innerHTML = '<div style="color:#dc2626;font-size:0.85rem;">Failed to load: ' + (e.message || e) + '</div>';
+                el.innerHTML = '<div style="color:var(--danger);font-size:0.85rem;">Failed to load: ' + (e.message || e) + '</div>';
             }
         }
 
