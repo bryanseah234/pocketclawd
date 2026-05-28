@@ -261,7 +261,7 @@ describe('Admin Dashboard', () => {
 
             expect(result.statusCode).toBe(200);
             expect(result.headers['Content-Type']).toContain('text/html');
-            expect(result.body).toContain('NanoClaw Admin');
+            expect(result.body).toContain('Clawd Admin');
             expect(result.body).toContain('<!DOCTYPE html>');
         });
 
@@ -274,7 +274,7 @@ describe('Admin Dashboard', () => {
             await handleAdminRequest(req, res);
 
             expect(result.statusCode).toBe(200);
-            expect(result.body).toContain('NanoClaw Admin');
+            expect(result.body).toContain('Clawd Admin');
         });
     });
 
@@ -456,7 +456,7 @@ describe('Admin Dashboard', () => {
             const html = getDashboardHtml();
 
             expect(html).toContain('<!DOCTYPE html>');
-            expect(html).toContain('NanoClaw Admin');
+            expect(html).toContain('Clawd Admin');
             expect(html).toContain('WhatsApp Connection');
             expect(html).toContain('System Health');
             expect(html).toContain('Active Containers');

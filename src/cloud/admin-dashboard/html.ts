@@ -11,7 +11,7 @@ export function getDashboardHtml(): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NanoClaw Admin</title>
+    <title>Clawd Admin</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -524,7 +524,7 @@ export function getDashboardHtml(): string {
         <header>
             <h1>
                 <span class="logo">N</span>
-                NanoClaw Admin
+                Clawd Admin
             </h1>
             <div class="connection-badge" id="sse-badge">
                 <span class="status-dot connecting" id="sse-dot"></span>

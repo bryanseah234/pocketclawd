@@ -231,7 +231,7 @@ function isAuthenticated(req: http.IncomingMessage): boolean {
 function sendUnauthorized(res: http.ServerResponse): void {
     res.writeHead(401, {
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Basic realm="NanoClaw Admin"',
+        'WWW-Authenticate': 'Basic realm="Clawd Admin"',
     });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
 }
