@@ -123,6 +123,7 @@ jobs:
             -e AWS_REGION=ap-southeast-1 \
             -e WHATSAPP_ENABLED=true \
             -e WHATSAPP_AUTH_DIR=/app/data/whatsapp \
+            -e ASSISTANT_NAME=Clawd \
             -e DATA_BUCKET=nanoclaw-data-709609992277 \
             -e LOG_PATH=/app/data/logs \
             -v /var/run/docker.sock:/var/run/docker.sock \
