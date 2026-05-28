@@ -867,6 +867,36 @@ export async function handleAdminRequest(
             return true;
         }
 
+        // K1 (Wave 8): GET /admin/api/data/consent — list user × consent timestamp × version
+        if (path === '/admin/api/data/consent' && method === 'GET') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const ddb = services.dataGateway.dynamo;
+                const cfg = services.dataGateway.cfg;
+                const { ScanCommand: DDBScan } = await import('@aws-sdk/lib-dynamodb');
+                const scan = await ddb.send(new DDBScan({
+                    TableName: cfg.dynamoDb.userPreferencesTable,
+                    ProjectionExpression: 'userId, consentGiven, consentVersion, consentTimestamp, consentDeclined, discoveryCompleted',
+                    Limit: 500,
+                }) as never) as { Items?: Array<Record<string, unknown>> };
+                const rows = (scan.Items ?? []).map(it => ({
+                    userId: String(it.userId ?? ''),
+                    consentGiven: Boolean(it.consentGiven),
+                    consentDeclined: Boolean(it.consentDeclined),
+                    consentVersion: it.consentVersion as string | undefined ?? null,
+                    consentTimestamp: it.consentTimestamp as string | undefined ?? null,
+                    discoveryCompleted: Boolean(it.discoveryCompleted),
+                }));
+                // Newest-first by timestamp
+                rows.sort((a, b) => String(b.consentTimestamp ?? '').localeCompare(String(a.consentTimestamp ?? '')));
+                sendJson(res, { rows, total: rows.length });
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
         // GET /admin/api/data/users/:id — full detail
         if (path.startsWith('/admin/api/data/users/') && method === 'GET') {
             const services = getCloudServices();

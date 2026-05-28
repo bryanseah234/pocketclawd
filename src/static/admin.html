@@ -653,6 +653,7 @@
             <button class="tab-btn" data-tab="data" role="tab" id="tab-btn-data" aria-selected="false" aria-controls="tab-data" onclick="switchTab('data')">Data</button>
             <button class="tab-btn" data-tab="users" role="tab" id="tab-btn-users" aria-selected="false" aria-controls="tab-users" onclick="switchTab('users')">Users</button>
             <button class="tab-btn" data-tab="system" role="tab" id="tab-btn-system" aria-selected="false" aria-controls="tab-system" onclick="switchTab('system')">System</button>
+            <button class="tab-btn" data-tab="consent" role="tab" id="tab-btn-consent" aria-selected="false" aria-controls="tab-consent" onclick="switchTab('consent')">Consent</button>
             <button class="tab-btn" data-tab="settings" role="tab" id="tab-btn-settings" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
@@ -927,6 +928,18 @@
         </div>
         </div><!-- /tab-system -->
 
+<div class="tab-panel" id="tab-consent" role="tabpanel" aria-labelledby="tab-btn-consent">
+    <div style="margin-bottom:16px;">
+        <h2 style="margin:0 0 8px;font-family:'Playfair Display',serif;">PDPA Consent Log</h2>
+        <p style="color:#888;font-size:0.9rem;margin:0;">User × consent timestamp × policy version. Required for compliance audits.</p>
+    </div>
+    <div style="margin-bottom:12px;">
+        <button onclick="loadConsent()" class="btn btn-secondary">Refresh</button>
+        <span id="consent-count" style="margin-left:12px;color:#888;font-size:0.9rem;"></span>
+    </div>
+    <div id="consent-list" style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;">Click Refresh to load.</div>
+</div>
+
 <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
             <div class="settings-tab-inner"><div id="settings-panel-content"><p style="padding:24px;color:var(--text-muted)">Loading settings...</p></div></div>
         </div>
@@ -1014,6 +1027,51 @@
         
             if (tabId === 'users') loadUsers();
             if (tabId === 'system') loadSystemErrors();
+            if (tabId === 'consent') loadConsent();
+        }
+        async function loadConsent() {
+            const list = document.getElementById('consent-list');
+            const count = document.getElementById('consent-count');
+            list.innerHTML = 'Loading…';
+            count.textContent = '';
+            try {
+                const r = await fetch('/admin/api/data/consent');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.rows || d.rows.length === 0) {
+                    list.innerHTML = '<p style="color:#888;margin:0">No consent records yet.</p>';
+                    return;
+                }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
+                html += '<thead><tr style="border-bottom:1px solid var(--border)">';
+                html += '<th style="text-align:left;padding:8px">User</th>';
+                html += '<th style="text-align:left;padding:8px">Status</th>';
+                html += '<th style="text-align:left;padding:8px">Version</th>';
+                html += '<th style="text-align:left;padding:8px">Timestamp</th>';
+                html += '<th style="text-align:left;padding:8px">Discovery</th>';
+                html += '</tr></thead><tbody>';
+                for (const row of d.rows) {
+                    let status = '—';
+                    let color = '#888';
+                    if (row.consentGiven) { status = '✓ Given'; color = 'var(--success, #4caf50)'; }
+                    else if (row.consentDeclined) { status = '✗ Declined'; color = 'var(--danger, #d62728)'; }
+                    const ts = row.consentTimestamp ? new Date(row.consentTimestamp).toLocaleString() : '—';
+                    const ver = row.consentVersion || '—';
+                    const disc = row.discoveryCompleted ? '✓' : '—';
+                    html += '<tr style="border-bottom:1px solid var(--border)">';
+                    html += '<td style="padding:8px;font-family:monospace">' + (row.userId || '') + '</td>';
+                    html += '<td style="padding:8px;color:' + color + '">' + status + '</td>';
+                    html += '<td style="padding:8px">' + ver + '</td>';
+                    html += '<td style="padding:8px">' + ts + '</td>';
+                    html += '<td style="padding:8px">' + disc + '</td>';
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+                list.innerHTML = html;
+                count.textContent = d.total + ' record' + (d.total === 1 ? '' : 's');
+            } catch (e) {
+                list.innerHTML = '<p style="color:var(--danger,#d62728)">Failed to load: ' + e.message + '</p>';
+            }
         }
         async function loadUsers() {
             const list = document.getElementById('users-list');
