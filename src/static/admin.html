@@ -651,6 +651,8 @@
             <button class="tab-btn active" data-tab="overview" role="tab" id="tab-btn-overview" aria-selected="true" aria-controls="tab-overview" onclick="switchTab('overview')">Overview</button>
             <button class="tab-btn" data-tab="whatsapp" role="tab" id="tab-btn-whatsapp" aria-selected="false" aria-controls="tab-whatsapp" onclick="switchTab('whatsapp')">Set Up</button>
             <button class="tab-btn" data-tab="data" role="tab" id="tab-btn-data" aria-selected="false" aria-controls="tab-data" onclick="switchTab('data')">Data</button>
+            <button class="tab-btn" data-tab="users" role="tab" id="tab-btn-users" aria-selected="false" aria-controls="tab-users" onclick="switchTab('users')">Users</button>
+            <button class="tab-btn" data-tab="system" role="tab" id="tab-btn-system" aria-selected="false" aria-controls="tab-system" onclick="switchTab('system')">System</button>
             <button class="tab-btn" data-tab="settings" role="tab" id="tab-btn-settings" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
@@ -900,6 +902,31 @@
         </div>
         </div><!-- /tab-documents -->
 
+<div class="tab-panel" id="tab-users" role="tabpanel" aria-labelledby="tab-btn-users">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Users</span>
+                    <button class="btn btn-outline" onclick="loadUsers()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                </div>
+                <div id="users-list" style="margin-top:1rem;">Loading…</div>
+                <div id="user-detail" style="margin-top:1.5rem;"></div>
+            </div>
+        </div>
+        </div><!-- /tab-users -->
+
+<div class="tab-panel" id="tab-system" role="tabpanel" aria-labelledby="tab-btn-system">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">System Errors</span>
+                    <button class="btn btn-outline" onclick="loadSystemErrors()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                </div>
+                <div id="system-errors-list" style="margin-top:1rem;">Loading…</div>
+            </div>
+        </div>
+        </div><!-- /tab-system -->
+
 <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
             <div class="settings-tab-inner"><div id="settings-panel-content"><p style="padding:24px;color:var(--text-muted)">Loading settings...</p></div></div>
         </div>
@@ -952,7 +979,93 @@
             if (tabId === 'settings') {
                 loadSettingsIfNeeded();
             }
+        
+            if (tabId === 'users') loadUsers();
+            if (tabId === 'system') loadSystemErrors();
         }
+        async function loadUsers() {
+            const list = document.getElementById('users-list');
+            const detail = document.getElementById('user-detail');
+            list.innerHTML = 'Loading…';
+            detail.innerHTML = '';
+            try {
+                const r = await fetch('/admin/api/data/users');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.users || d.users.length === 0) { list.innerHTML = '<p style="color:#aaa">No users yet.</p>'; return; }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
+                html += '<thead><tr style="border-bottom:1px solid #444"><th style="text-align:left;padding:6px">User</th><th style="text-align:right;padding:6px">Messages</th><th style="text-align:right;padding:6px">Docs</th><th style="text-align:right;padding:6px">Actions</th></tr></thead><tbody>';
+                for (const u of d.users) {
+                    const uid = u.userId.replace(/'/g, "\\'");
+                    html += `<tr style="border-bottom:1px solid #333"><td style="padding:6px"><a href="javascript:void(0)" onclick="loadUserDetail('${uid}')">${u.userId}</a></td><td style="text-align:right;padding:6px">${u.messageCount}</td><td style="text-align:right;padding:6px">${u.docCount}</td><td style="text-align:right;padding:6px"><button class="btn btn-outline" style="padding:4px 8px;font-size:0.75rem" onclick="forgetUser('${uid}')">Forget (PDPA)</button></td></tr>`;
+                }
+                html += '</tbody></table>';
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function loadUserDetail(uid) {
+            const detail = document.getElementById('user-detail');
+            detail.innerHTML = '<p>Loading detail for ' + uid + '…</p>';
+            try {
+                const r = await fetch('/admin/api/data/users/' + encodeURIComponent(uid));
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                let html = '<h3 style="margin-top:0">' + d.userId + '</h3>';
+                html += '<h4>Preferences</h4><pre style="background:#222;padding:8px;border-radius:4px;font-size:0.8rem">' + JSON.stringify(d.preferences, null, 2) + '</pre>';
+                html += '<h4>Documents (' + d.documents.length + ')</h4>';
+                if (d.documents.length === 0) {
+                    html += '<p style="color:#888">No documents.</p>';
+                } else {
+                    html += '<ul style="font-size:0.85rem;font-family:monospace">';
+                    for (const doc of d.documents) {
+                        html += '<li>' + doc.key + ' — ' + (doc.size/1024).toFixed(1) + ' KB — ' + doc.uploadedAt + '</li>';
+                    }
+                    html += '</ul>';
+                }
+                html += '<h4>Recent messages (' + d.recentMessages.length + ')</h4><pre style="background:#222;padding:8px;border-radius:4px;font-size:0.75rem;max-height:300px;overflow:auto">' + JSON.stringify(d.recentMessages, null, 2) + '</pre>';
+                detail.innerHTML = html;
+            } catch (e) {
+                detail.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function forgetUser(uid) {
+            if (!confirm('Permanently delete ALL data for ' + uid + '? This is irreversible.')) return;
+            try {
+                const r = await fetch('/admin/api/data/users/' + encodeURIComponent(uid), { method: 'DELETE' });
+                const d = await r.json();
+                alert(r.ok ? ('Forget request queued: ' + (d.requestId || '')) : ('Error: ' + (d.error || r.status)));
+                if (r.ok) loadUsers();
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+
+        async function loadSystemErrors() {
+            const el = document.getElementById('system-errors-list');
+            el.innerHTML = 'Loading…';
+            try {
+                const r = await fetch('/admin/api/data/system-errors?limit=50');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.errors || d.errors.length === 0) { el.innerHTML = '<p style="color:#aaa">No errors. ' + (d.note || 'Healthy.') + '</p>'; return; }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+                html += '<thead><tr style="border-bottom:1px solid #444"><th style="text-align:left;padding:6px">When</th><th style="text-align:left;padding:6px">Message</th></tr></thead><tbody>';
+                for (const err of d.errors) {
+                    const msg = (err.message || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+                    const ts = err.timestamp || '';
+                    const stack = (err.stackTrace || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+                    html += '<tr style="border-bottom:1px solid #333"><td style="padding:6px;white-space:nowrap;font-family:monospace;color:#888">' + ts + '</td><td style="padding:6px">' + msg + (stack ? '<details style="margin-top:4px"><summary style="cursor:pointer;color:#888">stack</summary><pre style="background:#222;padding:8px;font-size:0.75rem;overflow:auto">' + stack + '</pre></details>' : '') + '</td></tr>';
+                }
+                html += '</tbody></table>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+            }
+        }
+
+
 
         // ── SSE Connection ──
         function connectSSE() {
@@ -1567,5 +1680,8 @@
             }
         })();
 </script>
+<!-- impeccable-live-start -->
+<script src="http://localhost:8400/live.js"></script>
+<!-- impeccable-live-end -->
 </body>
 </html>
