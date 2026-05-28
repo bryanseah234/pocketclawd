@@ -1,5 +1,5 @@
 /**
- * NanoClaw — main entry point.
+ * Clawd — main entry point.
  *
  * Thin orchestrator: init DB, run migrations, start channel adapters,
  * start delivery polls, start sweep, handle shutdown.
@@ -403,7 +403,11 @@ async function main(): Promise<void> {
         const platformId = payload.platformId as string | undefined;
         const threadId = (payload.threadId as string | null) ?? null;
         const kind = (payload.kind as string) ?? 'chat';
-        const content = (payload.content as string) ?? JSON.stringify(payload);
+        const rawContent = (payload.content as string) ?? '';
+        // Sub-agent emits plain-text content; deliveryAdapter.deliver expects
+        // a JSON-encoded OutboundMessage payload (e.g. {"text": "..."}). Wrap
+        // accordingly so JSON.parse on the other side produces {text}.
+        const content = JSON.stringify({ text: rawContent });
 
         // Per Q5 (silent admin uploads / discovery quietude): if the sub-agent
         // explicitly marked the response as silent or content is empty, skip
