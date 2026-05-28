@@ -30,6 +30,26 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+# Fallback chain for ThrottlingException / ServiceUnavailable scenarios (G_5).
+# Order: best-but-most-throttled -> regional fallback -> cheap-and-fast fallback.
+# Each tier is tried only after MAX_RETRIES is exhausted on the previous one.
+# WARNING: Bedrock model IDs in ap-southeast-1 are version-specific. Use
+# `aws bedrock list-inference-profiles --region ap-southeast-1` if these
+# stop resolving. Sonnet 4.5 currently exists ONLY as `global.*`, Sonnet 4
+# only as `apac.*`, Haiku 4.5 as `apac.*`.
+FALLBACK_MODEL_IDS = [
+    "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+    "apac.anthropic.claude-haiku-4-5-20251001-v1:0",
+]
+
+# Errors that should trigger fallback to the next model (vs hard fail).
+FALLBACK_TRIGGER_ERROR_CODES = frozenset({
+    "ThrottlingException",
+    "ServiceUnavailableException",
+    "ModelNotReadyException",
+    "ModelTimeoutException",
+})
 MAX_OUTPUT_TOKENS = 4096
 
 # Circuit breaker thresholds
@@ -356,47 +376,108 @@ class BedrockClient:
         body = self._build_request_body(messages, task_type, system_prompt, max_tokens)
         last_error: Exception | None = None
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = await self._call_bedrock(body)
-                await self.circuit_breaker.record_success()
-                return response
+        # G_5: Fallback chain. Try the configured model_id first, then walk
+        # through FALLBACK_MODEL_IDS on ThrottlingException / ServiceUnavailable.
+        # Each model gets its own MAX_RETRIES retry loop with exponential backoff.
+        # The circuit breaker only records a hard failure if the entire chain
+        # fails — a fallback is treated as a degraded success for the breaker.
+        chain = [self.model_id] + [m for m in FALLBACK_MODEL_IDS if m != self.model_id]
 
-            except (ClientError, Exception) as e:
-                last_error = e
+        for chain_idx, candidate_model in enumerate(chain):
+            chain_failed = False
+            for attempt in range(MAX_RETRIES):
+                try:
+                    response = await self._call_bedrock(body, model_id_override=candidate_model)
+                    if chain_idx > 0:
+                        logger.warning(
+                            "Bedrock fallback succeeded via %s (primary=%s)",
+                            candidate_model,
+                            self.model_id,
+                        )
+                    await self.circuit_breaker.record_success()
+                    return response
+
+                except ClientError as e:
+                    last_error = e
+                    err_code = e.response.get("Error", {}).get("Code", "")
+                    logger.warning(
+                        "Bedrock invoke attempt %d/%d on %s failed: %s (code=%s)",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        candidate_model,
+                        str(e),
+                        err_code,
+                    )
+                    # If fallback-trigger error, abort retries on this model
+                    # and move to the next model in the chain immediately.
+                    if err_code in FALLBACK_TRIGGER_ERROR_CODES:
+                        chain_failed = True
+                        break
+                    if attempt < MAX_RETRIES - 1:
+                        backoff = BACKOFF_BASE_SECONDS * (2**attempt)
+                        logger.info("Retrying in %.1fs...", backoff)
+                        await asyncio.sleep(backoff)
+
+                except Exception as e:  # noqa: BLE001 — keep prior catchall behaviour
+                    last_error = e
+                    logger.warning(
+                        "Bedrock invoke attempt %d/%d on %s failed: %s",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        candidate_model,
+                        str(e),
+                    )
+                    if attempt < MAX_RETRIES - 1:
+                        backoff = BACKOFF_BASE_SECONDS * (2**attempt)
+                        logger.info("Retrying in %.1fs...", backoff)
+                        await asyncio.sleep(backoff)
+            if chain_failed and chain_idx + 1 < len(chain):
                 logger.warning(
-                    "Bedrock invoke attempt %d/%d failed: %s",
-                    attempt + 1,
-                    MAX_RETRIES,
-                    str(e),
+                    "Bedrock model %s tripped fallback trigger; trying %s next",
+                    candidate_model,
+                    chain[chain_idx + 1],
+                )
+                continue
+            # If we reach here without returning, this model is exhausted.
+            # Move on to the next model in the chain.
+            if chain_idx + 1 < len(chain):
+                logger.warning(
+                    "Bedrock model %s exhausted retries; trying %s next",
+                    candidate_model,
+                    chain[chain_idx + 1],
                 )
 
-                if attempt < MAX_RETRIES - 1:
-                    backoff = BACKOFF_BASE_SECONDS * (2**attempt)
-                    logger.info("Retrying in %.1fs...", backoff)
-                    await asyncio.sleep(backoff)
-
-        # All retries exhausted — record failure for circuit breaker
+        # All models in the chain exhausted — record failure for circuit breaker
         await self.circuit_breaker.record_failure()
         logger.error(
-            "All %d retries exhausted for Bedrock invoke. Last error: %s",
-            MAX_RETRIES,
+            "All %d models in fallback chain exhausted. Last error: %s",
+            len(chain),
             last_error,
         )
         raise last_error  # type: ignore[misc]
 
-    async def _call_bedrock(self, body: dict[str, Any]) -> LLMResponse:
+    async def _call_bedrock(
+        self,
+        body: dict[str, Any],
+        model_id_override: str | None = None,
+    ) -> LLMResponse:
         """
         Execute the actual Bedrock InvokeModel call.
 
         Runs the synchronous boto3 call in a thread executor to avoid
         blocking the async event loop.
+
+        Args:
+            body: InvokeModel request body.
+            model_id_override: Override the configured self.model_id (used by
+                the G_5 fallback chain to try a secondary model on throttle).
         """
+        effective_model_id = model_id_override or self.model_id
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
             None,
             lambda: self._client.invoke_model(
-                modelId=self.model_id,
+                modelId=effective_model_id,
                 contentType="application/json",
                 accept="application/json",
                 body=json.dumps(body),
@@ -417,7 +498,7 @@ class BedrockClient:
 
         return LLMResponse(
             content=content,
-            model_id=self.model_id,
+            model_id=effective_model_id,
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
             stop_reason=response_body.get("stop_reason", ""),

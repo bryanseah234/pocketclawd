@@ -146,6 +146,15 @@ jobs:
           fi
           echo "  smoke passed"
 
+          # ── Reset circuit breaker on every deploy (G_4) ──
+          # The orchestrator persists circuit-breaker state at /opt/nanoclaw-data/circuit-breaker.json.
+          # If the previous deploy crashed during smoke (e.g. EACCES from
+          # unconditional fs.mkdirSync), the breaker can stay open across
+          # deploys and cascade into a 75s probe timeout. Clear it so a
+          # successful deploy starts with a clean slate.
+          echo "=== [2.5/4] Reset circuit breaker (G_4) ==="
+          rm -f /opt/nanoclaw-data/circuit-breaker.json 2>/dev/null || true
+
           # ── Atomic swap: stop old, start new — under 5s ──
           echo "=== [3/4] Atomic swap (old container down for ~5s) ==="
           mkdir -p /opt/nanoclaw-data/whatsapp /opt/nanoclaw-data/logs /opt/nanoclaw-data/db
@@ -218,6 +227,39 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Force ECS sub-agent redeployment (G_1)
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          # The sub-agent ECS service does NOT auto-pick-up new image digests
+          # when only the :latest tag changes (task definition references
+          # :latest by name, ECS only re-pulls on task definition change).
+          # Force a new deployment so the new image is picked up immediately.
+          echo "Forcing nanoclaw-sub-agent ECS redeployment..."
+          aws ecs update-service \
+            --cluster nanoclaw-cluster \
+            --service nanoclaw-sub-agent \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }} \
+            --query "service.deployments[0].{Id:id,Status:status,RolloutState:rolloutState}" \
+            --output table
+
+          # Optionally wait for rollout to complete (capped at 5min).
+          echo "Waiting for rollout (up to 5 min)..."
+          for i in $(seq 1 30); do
+            sleep 10
+            STATE=$(aws ecs describe-services \
+              --cluster nanoclaw-cluster \
+              --services nanoclaw-sub-agent \
+              --region ${{ env.AWS_REGION }} \
+              --query "services[0].deployments[0].rolloutState" \
+              --output text 2>/dev/null || echo UNKNOWN)
+            echo "  [$i/30] rolloutState=$STATE"
+            [ "$STATE" = "COMPLETED" ] && echo "Rollout complete" && exit 0
+            [ "$STATE" = "FAILED" ] && echo "Rollout FAILED" && exit 1
+          done
+          echo "Rollout still in progress after 5min — letting it continue async."
 
       - name: External health check
         run: |

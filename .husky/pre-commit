@@ -1,5 +1,31 @@
-staged=$(git diff --cached --name-only --diff-filter=ACM -- 'src/**/*.ts')
-pnpm run format:fix
-if [ -n "$staged" ]; then
-  echo "$staged" | xargs git add
+#!/usr/bin/env bash
+# Husky pre-commit (G_2): hard-fail on format issues OR typecheck errors.
+# Bypass with `git commit --no-verify` if you really mean it.
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM -- 'src/**/*.ts' 'container/**/*.py' 2>/dev/null || true)
+
+if [ -z "$staged" ]; then
+  exit 0
 fi
+
+# Format TS files in-place, then re-add — but FAIL if prettier itself errors.
+ts_staged=$(echo "$staged" | grep -E '\.ts$' || true)
+if [ -n "$ts_staged" ]; then
+  if ! pnpm run format:fix; then
+    echo "❌ pre-commit: format:fix failed. Fix the prettier errors above."
+    exit 1
+  fi
+  echo "$ts_staged" | xargs git add
+fi
+
+# Quick typecheck on the whole repo. If you want this faster, narrow to
+# tsc --noEmit on a project file. tsbuildinfo cache makes this fast.
+if [ -n "$ts_staged" ]; then
+  if ! pnpm run typecheck; then
+    echo "❌ pre-commit: typecheck failed. Fix TS errors before committing."
+    exit 1
+  fi
+fi
+
+exit 0
