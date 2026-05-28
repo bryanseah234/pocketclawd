@@ -277,6 +277,17 @@ async def _handle_chat_message(message: InboundMessage) -> AgentResponse:
         # Store user message in DynamoDB
         await _store_chat_message(message.user_id, "user", message.content)
 
+        # Q8: Silent URL ingestion — if the message contains http(s) URLs,
+        # fetch + extract + embed + index in the background. The user gets
+        # a normal RAG response; the URL becomes searchable on subsequent
+        # questions. Failures are swallowed inside ingest_urls_silently —
+        # the chat reply is never blocked.
+        try:
+            from src.url_ingestion import schedule_silent_ingest
+            schedule_silent_ingest(state.redis, message.user_id, message.content)
+        except Exception as url_err:  # noqa: BLE001
+            logger.warning("URL silent-ingest scheduling failed: %s", url_err)
+
         # Run RAG pipeline (searches documents + calls LLM)
         response_text = await pipeline.query(
             user_message=message.content,

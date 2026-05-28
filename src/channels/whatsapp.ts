@@ -857,6 +857,8 @@ registerChannelAdapter('whatsapp', {
                       Key: s3Key,
                       Body: fileBuffer,
                       Metadata: { uploadId, originalFilename: att.name, userId },
+                      // 24h staging TTL — see bucket lifecycle policy
+                      Tagging: 'lifecycle=staging-24h',
                     }));
 
                     // Determine content type

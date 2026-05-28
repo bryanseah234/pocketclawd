@@ -16,11 +16,7 @@ CONSENT_TTL_SECONDS = 400 * 24 * 3600  # ~13 months, ensure annual renewal
 RENEWAL_THRESHOLD_DAYS = 335  # ~11 months
 
 CONSENT_MESSAGE = (
-    "Welcome to NanoClaw! 👋\n\n"
-    "Before we begin, I need your consent to process your messages.\n\n"
-    "I will store your conversations to provide personalised responses. "
-    "Your data is protected under PDPA and you can withdraw consent at any time.\n\n"
-    "Type *yes* to consent or *no* to decline. Type /privacy for full details."
+    "Hey 👋 I store messages so I can help you better (PDPA-protected, /forget anytime). Reply *yes* to start or *no* to decline."
 )
 
 CONSENT_GRANTED_MESSAGE = (

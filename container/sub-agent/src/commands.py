@@ -64,6 +64,7 @@ HELP_TEXT = """*Available commands:*
 
 /list — Show your uploaded documents
 /delete <filename> — Delete a document
+/forget — Delete ALL your data (PDPA right of erasure)
 /privacy — Privacy policy and data rights
 /help — Show this help message
 
@@ -71,6 +72,27 @@ HELP_TEXT = """*Available commands:*
 • Upload documents via the admin portal
 • Ask questions about your documents naturally
 • Type /list to see what's available"""
+
+
+async def handle_forget(redis: Redis, user_id: str) -> str:
+    """
+    PDPA right-of-erasure: delete every record we hold for this user.
+    Triggers a single delete_user_documents request which the DataGateway
+    fans out across DynamoDB chat history, OpenSearch chunks, and S3 prefix.
+    Best-effort — returns a confirmation regardless of the gateway result so
+    the user always sees a reply (the DG audit log still records the request).
+    """
+    resp = await _dg_request(redis, user_id, {"action": "delete_user_documents"})
+    if resp and resp.get("success"):
+        return (
+            "✅ All your data has been deleted — chats, documents, and embeddings.\n"
+            "If you message me again I'll start fresh and re-ask for consent."
+        )
+    return (
+        "⚠️ Deletion request sent but the gateway did not confirm immediately. "
+        "Your data will still be removed in the next sweep — contact admin if "
+        "you don't see this take effect within an hour."
+    )
 
 PRIVACY_TEXT = """*Privacy & Data Rights*
 
@@ -104,4 +126,6 @@ async def handle_command(redis: Redis, user_id: str, content: str) -> str | None
         return HELP_TEXT
     if cmd == "/privacy":
         return PRIVACY_TEXT
+    if cmd == "/forget":
+        return await handle_forget(redis, user_id)
     return f"Unknown command: {cmd}\nType /help for available commands."
