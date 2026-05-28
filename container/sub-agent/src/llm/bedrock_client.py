@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
 MAX_OUTPUT_TOKENS = 4096
 
 # Circuit breaker thresholds
@@ -78,6 +78,33 @@ class CircuitBreakerOpenError(Exception):
     """Raised when the circuit breaker is open and requests are rejected."""
 
     pass
+
+
+_CACHED_MODEL_ID: str | None = None
+
+
+def _load_model_id_from_secrets(secret_id: str) -> str | None:
+    """
+    Resolve ``llm_subagent_model_id`` from AWS Secrets Manager.
+
+    Falls back silently to None on any error so the caller can keep using the
+    DEFAULT_MODEL_ID. Result is cached per-process.
+    """
+    global _CACHED_MODEL_ID
+    if _CACHED_MODEL_ID is not None:
+        return _CACHED_MODEL_ID
+    region = os.environ.get("AWS_REGION", "ap-southeast-1")
+    client = boto3.client("secretsmanager", region_name=region)
+    resp = client.get_secret_value(SecretId=secret_id)
+    raw_str = resp.get("SecretString")
+    if not raw_str:
+        return None
+    config = json.loads(raw_str)
+    model_id = config.get("llm_subagent_model_id") or config.get("llm_model_id")
+    if model_id:
+        _CACHED_MODEL_ID = model_id
+        logger.info("Sub-agent model id resolved from %s: %s", secret_id, model_id)
+    return model_id
 
 
 class LLMResponse(BaseModel):
@@ -249,6 +276,19 @@ class BedrockClient:
         env_model = os.environ.get("BEDROCK_LLM_MODEL_ID")
         if model_id == DEFAULT_MODEL_ID and env_model:
             model_id = env_model
+        # If still on default, try AWS Secrets Manager (PRD path)
+        if model_id == DEFAULT_MODEL_ID:
+            secret_id = os.environ.get("APP_CONFIG_SECRET_ID", "nanoclaw/app-config")
+            try:
+                resolved = _load_model_id_from_secrets(secret_id)
+                if resolved:
+                    model_id = resolved
+            except Exception as e:  # noqa: BLE001 — best-effort, never blocks startup
+                logger.warning(
+                    "Could not resolve sub-agent model id from secret %s: %s",
+                    secret_id,
+                    e,
+                )
         self.model_id = model_id
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
 

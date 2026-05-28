@@ -22,7 +22,7 @@ import { log as baseLog } from './log.js';
 const log = baseLog;
 
 const REGION = process.env.AWS_REGION ?? 'ap-southeast-1';
-const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0';
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE ?? 'nanoclaw-chat-messages';
 const HISTORY_LIMIT = 20;
 const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Clawd';
