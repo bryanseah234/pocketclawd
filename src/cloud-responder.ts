@@ -15,9 +15,9 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 
 import type { ChannelAdapter, InboundMessage } from './channels/adapter.js';
-import { logger } from './modules/logger.js';
+import { log as baseLog } from './log.js';
 
-const log = logger.child({ component: 'cloud-responder' });
+const log = baseLog;
 
 const REGION = process.env.AWS_REGION ?? 'ap-southeast-1';
 const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'apac.anthropic.claude-sonnet-4-5-20250929-v1:0';
@@ -115,6 +115,7 @@ export async function respondToDM(
 
     // Send via WA adapter
     await adapter.deliver(platformId, null, {
+      kind: 'chat',
       content: { text: reply, markdown: reply },
     });
 
@@ -127,6 +128,7 @@ export async function respondToDM(
     // Send a graceful fallback so the user knows something happened
     try {
       await adapter.deliver(platformId, null, {
+        kind: 'chat',
         content: {
           text: "Sorry, I hit a snag on my end. Try again in a sec.",
           markdown: "Sorry, I hit a snag on my end. Try again in a sec.",
