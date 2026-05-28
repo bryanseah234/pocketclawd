@@ -154,17 +154,14 @@ class TestExtractImage:
     """Tests for image OCR extraction (mocked)."""
 
     def test_extracts_text_from_image(self):
-        """Test image OCR with mocked pytesseract."""
-        mock_image = MagicMock()
+        """F1 (Wave 9): extract_image now routes through bedrock_vision.describe_image."""
+        with patch("src.vision.bedrock_vision.describe_image", return_value="TEXT:\nOCR extracted text\n\nDESCRIPTION:\nA photo.") as mock_describe:
+            from src.documents.extractors import extract_image
+            result = extract_image(b"fake image bytes")
 
-        with patch("src.documents.extractors.Image") as mock_pil:
-            mock_pil.open.return_value = mock_image
-            with patch("src.documents.extractors.pytesseract") as mock_tess:
-                mock_tess.image_to_string.return_value = "OCR extracted text"
-                from src.documents.extractors import extract_image
-                result = extract_image(b"fake image bytes")
-
-        assert result == "OCR extracted text"
+        mock_describe.assert_called_once_with(b"fake image bytes")
+        assert "OCR extracted text" in result
+        assert "DESCRIPTION" in result
 
 
 class TestExtractTextRouter:
@@ -207,13 +204,9 @@ class TestExtractTextRouter:
         assert "PDF content" in result
 
     def test_routes_image_png(self):
-        """Test that image/png routes to extract_image."""
-        mock_image = MagicMock()
-        with patch("src.documents.extractors.Image") as mock_pil:
-            mock_pil.open.return_value = mock_image
-            with patch("src.documents.extractors.pytesseract") as mock_tess:
-                mock_tess.image_to_string.return_value = "Image text"
-                result = extract_text(b"fake png", "image/png")
+        """Test that image/png routes to extract_image (via bedrock_vision)."""
+        with patch("src.vision.bedrock_vision.describe_image", return_value="Image text"):
+            result = extract_text(b"fake png", "image/png")
         assert result == "Image text"
 
 

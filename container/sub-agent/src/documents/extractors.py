@@ -158,19 +158,27 @@ def extract_txt(content: bytes) -> str:
 
 def extract_image(content: bytes) -> str:
     """
-    Extract text from an image using OCR (pytesseract).
+    Extract text + description from an image.
+
+    F1 (Wave 9): Routes through `vision.bedrock_vision.describe_image` which
+    honours the CLAWD_VISION_PROVIDER env var:
+    - "bedrock" (default in cloud) — Claude Sonnet 4.5 native vision
+    - "tesseract" — legacy pytesseract OCR
+    - "auto" — try Bedrock; fall back to tesseract on any failure
+
+    The Bedrock provider returns "TEXT:\n...\n\nDESCRIPTION:\n..." which
+    is preserved verbatim so embedders/index get both signals.
 
     Args:
         content: Raw image file bytes (PNG, JPEG, etc.).
 
     Returns:
-        OCR-extracted text content.
+        Extracted text + description.
     """
-    # pytesseract is imported at module level for patchability
-    # Image is imported at module level for patchability
+    # Late import so the legacy tesseract-only test path keeps working.
+    from src.vision.bedrock_vision import describe_image
 
-    image = Image.open(io.BytesIO(content))
-    return pytesseract.image_to_string(image)
+    return describe_image(content)
 
 
 def extract_text(content: bytes, content_type: str) -> str:

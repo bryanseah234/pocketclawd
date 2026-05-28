@@ -74,6 +74,9 @@ HELP_TEXT = """*Clawd — Available commands*
 /profile — Show or edit how Clawd talks to you
 /forget — Delete ALL your data (PDPA right of erasure)
 
+✍️ *Drafting*
+/draft <type> <topic> — Generate a draft (types: minutes, research, slides, email)
+
 ℹ️ *About*
 /about — What Clawd is and what it can do
 /privacy — Privacy policy and data rights
@@ -258,6 +261,72 @@ async def handle_forget_url(redis: Redis, user_id: str, arg: str) -> str:
     return f"✅ Removed: {url}"
 
 
+DRAFT_TYPES = {
+    "minutes": (
+        "You are drafting concise meeting minutes from the topic the user describes.\n"
+        "Output: Date placeholder, Attendees placeholder, 3-5 Discussion bullets,\n"
+        "Decisions, Action items (owner + due date placeholders).\n"
+        "Keep it under 250 words. No fluff."
+    ),
+    "research": (
+        "You are drafting a 5-paragraph research brief on the user-supplied topic.\n"
+        "Sections: Background, Key findings (3 bullets), Open questions,\n"
+        "Recommended next steps. Cite sources as [Source 1], [Source 2] placeholders.\n"
+        "Keep total length under 400 words."
+    ),
+    "slides": (
+        "You are drafting a slide deck outline on the user topic.\n"
+        "Output 8 slides: Title slide, Problem, Why it matters, Approach, Key data,\n"
+        "Conclusion, Next steps, Q&A. Each slide: title + 3 sub-bullets.\n"
+        "Format as Markdown headings."
+    ),
+    "email": (
+        "You are drafting a short professional email on the user topic.\n"
+        "Output: Subject line, Greeting, 2-3 body paragraphs, Sign-off.\n"
+        "Keep under 180 words."
+    ),
+}
+
+
+async def handle_draft(redis: Redis, user_id: str, arg: str) -> str:  # noqa: ARG001
+    """
+    F4 (Wave 9): /draft <type> <topic> — generate a draft document via Bedrock.
+
+    Best-effort: errors return a friendly message. Bedrock invocation is
+    short-circuited if the LLM client can\'t initialise (e.g. local pytest).
+    """
+    parts = arg.strip().split(None, 1)
+    if len(parts) < 2:
+        return (
+            "Usage: /draft <type> <topic>\n"
+            f"Types: {', '.join(sorted(DRAFT_TYPES.keys()))}\n"
+            "Example: /draft minutes Q3 product review with the design team"
+        )
+    doc_type, topic = parts[0].lower(), parts[1].strip()
+    if doc_type not in DRAFT_TYPES:
+        return (
+            f"Unknown draft type \'{doc_type}\'.\n"
+            f"Types: {', '.join(sorted(DRAFT_TYPES.keys()))}"
+        )
+
+    try:
+        from src.llm.bedrock_client import BedrockClient, TaskType
+        client = BedrockClient()
+        system_prompt = DRAFT_TYPES[doc_type]
+        resp = await client.invoke(
+            messages=[{"role": "user", "content": f"Topic: {topic}"}],
+            task_type=TaskType.SUMMARIZATION,
+            system_prompt=system_prompt,
+            max_tokens=2048,
+        )
+        if not resp or not getattr(resp, "content", "").strip():
+            return "⚠️ The model returned an empty draft — try rephrasing the topic."
+        return f"📝 *{doc_type.capitalize()} draft*\n\n{resp.content.strip()}"
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Draft failed for user_id=%s type=%s: %s", user_id, doc_type, exc)
+        return f"⚠️ Could not generate the draft right now ({type(exc).__name__}). Try again later."
+
+
 async def handle_command(redis: Redis, user_id: str, content: str) -> str | None:
     """
     Returns a response string if content is a slash command, else None.
@@ -288,4 +357,6 @@ async def handle_command(redis: Redis, user_id: str, content: str) -> str | None
         return await handle_ingested(redis, user_id)
     if cmd == "/forget-url":
         return await handle_forget_url(redis, user_id, arg)
+    if cmd == "/draft":
+        return await handle_draft(redis, user_id, arg)
     return f"Unknown command: {cmd}\nType /help for available commands."

@@ -48,10 +48,41 @@ export class GoogleAuthManager {
       );
     }
 
-    const credsRaw = await fs.readFile(CREDENTIALS_PATH, 'utf8').catch(() => null);
+    // F5 (Wave 9): cloud-mode creds via AWS Secrets Manager.
+    // When CLAWD_GOOGLE_SECRET_ID is set we resolve credentials and token
+    // from Secrets Manager instead of the local filesystem. The secret
+    // payload is JSON of shape {credentials: <client_secret_json>, token: <token_json>}.
+    let credsRaw: string | null = null;
+    let tokenRaw: string | null = null;
+
+    const cloudSecretId = process.env.CLAWD_GOOGLE_SECRET_ID;
+    if (cloudSecretId) {
+      try {
+        const { SecretsManagerClient, GetSecretValueCommand } =
+          await import('@aws-sdk/client-secrets-manager');
+        const region = process.env.AWS_REGION || 'ap-southeast-1';
+        const sm = new SecretsManagerClient({ region });
+        const resp = await sm.send(new GetSecretValueCommand({ SecretId: cloudSecretId }));
+        const payload = JSON.parse(resp.SecretString ?? '{}') as {
+          credentials?: unknown;
+          token?: unknown;
+        };
+        if (payload.credentials) credsRaw = JSON.stringify(payload.credentials);
+        if (payload.token) tokenRaw = JSON.stringify(payload.token);
+      } catch (err) {
+        throw new Error(
+          `Failed to load Google secret '${cloudSecretId}' from Secrets Manager: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    // Fall back to filesystem (host mode) if cloud lookup didn\'t populate.
+    if (credsRaw === null) {
+      credsRaw = await fs.readFile(CREDENTIALS_PATH, 'utf8').catch(() => null);
+    }
     if (!credsRaw) {
       throw new Error(
-        `Google credentials missing at ${CREDENTIALS_PATH}. Run /auth google.`,
+        `Google credentials missing. Set CLAWD_GOOGLE_SECRET_ID or place credentials at ${CREDENTIALS_PATH}.`,
       );
     }
     const creds = JSON.parse(credsRaw);
@@ -63,12 +94,14 @@ export class GoogleAuthManager {
       installed.redirect_uris?.[0] ?? 'http://localhost',
     );
 
-    const tokenRaw = await fs.readFile(TOKEN_PATH, 'utf8').catch(() => null);
+    if (tokenRaw === null) {
+      tokenRaw = await fs.readFile(TOKEN_PATH, 'utf8').catch(() => null);
+    }
     if (tokenRaw) {
       this.oauth2Client.setCredentials(JSON.parse(tokenRaw));
     } else {
       throw new Error(
-        `Google token missing at ${TOKEN_PATH}. Run /auth google to start OAuth.`,
+        `Google token missing. Set CLAWD_GOOGLE_SECRET_ID with token, or place token at ${TOKEN_PATH}, or run /auth google.`,
       );
     }
   }

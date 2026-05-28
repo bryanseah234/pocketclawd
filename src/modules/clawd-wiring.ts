@@ -1,28 +1,30 @@
 /**
- * Clawd — host-side wiring for cron handlers.
+ * Clawd — host-side wiring for cron handlers (F2 + F3 wired in Wave 9).
  *
  * Imported for side effects from `src/modules/index.ts`.
  *
- * As of the pgvector / Claude-Code-subscription re-arch, host-side cron
- * handlers no longer invoke Claude directly:
+ * As of Wave 9 the wiring is no longer no-op:
  *
- *   - The wiki regen cron (03:00) needs a Claude callback. None is wired
- *     here, so `runWikiRegen` SKIPs with `no-provider`. Re-wiring through
- *     the agent container is a follow-on project.
+ *   - F3 wiki regen (03:00): wired to a Bedrock callback via `setWikiProvider`.
+ *     Calls Sonnet 4.5 with the prompt the WikiGenerator emits, returns the
+ *     raw text, audit-logs success/fail.
  *
- *   - The morning digest cron (07:00) needs a delivery handler. None is
- *     wired here for the same reason; `runMorningDigest` SKIPs with
- *     `no-handler`.
+ *   - F2 morning digest (07:00): wired via `setDigestHandler`. Iterates the
+ *     consenting users in DDB, asks Bedrock for a 3-bullet digest of their
+ *     last 24h of chat history, and pushes the result to the WhatsApp
+ *     channel through the delivery adapter. Best-effort per user.
  *
- * The adapter-ready audit is retained as a boot-chain signal so operators
- * can confirm the host wired up its delivery layer.
+ * Both handlers are gated on env: set CLAWD_CRON_WIKI=true / CLAWD_CRON_DIGEST=true
+ * to enable them in the running orchestrator. Defaults are FALSE so existing
+ * deployments stay quiet until Bryan flips the switch.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { onDeliveryAdapterReady } from '../delivery.js';
+import { onDeliveryAdapterReady, getDeliveryAdapter } from '../delivery.js';
 import { envPath } from './paths.js';
+import { setWikiProvider, setDigestHandler } from './clawd.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
@@ -36,6 +38,113 @@ async function audit(line: string): Promise<void> {
   }
 }
 
+// ── F3: Bedrock-backed wiki provider ──
+async function bedrockChat(prompt: string): Promise<string> {
+  const { BedrockRuntimeClient, InvokeModelCommand } = await import('@aws-sdk/client-bedrock-runtime');
+  const region = process.env.AWS_REGION || 'ap-southeast-1';
+  const modelId = process.env.CLAWD_WIKI_MODEL_ID || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
+  const client = new BedrockRuntimeClient({ region });
+  const body = {
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+  };
+  const cmd = new InvokeModelCommand({
+    modelId,
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: Buffer.from(JSON.stringify(body), 'utf-8'),
+  });
+  const resp = await client.send(cmd);
+  const payload = JSON.parse(Buffer.from(resp.body as Uint8Array).toString('utf-8')) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  return (payload.content ?? []).filter(b => b.type === 'text').map(b => b.text ?? '').join('\n').trim();
+}
+
+// ── F2: morning digest handler ──
+async function buildAndDeliverDigest(): Promise<void> {
+  if (process.env.CLAWD_CRON_DIGEST !== 'true') {
+    await audit('CRON | morning-digest SKIP | CLAWD_CRON_DIGEST!=true');
+    return;
+  }
+  const adapter = getDeliveryAdapter();
+  if (!adapter) {
+    await audit('CRON | morning-digest SKIP | no delivery adapter');
+    return;
+  }
+
+  const { DynamoDBClient } = await import('@aws-sdk/client-dynamodb');
+  const { DynamoDBDocumentClient, ScanCommand, QueryCommand } = await import('@aws-sdk/lib-dynamodb');
+  const region = process.env.AWS_REGION || 'ap-southeast-1';
+  const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
+  const prefsTable = process.env.USER_PREFERENCES_TABLE || 'nanoclaw-user-preferences';
+  const chatTable = process.env.CHAT_MESSAGES_TABLE || 'nanoclaw-chat-messages';
+
+  // Scan consenting users
+  let consenting: string[] = [];
+  try {
+    const scan = await ddb.send(new ScanCommand({
+      TableName: prefsTable,
+      ProjectionExpression: 'userId, consentGiven, dailyDigestEnabled',
+      FilterExpression: 'consentGiven = :t AND dailyDigestEnabled = :t',
+      ExpressionAttributeValues: { ':t': true },
+      Limit: 200,
+    }));
+    consenting = (scan.Items ?? []).map(it => String(it.userId ?? '')).filter(Boolean);
+  } catch (e) {
+    await audit(`CRON | morning-digest FAIL | scan: ${(e as Error).message}`);
+    return;
+  }
+
+  await audit(`CRON | morning-digest | users=${consenting.length}`);
+  const yesterday = new Date(Date.now() - 24 * 3600_000).toISOString();
+
+  let delivered = 0;
+  for (const userId of consenting) {
+    try {
+      // Get last-24h messages
+      const q = await ddb.send(new QueryCommand({
+        TableName: chatTable,
+        KeyConditionExpression: 'userId = :u AND #ts > :since',
+        ExpressionAttributeNames: { '#ts': 'timestamp' },
+        ExpressionAttributeValues: { ':u': userId, ':since': yesterday },
+        Limit: 50,
+      }));
+      const items = q.Items ?? [];
+      if (items.length === 0) continue;
+
+      const history = items.map(it => `[${it.role}] ${it.content}`.slice(0, 600)).join('\n');
+      const prompt = `You are Clawd writing a 3-bullet morning briefing for one of your users. Read the last 24h of conversation below and produce 3 short bullets (• each) covering: 1) what they were working on, 2) anything you noted to follow up on, 3) one helpful nudge for today. Keep it under 80 words total. Do not greet, do not sign off.\n\nCONVERSATION:\n${history}`;
+      const text = await bedrockChat(prompt);
+      if (!text) continue;
+
+      await adapter.deliver(
+        'whatsapp',
+        userId,
+        userId,
+        'text',
+        JSON.stringify({ text: `*Morning briefing*\n${text}` }),
+      );
+      delivered += 1;
+    } catch (e) {
+      await audit(`CRON | morning-digest user-fail | user=${userId} ${(e as Error).message}`);
+    }
+  }
+  await audit(`CRON | morning-digest END | delivered=${delivered}`);
+}
+
+// Register the wiring under env gates so existing deployments stay quiet
+// until Bryan opts in.
+if (process.env.CLAWD_CRON_WIKI === 'true') {
+  setWikiProvider(bedrockChat);
+}
+if (process.env.CLAWD_CRON_DIGEST === 'true') {
+  setDigestHandler(buildAndDeliverDigest);
+}
+
 onDeliveryAdapterReady(() => {
-  void audit('CLAWD_WIRING | delivery adapter ready (no host-side handlers wired)');
+  const wikiOn = process.env.CLAWD_CRON_WIKI === 'true';
+  const digestOn = process.env.CLAWD_CRON_DIGEST === 'true';
+  void audit(`CLAWD_WIRING | delivery ready | wiki=${wikiOn ? 'wired' : 'off'} digest=${digestOn ? 'wired' : 'off'}`);
 });
