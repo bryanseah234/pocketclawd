@@ -259,6 +259,22 @@ registerChannelAdapter('whatsapp', {
     const phoneNumber = env.WHATSAPP_PHONE_NUMBER;
     const authDir = AUTH_DIR;
 
+    // Bail BEFORE touching the filesystem if WhatsApp is explicitly disabled.
+    // Touching authDir before this check causes EACCES in non-root smoke
+    // containers where authDir falls back to ~/.clawd/whatsapp (the
+    // nanoclaw user's home is /home/nanoclaw and is not writable).
+    if (!env.WHATSAPP_ENABLED && !phoneNumber) {
+      // We could still try fs.existsSync as the original code did, but only
+      // if authDir is something we can safely access. In smoke containers
+      // authDir is /home/nanoclaw/.clawd/whatsapp which doesn't exist, and
+      // fs.existsSync returns false there without throwing — so this is safe.
+      try {
+        if (!fs.existsSync(path.join(authDir, 'creds.json'))) return null;
+      } catch {
+        return null;
+      }
+    }
+
     // ── Session backup (S3) — survives container restarts ──
     const dataBucket = process.env.DATA_BUCKET || '';
     const awsRegion = process.env.AWS_REGION || 'ap-southeast-1';
@@ -292,8 +308,16 @@ registerChannelAdapter('whatsapp', {
       }, delayMs);
     };
 
-    // Skip if no existing auth, no phone number for pairing, and not explicitly enabled (QR mode)
-    fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
+    // Now safe to mkdir — we are committed to running the WA adapter.
+    try {
+      fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
+    } catch (mkdirErr) {
+      log.error('WA adapter: failed to create auth dir, disabling channel', {
+        authDir,
+        err: mkdirErr instanceof Error ? mkdirErr.message : String(mkdirErr),
+      });
+      return null;
+    }
     let hasAuth = fs.existsSync(path.join(authDir, 'creds.json'));
 
     // Restore from S3 if local is empty
