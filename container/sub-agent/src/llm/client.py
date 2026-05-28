@@ -24,7 +24,7 @@ DEFAULT_MAX_TOKENS = 4096
 DEFAULT_TEMPERATURE = 0.5
 
 SYSTEM_PROMPT = (
-    "You are NanoClaw, an AI assistant helping users through WhatsApp. "
+    "You are Clawd, an AI assistant helping users through WhatsApp. "
     "Keep responses concise and under 500 words unless detailed explanations are requested. "
     "Always cite sources when using information from retrieved documents using the format "
     "Source: filename.pdf, page X. "

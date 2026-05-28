@@ -48,7 +48,7 @@ class PresentationRequest:
     title: str
     template: SlideTemplate
     slides: list[SlideContent]
-    author: str = "NanoClaw"
+    author: str = "Clawd"
 
 
 def _rgb(triple: tuple) -> "RGBColor":
@@ -148,7 +148,7 @@ def parse_slide_request(user_message: str, llm_response: str) -> "PresentationRe
             title=data["title"],
             template=template,
             slides=slides,
-            author=data.get("author", "NanoClaw"),
+            author=data.get("author", "Clawd"),
         )
     except (KeyError, json.JSONDecodeError, TypeError):
         return None

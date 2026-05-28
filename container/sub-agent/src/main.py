@@ -682,7 +682,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="NanoClaw Sub-Agent",
+    title="Clawd Sub-Agent",
     description="Per-user AI agent for message processing, RAG, and document ingestion",
     version="0.1.0",
     lifespan=lifespan,

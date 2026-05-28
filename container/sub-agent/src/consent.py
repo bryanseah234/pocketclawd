@@ -1,5 +1,5 @@
 """
-PDPA consent collection module for the NanoClaw sub-agent.
+PDPA consent collection module for the Clawd sub-agent.
 Tracks user consent status in Redis and enforces annual renewal.
 """
 import json
@@ -36,13 +36,13 @@ CONSENT_RE_ASK = (
 RENEWAL_MESSAGE = (
     "⚠️ *Annual data consent renewal*\n\n"
     "It's been almost a year since you gave consent for data processing. "
-    "Please renew your consent to continue using NanoClaw.\n\n"
+    "Please renew your consent to continue using Clawd.\n\n"
     "Reply *yes* to renew or *no* to withdraw consent."
 )
 
 WITHDRAWAL_MESSAGE = (
     "✅ Your consent has been withdrawn and all your data will be deleted. "
-    "Thank you for using NanoClaw."
+    "Thank you for using Clawd."
 )
 
 
