@@ -601,6 +601,13 @@ async def poll_queue() -> None:
 
             # Process and respond
             response = await process_message(message)
+            # Echo routing fields from inbound -> response metadata so
+            # the orchestrator's response poll can deliver back to the
+            # right channel/user. Handlers may override by setting the
+            # field explicitly in their own metadata dict.
+            for _k in ("channelType", "platformId", "threadId", "kind"):
+                if _k in message.metadata and not response.metadata.get(_k):
+                    response.metadata[_k] = message.metadata[_k]
             await enqueue_response(response)
 
         except aioredis.ConnectionError as e:
