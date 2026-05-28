@@ -88,12 +88,25 @@ function getSettingsHandler(): ReturnType<typeof createSettingsRoutes> {
 // EventSource and subsequent fetch calls use the cookie automatically — no headers needed.
 const SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
 const SESSION_COOKIE_NAME = 'nanoclaw_admin_session';
+// CSRF (A2): double-submit cookie pattern. The CSRF cookie is readable by JS
+// (NOT HttpOnly) so the admin UI can read it and echo it as the X-CSRF-Token
+// header on state-mutating requests. The server compares the cookie value to
+// the header value — if they match, the request originated from a same-origin
+// page (which is the only context where JS can read this cookie).
+// SameSite=Strict already blocks classic CSRF, this is defense-in-depth.
+const CSRF_TOKEN = crypto.randomBytes(32).toString('hex');
+const CSRF_COOKIE_NAME = 'nanoclaw_admin_csrf';
+const CSRF_HEADER_NAME = 'x-csrf-token';
+// Methods that require CSRF protection (i.e., state-mutating).
+const CSRF_PROTECTED_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 
 function setSessionCookie(res: http.ServerResponse): void {
     if (typeof res.setHeader !== 'function') return;
-    res.setHeader('Set-Cookie',
-        `${SESSION_COOKIE_NAME}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=86400`
-    );
+    res.setHeader('Set-Cookie', [
+        `${SESSION_COOKIE_NAME}=${SESSION_TOKEN}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=86400`,
+        // CSRF cookie is intentionally NOT HttpOnly — the admin UI's JS reads it.
+        `${CSRF_COOKIE_NAME}=${CSRF_TOKEN}; SameSite=Strict; Path=/admin; Max-Age=86400`,
+    ]);
 }
 
 function hasValidSessionCookie(req: http.IncomingMessage): boolean {
@@ -102,6 +115,53 @@ function hasValidSessionCookie(req: http.IncomingMessage): boolean {
         const [k, v] = c.trim().split('=');
         return k === SESSION_COOKIE_NAME && v === SESSION_TOKEN;
     });
+}
+
+/**
+ * CSRF check (A2): for state-mutating requests, require a matching X-CSRF-Token
+ * header AND nanoclaw_admin_csrf cookie. Returns true if the request is safe
+ * (i.e., either a non-mutating method or has a valid token pair).
+ */
+function passesCsrfCheck(req: http.IncomingMessage): boolean {
+    const method = (req.method || 'GET').toUpperCase();
+    if (!CSRF_PROTECTED_METHODS.has(method)) return true;
+
+    // Skip CSRF for explicit-auth clients (Bearer/Basic Auth headers).
+    // CSRF only matters for cookie-based auth where a victim browser auto-attaches
+    // credentials. API clients sending Authorization headers explicitly cannot
+    // be tricked into doing this.
+    const authHeader = req.headers.authorization || '';
+    if (authHeader.startsWith('Bearer ') || authHeader.startsWith('Basic ')) return true;
+
+    // Read cookie value
+    const cookieHeader = req.headers.cookie || '';
+    let cookieToken: string | undefined;
+    for (const c of cookieHeader.split(';')) {
+        const [k, v] = c.trim().split('=');
+        if (k === CSRF_COOKIE_NAME) {
+            cookieToken = v;
+            break;
+        }
+    }
+    if (!cookieToken) return false;
+
+    // Read header value
+    const headerToken = req.headers[CSRF_HEADER_NAME];
+    if (!headerToken || typeof headerToken !== 'string') return false;
+
+    // Constant-time comparison
+    if (cookieToken.length !== headerToken.length) return false;
+    let diff = 0;
+    for (let i = 0; i < cookieToken.length; i++) {
+        diff |= cookieToken.charCodeAt(i) ^ headerToken.charCodeAt(i);
+    }
+    return diff === 0;
+}
+
+function sendCsrfFailure(res: http.ServerResponse): void {
+    if (typeof res.writeHead !== 'function') return;
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'CSRF token missing or invalid' }));
 }
 
 // ── Auth: HTTP Basic Auth + Rate Limiting ──
@@ -496,6 +556,13 @@ export async function handleAdminRequest(
 
     // Auth succeeded — clear failed attempts
     clearFailedAttempts(clientIp);
+
+    // CSRF (A2): for state-mutating methods, require matching cookie + header token.
+    // Same-origin GETs and the initial /admin HTML load are exempt.
+    if (!passesCsrfCheck(req)) {
+        sendCsrfFailure(res);
+        return true;
+    }
 
     try {
         // ── Settings API delegation ──

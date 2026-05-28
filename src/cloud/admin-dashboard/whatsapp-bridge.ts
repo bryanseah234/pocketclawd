@@ -8,6 +8,7 @@
  */
 
 import QRCode from 'qrcode';
+import { broadcastWaStateChange, registerWaStateProvider } from './wa-state.js';
 
 // ── Types ──
 
@@ -93,3 +94,9 @@ export function setPairingCode(code: string | null): void {
 export function getWhatsAppState(): WhatsAppBridgeState {
     return { ...state };
 }
+
+// A4: register provider so /api/wa-state and /api/wa-state/stream return live state.
+registerWaStateProvider(() => ({
+    status: state.status,
+    phoneNumber: state.phoneNumber,
+}));
