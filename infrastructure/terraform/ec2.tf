@@ -63,12 +63,14 @@ resource "aws_instance" "main" {
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh.tpl", {
-    project_name = var.project_name
-    aws_region   = var.aws_region
-    redis_host   = aws_elasticache_cluster.redis.cache_nodes[0].address
-    redis_port   = aws_elasticache_cluster.redis.cache_nodes[0].port
-    s3_bucket    = aws_s3_bucket.data.id
-    ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+    project_name      = var.project_name
+    aws_region        = var.aws_region
+    redis_host        = aws_elasticache_cluster.redis.cache_nodes[0].address
+    redis_port        = aws_elasticache_cluster.redis.cache_nodes[0].port
+    s3_bucket         = aws_s3_bucket.data.id
+    ecr_registry      = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
+    orchestrator_image = "${aws_ecr_repository.orchestrator.repository_url}:latest"
+    agent_image       = "${aws_ecr_repository.agent.repository_url}:latest"
   }))
 
   tags = {

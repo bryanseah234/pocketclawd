@@ -192,7 +192,7 @@ resource "aws_security_group_rule" "redis_from_sub_agent" {
   protocol                 = "tcp"
   security_group_id        = aws_security_group.redis.id
   source_security_group_id = aws_security_group.sub_agent.id
-  description              = "Sub-agent ECS task -> Redis"
+  description              = "Sub-agent ECS task to Redis"
 }
 
 resource "aws_ecs_task_definition" "sub_agent" {
