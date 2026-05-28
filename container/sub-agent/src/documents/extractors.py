@@ -11,6 +11,25 @@ import io
 import logging
 from typing import Callable
 
+# Module-level imports so unittest.mock.patch can target these names.
+# Wrapped in try/except so missing optional deps do not break module import.
+try:  # pragma: no cover
+    from PyPDF2 import PdfReader  # type: ignore
+except Exception:  # pragma: no cover
+    PdfReader = None  # type: ignore
+try:  # pragma: no cover
+    from docx import Document  # type: ignore
+except Exception:  # pragma: no cover
+    Document = None  # type: ignore
+try:  # pragma: no cover
+    from PIL import Image  # type: ignore
+except Exception:  # pragma: no cover
+    Image = None  # type: ignore
+try:  # pragma: no cover
+    import pytesseract  # type: ignore
+except Exception:  # pragma: no cover
+    pytesseract = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 # Content type to extractor mapping
@@ -30,7 +49,7 @@ def extract_pdf(content: bytes) -> str:
     Returns:
         Extracted text content.
     """
-    from PyPDF2 import PdfReader
+    # PdfReader is imported at module level for patchability
 
     reader = PdfReader(io.BytesIO(content))
     pages_text: list[str] = []
@@ -57,7 +76,7 @@ def _ocr_pdf_page(content: bytes, page_index: int) -> str:
     """
     try:
         from pdf2image import convert_from_bytes
-        import pytesseract
+        # pytesseract is imported at module level for patchability
 
         images = convert_from_bytes(content, first_page=page_index + 1, last_page=page_index + 1)
         if images:
@@ -82,7 +101,7 @@ def extract_docx(content: bytes) -> str:
     Returns:
         Extracted text content with paragraphs separated by newlines.
     """
-    from docx import Document
+    # Document is imported at module level for patchability
 
     doc = Document(io.BytesIO(content))
     paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
@@ -147,8 +166,8 @@ def extract_image(content: bytes) -> str:
     Returns:
         OCR-extracted text content.
     """
-    import pytesseract
-    from PIL import Image
+    # pytesseract is imported at module level for patchability
+    # Image is imported at module level for patchability
 
     image = Image.open(io.BytesIO(content))
     return pytesseract.image_to_string(image)
