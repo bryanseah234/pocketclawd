@@ -167,9 +167,21 @@ async function main(): Promise<void> {
             services: health ? Object.entries(health.components).map(([name, c]) => ({ name, status: c.status, latencyMs: c.latencyMs, lastChecked: c.lastChecked ?? new Date().toISOString() })) : [],
           };
         },
-        getContainers: async () => ({ total: 0, containers: [] }),
-        getRecentMessages: async () => ({ messages: [], totalProcessed24h: 0 }),
-        getStats: async () => ({ globalMessagesPerMinute: 0, globalMessagesPerHour: 0, activeUsers: 0, topUsers: [], rateLimitHits24h: 0 }),
+        getContainers: async () => {
+          // Live ECS DescribeTasks + CloudWatch Container Insights
+          const { getContainersLive } = await import('./cloud/admin-dashboard/live-data.js');
+          return getContainersLive();
+        },
+        getRecentMessages: async () => {
+          if (!services) return { messages: [], totalProcessed24h: 0 };
+          const { getRecentMessagesLive } = await import('./cloud/admin-dashboard/live-data.js');
+          return getRecentMessagesLive(services);
+        },
+        getStats: async () => {
+          if (!services) return { globalMessagesPerMinute: 0, globalMessagesPerHour: 0, activeUsers: 0, topUsers: [], rateLimitHits24h: 0 };
+          const { getStatsLive } = await import('./cloud/admin-dashboard/live-data.js');
+          return getStatsLive(services);
+        },
         getDataStats: async () => {
           const { getDataStats } = await import('./cloud/admin-dashboard/data-stats.js');
           return getDataStats(services!);

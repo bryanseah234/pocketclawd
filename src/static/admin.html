@@ -658,6 +658,38 @@
         </nav>
 
                 <div class="tab-panel active" id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview">
+
+        <!-- Wave 10: Live Pulse Strip -->
+        <div class="pulse-strip" id="pulse-strip">
+            <div class="pulse-tile" id="pulse-spend">
+                <div class="pulse-label">Bedrock Spend (24h)</div>
+                <div class="pulse-value" id="pulse-spend-value">—</div>
+                <div class="pulse-sub" id="pulse-spend-sub">7-day trend</div>
+                <svg class="pulse-spark" id="pulse-spend-spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="pulse-tile" id="pulse-msgs">
+                <div class="pulse-label">Messages / hour</div>
+                <div class="pulse-value" id="pulse-msgs-value">—</div>
+                <div class="pulse-sub" id="pulse-msgs-sub">vs last hour</div>
+                <svg class="pulse-spark" id="pulse-msgs-spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+            </div>
+            <div class="pulse-tile" id="pulse-tasks">
+                <div class="pulse-label">Live ECS tasks</div>
+                <div class="pulse-value" id="pulse-tasks-value">—</div>
+                <div class="pulse-sub" id="pulse-tasks-sub">orchestrator + sub-agent</div>
+            </div>
+            <div class="pulse-tile" id="pulse-queue">
+                <div class="pulse-label">Pending work</div>
+                <div class="pulse-value" id="pulse-queue-value">—</div>
+                <div class="pulse-sub" id="pulse-queue-sub">uploads · gateway · agents</div>
+            </div>
+            <div class="pulse-tile" id="pulse-health">
+                <div class="pulse-label">System Health</div>
+                <div class="pulse-value" id="pulse-health-value">—</div>
+                <div class="pulse-sub"><span class="as-of" id="pulse-asof">live</span></div>
+            </div>
+        </div>
+
         <div class="grid">
             <!-- System Health -->
             <div class="card">
@@ -1214,7 +1246,9 @@
             });
 
             eventSource.addEventListener('health', (e) => {
-                updateHealth(JSON.parse(e.data));
+                const d = JSON.parse(e.data);
+                updateHealth(d);
+                updatePulseHealth(d);
             });
 
             eventSource.addEventListener('whatsapp', (e) => {
@@ -1222,7 +1256,9 @@
             });
 
             eventSource.addEventListener('containers', (e) => {
-                updateContainers(JSON.parse(e.data));
+                const d = JSON.parse(e.data);
+                updateContainers(d);
+                updatePulseTasks(d);
             });
 
             eventSource.addEventListener('stats', (e) => {
@@ -1342,6 +1378,122 @@
             document.getElementById('stat-users').textContent = data.activeUsers || 0;
             document.getElementById('stat-hits').textContent = data.rateLimitHits24h || 0;
         }
+
+        // ── Wave 10: Live Pulse Strip handlers ──
+        const pulseHistory = { msgs: [] };
+
+        function flashTile(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('flash');
+            void el.offsetWidth;
+            el.classList.add('flash');
+        }
+
+        function renderSparkline(svgId, points, color) {
+            const svg = document.getElementById(svgId);
+            if (!svg || !points || points.length < 2) return;
+            const w = 100, h = 30, pad = 2;
+            const max = Math.max(...points, 0.01);
+            const min = Math.min(...points, 0);
+            const range = (max - min) || 1;
+            const stepX = (w - 2*pad) / (points.length - 1);
+            const coords = points.map((v, i) => {
+                const x = pad + i * stepX;
+                const y = h - pad - ((v - min) / range) * (h - 2*pad);
+                return [x, y];
+            });
+            const linePath = coords.map((c, i) => (i === 0 ? 'M' : 'L') + c[0].toFixed(1) + ' ' + c[1].toFixed(1)).join(' ');
+            const areaPath = linePath + ' L ' + (w-pad) + ' ' + (h-pad) + ' L ' + pad + ' ' + (h-pad) + ' Z';
+            const c = color || 'var(--accent)';
+            svg.innerHTML =
+                '<defs><linearGradient id="grad-' + svgId + '" x1="0" y1="0" x2="0" y2="1">' +
+                '<stop offset="0%" stop-color="' + c + '" stop-opacity="0.35"/>' +
+                '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
+                '</linearGradient></defs>' +
+                '<path d="' + areaPath + '" fill="url(#grad-' + svgId + ')"/>' +
+                '<path d="' + linePath + '" fill="none" stroke="' + c + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        }
+
+        function updatePulseSpend(data) {
+            if (!data) return;
+            const v = data.last24hUsd || 0;
+            const v7 = data.last7dUsd || 0;
+            const valueEl = document.getElementById('pulse-spend-value');
+            if (valueEl) valueEl.textContent = '$' + v.toFixed(2);
+            const sub = document.getElementById('pulse-spend-sub');
+            if (sub) sub.textContent = '7-day total: $' + v7.toFixed(2);
+            renderSparkline('pulse-spend-spark', data.perDayUsd || [], 'var(--accent)');
+            flashTile('pulse-spend');
+        }
+
+        function updatePulseQueues(data) {
+            if (!data) return;
+            const total = (data.pendingUploads || 0) + (data.dataGatewayQueue || 0) + (data.subAgentQueues || 0);
+            const valueEl = document.getElementById('pulse-queue-value');
+            if (valueEl) valueEl.textContent = total;
+            const sub = document.getElementById('pulse-queue-sub');
+            if (sub) sub.textContent = (data.pendingUploads || 0) + ' uploads · ' + (data.dataGatewayQueue || 0) + ' gateway · ' + (data.subAgentQueues || 0) + ' agents';
+            flashTile('pulse-queue');
+        }
+
+        function updatePulseHealth(data) {
+            if (!data) return;
+            const v = (data.overallStatus || 'unknown').toUpperCase();
+            const valueEl = document.getElementById('pulse-health-value');
+            if (valueEl) {
+                valueEl.textContent = v;
+                valueEl.style.color = data.overallStatus === 'healthy' ? 'var(--success)' : (data.overallStatus === 'degraded' ? 'var(--warning)' : 'var(--text-primary)');
+            }
+            const asof = document.getElementById('pulse-asof');
+            if (asof) asof.textContent = 'live · ' + new Date().toLocaleTimeString();
+            flashTile('pulse-health');
+        }
+
+        function updatePulseTasks(data) {
+            if (!data) return;
+            const valueEl = document.getElementById('pulse-tasks-value');
+            if (valueEl) valueEl.textContent = data.total || 0;
+            flashTile('pulse-tasks');
+        }
+
+        function updatePulseFromStats(data) {
+            if (!data) return;
+            const rph = data.globalMessagesPerHour || 0;
+            const valueEl = document.getElementById('pulse-msgs-value');
+            if (valueEl) valueEl.textContent = rph;
+
+            pulseHistory.msgs.push(rph);
+            if (pulseHistory.msgs.length > 30) pulseHistory.msgs.shift();
+            renderSparkline('pulse-msgs-spark', pulseHistory.msgs, 'var(--accent-mustard)');
+
+            const sub = document.getElementById('pulse-msgs-sub');
+            if (sub && pulseHistory.msgs.length >= 2) {
+                const prev = pulseHistory.msgs[pulseHistory.msgs.length - 2] || 0;
+                const delta = rph - prev;
+                const cls = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+                const sign = delta > 0 ? '+' : '';
+                sub.innerHTML = 'msgs/hour ' + (data.globalMessagesPerMinute || 0) + '/min · <span class="pulse-delta ' + cls + '">' + sign + delta + '</span>';
+            }
+            flashTile('pulse-msgs');
+        }
+
+        async function bootstrapPulse() {
+            try {
+                const [s, q] = await Promise.all([
+                    fetch('/admin/api/spend').then(r => r.ok ? r.json() : null).catch(() => null),
+                    fetch('/admin/api/queues').then(r => r.ok ? r.json() : null).catch(() => null),
+                ]);
+                if (s) updatePulseSpend(s);
+                if (q) updatePulseQueues(q);
+            } catch (_e) { /* swallow */ }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapPulse);
+        } else {
+            bootstrapPulse();
+        }
+
 
         // ── WhatsApp Actions ──
         async function reconnectWhatsApp() {

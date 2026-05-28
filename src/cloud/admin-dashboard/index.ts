@@ -382,6 +382,21 @@ async function emitHealthUpdate(): Promise<void> {
         broadcastSse('whatsapp', whatsapp);
         broadcastSse('containers', containers);
         broadcastSse('stats', stats);
+
+        // Wave 10: broadcast Bedrock spend + Redis queue depth.
+        // Lazy-imported so dashboard works even if SDKs are missing in dev.
+        try {
+            const { getBedrockSpendLive, getQueueDepthLive } = await import('./live-data.js');
+            const services = getCloudServices();
+            const [spend, queues] = await Promise.all([
+                getBedrockSpendLive(),
+                services ? getQueueDepthLive(services) : Promise.resolve({ pendingUploads: 0, dataGatewayQueue: 0, subAgentQueues: 0, asOf: new Date().toISOString() }),
+            ]);
+            broadcastSse('spend', spend);
+            broadcastSse('queues', queues);
+        } catch {
+            // best-effort; never break the SSE loop
+        }
     } catch (err) {
         log.error('Admin dashboard SSE emit error', { err });
     }
@@ -862,6 +877,32 @@ export async function handleAdminRequest(
                 sendJson(res, { users, total: users.length });
             } catch (err) {
                 log.error('admin /data/users failed', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // Wave 10 (dashboard live-data): GET /admin/api/spend — Bedrock cost snapshot
+        if (path === '/admin/api/spend' && method === 'GET') {
+            try {
+                const { getBedrockSpendLive } = await import('./live-data.js');
+                const spend = await getBedrockSpendLive();
+                sendJson(res, spend);
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // Wave 10 (dashboard live-data): GET /admin/api/queues — Redis queue depth
+        if (path === '/admin/api/queues' && method === 'GET') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const { getQueueDepthLive } = await import('./live-data.js');
+                const queues = await getQueueDepthLive(services);
+                sendJson(res, queues);
+            } catch (err) {
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
