@@ -148,6 +148,21 @@
             color: #fff;
         }
 
+        /* Disabled state — visible but not actionable */
+        .cta-btn-disabled,
+        .cta-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+            background: rgba(196, 163, 90, 0.5);
+        }
+        .cta-btn-disabled:hover,
+        .cta-btn:disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
         /* ─── Washi-tape decoration on CTA ───────────────────── */
         .washi-tape {
             position: relative;
@@ -236,7 +251,7 @@
         .steps-container {
             display: flex;
             flex-direction: column;
-            gap: 48px;
+            gap: 16px;
             position: relative;
         }
 
@@ -272,13 +287,11 @@
             margin-bottom: 0;
         }
 
-        /* Doodle arrow connector */
+        /* Doodle arrow connector — inline between steps */
         .doodle-arrow {
-            position: absolute;
-            left: 23px;
-            top: 56px;
+            height: 32px;
             width: 2px;
-            height: calc(100% - 8px);
+            margin-left: 23px;
             opacity: 0;
             transition: opacity 0.6s ease;
         }
@@ -288,8 +301,9 @@
         }
 
         .doodle-arrow svg {
-            width: 100%;
-            height: 100%;
+            width: 2px;
+            height: 32px;
+            display: block;
         }
 
         /* ─── Social Proof ───────────────────────────────────── */
@@ -308,7 +322,7 @@
         }
 
         .testimonial-card::before {
-            content: '\\201C';
+            content: '\201C';
             font-family: var(--font-heading);
             font-size: 4rem;
             color: var(--accent-mustard);
@@ -394,7 +408,7 @@
         }
 
         .pricing-features li::before {
-            content: '\\2713';
+            content: '\2713';
             position: absolute;
             left: 0;
             color: var(--accent-mustard);
@@ -517,8 +531,8 @@
             <div class="container">
                 <span class="status-badge status-coming-soon" id="wa-badge">Coming Soon</span>
                 <h1 class="highlight-swipe">Meet Clawd</h1>
-                <p class="hero-subheadline">The AI assistant that actually gets to know you—organizing your life and learning your vibe with every interaction.</p>
-                <span class="cta-btn" id="wa-cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist &rarr;</span>
+                <p class="hero-subheadline">The AI assistant that actually gets to know you — organizing your life and learning your vibe with every interaction. Available on WhatsApp soon.</p>
+                <button class="cta-btn cta-btn-disabled" id="wa-cta-btn" type="button" disabled aria-disabled="true">Joining Soon — WhatsApp Setup In Progress</button>
             </div>
         </section>
 
@@ -551,8 +565,8 @@
             <div class="container">
                 <h2 class="highlight-swipe section-heading">How It Works</h2>
                 <div class="steps-container">
-                    <div class="step"><div class="step-number">1</div><div class="step-content"><h3 class="step-title">Send a message</h3><p class="step-desc">Open WhatsApp and say hello to Clawd. No sign-up forms, no downloads—just start chatting.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 48" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="48" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
-<div class="step"><div class="step-number">2</div><div class="step-content"><h3 class="step-title">Clawd learns</h3><p class="step-desc">Every conversation helps Clawd understand your preferences, schedule, and priorities.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 48" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="48" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
+                    <div class="step"><div class="step-number">1</div><div class="step-content"><h3 class="step-title">Send a message</h3><p class="step-desc">Open WhatsApp and say hello to Clawd. No sign-up forms, no downloads—just start chatting.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 32" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="32" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
+<div class="step"><div class="step-number">2</div><div class="step-content"><h3 class="step-title">Clawd learns</h3><p class="step-desc">Every conversation helps Clawd understand your preferences, schedule, and priorities.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 32" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="32" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
 <div class="step"><div class="step-number">3</div><div class="step-content"><h3 class="step-title">Ask anything</h3><p class="step-desc">Need a recap? A document summary? A reminder? Clawd has your back with instant, personalized answers.</p></div></div>                </div>
             </div>
         </section>
@@ -583,7 +597,7 @@
             <div class="container">
                 <h2 class="highlight-swipe section-heading">Simple, Transparent Pricing</h2>
                 <div class="pricing-grid">
-                    <div class="pricing-card highlighted"><div class="pricing-name">Early Access — Free</div><div class="pricing-price">Free</div><p class="pricing-desc">Free to use while we’re in early access. No credit card, no commitment.</p><ul class="pricing-features"><li>Unlimited WhatsApp messages</li><li>Personal knowledge base</li><li>Document uploads & Q&A</li><li>Daily morning briefings</li><li>Calendar & email summaries</li></ul><span class="cta-btn" style="opacity:0.5;cursor:default;pointer-events:none;">Join the Waitlist</span>
+                    <div class="pricing-card highlighted"><div class="pricing-name">Early Access — Free</div><div class="pricing-price">Free</div><p class="pricing-desc">Free to use while we’re in early access. No credit card, no commitment.</p><ul class="pricing-features"><li>Unlimited WhatsApp messages</li><li>Personal knowledge base</li><li>Document uploads & Q&A</li><li>Daily morning briefings</li><li>Calendar & email summaries</li></ul><button class="cta-btn cta-btn-disabled" id="wa-pricing-btn" type="button" disabled aria-disabled="true">Joining Soon</button>
                     </div>
                 </div>
             </div>
@@ -594,13 +608,12 @@
     <footer>
         <div class="container">
             <div class="footer-links">
-                <a href="/privacy" class="footer-link">Privacy Policy</a>
-<a href="/terms" class="footer-link">Terms of Service</a>
-<a href="#features" class="footer-link">Features</a>
-<a href="#how-it-works" class="footer-link">How It Works</a>
-<a href="#pricing" class="footer-link">Pricing</a>
+                <a href="#features" class="footer-link">Features</a>
+                <a href="#how-it-works" class="footer-link">How It Works</a>
+                <a href="#pricing" class="footer-link">Pricing</a>
+                <a href="mailto:hello@clawd.ai" class="footer-link">Contact</a>
             </div>
-            <p class="footer-copy">&copy; 2026 Clawd. All rights reserved.</p>
+            <p class="footer-copy">Made with care in Singapore &middot; &copy; 2026 Clawd</p>
         </div>
     </footer>
 
@@ -657,16 +670,20 @@
     function applyState(s){
         var badge=document.getElementById('wa-badge');
         var cta=document.getElementById('wa-cta-btn');
+        var pricingCta=document.getElementById('wa-pricing-btn');
         if(!s.connected||!s.phone) return;
         var link='https://wa.me/'+s.phone+'?text=Hi%20Clawd!';
-        if(badge){badge.className='status-badge status-live';badge.textContent='● Live';}
-        if(cta){
+        if(badge){badge.className='status-badge status-live';badge.textContent='\u25CF Live';}
+        function swap(node, label){
+            if(!node) return;
             var a=document.createElement('a');
-            a.href=link;a.target='_blank';a.rel='noopener';
+            a.href=link; a.target='_blank'; a.rel='noopener';
             a.className='cta-btn washi-tape';
-            a.textContent='Chat with Clawd on WhatsApp ➜';
-            cta.parentNode.replaceChild(a,cta);
+            a.textContent=label;
+            node.parentNode.replaceChild(a,node);
         }
+        swap(cta, 'Chat with Clawd on WhatsApp \u279C');
+        swap(pricingCta, 'Start Chatting on WhatsApp \u279C');
     }
     fetch('/api/wa-state').then(function(r){return r.json();}).then(applyState).catch(function(){});
 })();
