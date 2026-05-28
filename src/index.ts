@@ -262,6 +262,43 @@ async function main(): Promise<void> {
         isMention: event.message.isMention,
         isGroup: event.message.isGroup,
       };
+
+      // ── Sub-agent dispatch path (ECS Fargate via Redis queue) ──────────
+      // When USE_SUBAGENT=1, push the message onto the Redis inbound queue
+      // and let the sub-agent BRPOP it. The response comes back via the
+      // existing startResponsePoll loop which delivers through the adapter.
+      // The cloud-responder direct path stays as the fallback for when the
+      // sub-agent service is unavailable or the flag is unset.
+      if (process.env.USE_SUBAGENT === '1') {
+        const services = getCloudServices();
+        if (services?.messageQueue) {
+          try {
+            const text = typeof parsedContent.text === 'string' ? parsedContent.text : '';
+            await services.messageQueue.enqueueForAgent('shared', {
+              id: event.message.id,
+              userId: 'shared',
+              type: 'chat',
+              timestamp: event.message.timestamp,
+              payload: {
+                content: text,
+                channelType: event.channelType,
+                platformId: event.platformId,
+                threadId: event.threadId ?? null,
+                kind: event.message.kind,
+              },
+            });
+            log.info('Inbound dispatched to sub-agent via Redis', {
+              messageId: event.message.id,
+              platformId: event.platformId,
+            });
+            return;
+          } catch (err) {
+            log.error('Sub-agent dispatch failed, falling back to cloud-responder', { err });
+            // fall through to direct path
+          }
+        }
+      }
+
       try {
         await respondToDM(adapter, event.platformId, inbound);
       } catch (err) {
