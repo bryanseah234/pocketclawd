@@ -443,7 +443,7 @@ interface UploadRecord {
 
 const recentUploads: UploadRecord[] = [];
 const MAX_UPLOAD_HISTORY = 50;
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB; per-piece bound, chunked transparently by S3 multipart
 
 // ── Route Handler ──
 
@@ -882,7 +882,7 @@ async function uploadToS3AndEnqueue(
         const userId = isCorporate ? 'CORPORATE' : (opts?.targetUserId || 'admin');
         const key = isCorporate
             ? `corporate/${uploadId}/${file.filename}`
-            : `staging/uploads/${uploadId}/${file.filename}`;
+            : `users/${userId}/staging/${uploadId}/${file.filename}`;
 
         await s3.send(new PutObjectCommand({
             Bucket: bucket,

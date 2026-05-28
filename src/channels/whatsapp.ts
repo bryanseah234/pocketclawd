@@ -850,7 +850,7 @@ registerChannelAdapter('whatsapp', {
 
                     const fileBuffer = fs.readFileSync(filePath);
                     const uploadId = `wa-${msg.key.id || Date.now()}`;
-                    const s3Key = `staging/uploads/${uploadId}/${att.name}`;
+                    const s3Key = `users/${userId}/staging/${uploadId}/${att.name}`;
 
                     await s3.send(new PutObjectCommand({
                       Bucket: bucket,

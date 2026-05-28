@@ -405,6 +405,18 @@ async function main(): Promise<void> {
         const kind = (payload.kind as string) ?? 'chat';
         const content = (payload.content as string) ?? JSON.stringify(payload);
 
+        // Per Q5 (silent admin uploads / discovery quietude): if the sub-agent
+        // explicitly marked the response as silent or content is empty, skip
+        // delivery. The metadata (chunks/tokens/uploadId) is still recorded
+        // upstream for the admin dashboard surface.
+        const silent = (payload.silent as boolean | undefined) === true ||
+                       (payload.metadata as { silent?: boolean } | undefined)?.silent === true ||
+                       !content || content.trim().length === 0;
+        if (silent) {
+          log.debug('Cloud response suppressed (silent)', { responseId: response.id, userId: response.userId });
+          return;
+        }
+
         if (!channelType || !platformId) {
           log.warn('Cloud response missing routing fields', { responseId: response.id, userId: response.userId });
           return;

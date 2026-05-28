@@ -674,7 +674,7 @@ export function getDashboardHtml(): string {
                         accept=".pdf,.docx,.csv,.txt,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,text/plain,image/png,image/jpeg">
                     <div class="upload-icon">&#x1f4c1;</div>
                     <div class="upload-text">Drag &amp; drop files here, or click to select</div>
-                    <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
+                    <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 200MB per file</div>
                 </div>
                 <!-- Corporate toggle (data-isolation-corporate-docs req 6.1, 6.4) -->
                 <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:rgba(61,43,31,0.05);border-radius:6px;">

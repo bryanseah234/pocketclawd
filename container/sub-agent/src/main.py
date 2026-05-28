@@ -115,15 +115,46 @@ async def connect_redis(settings: Settings) -> aioredis.Redis:
 
 
 async def enqueue_response(response: AgentResponse) -> None:
-    """Push a response onto the orchestrator's response queue."""
+    """Push a response onto the orchestrator's response queue.
+
+    Translates the sub-agent's internal AgentResponse shape into the
+    orchestrator's expected QueueMessage-shaped envelope:
+      {id, userId, type, payload: {channelType, platformId, threadId, kind, content, ...}, timestamp}
+
+    Routing fields (channelType/platformId/threadId/kind) are echoed back from
+    the inbound message metadata. Without this echo, the host's startResponsePoll
+    would see undefined routing fields and silently drop the response.
+    """
     if state.redis is None:
         raise RuntimeError("Redis not connected")
-    payload = response.model_dump_json()
+    md = response.metadata or {}
+    payload_obj = {
+        "content": response.content,
+        "channelType": md.get("channelType"),
+        "platformId": md.get("platformId"),
+        "threadId": md.get("threadId"),
+        "kind": md.get("kind", "chat"),
+        "metadata": md,
+        # Surface "silent" at top-level so the host's suppression check works
+        # without having to reach into metadata.
+        "silent": bool(md.get("silent")) or response.content == "",
+    }
+    envelope = {
+        "id": response.message_id,
+        "userId": response.user_id,
+        "type": md.get("type", "chat"),
+        "payload": payload_obj,
+        "timestamp": response.timestamp,
+    }
+    payload = json.dumps(envelope, ensure_ascii=False)
     await state.redis.lpush(state.settings.response_queue_key, payload)
     logger.info(
-        "Enqueued response for message_id=%s user_id=%s",
+        "Enqueued response for message_id=%s user_id=%s channelType=%s platformId=%s silent=%s",
         response.message_id,
         response.user_id,
+        payload_obj.get("channelType"),
+        payload_obj.get("platformId"),
+        payload_obj["silent"],
     )
 
 
@@ -429,6 +460,27 @@ async def _handle_document_upload(message: InboundMessage) -> AgentResponse:
             result.total_tokens,
         )
 
+        # Per Q5 (silent admin uploads): if origin='upload_worker', the message
+        # came from the admin dashboard, not a user DM. Return a minimal/silent
+        # response so we do not echo into a user chat the admin never opened.
+        origin = metadata.get("origin")
+        if origin == "upload_worker":
+            return AgentResponse(
+                message_id=message.message_id,
+                user_id=message.user_id,
+                content="",  # silent: not delivered to chat
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                metadata={
+                    "source": "sub-agent",
+                    "type": "document_processed",
+                    "status": "success",
+                    "uploadId": upload_id,
+                    "chunks": result.chunk_count,
+                    "tokens": result.total_tokens,
+                    "silent": True,
+                },
+            )
+
         return AgentResponse(
             message_id=message.message_id,
             user_id=message.user_id,
@@ -507,15 +559,30 @@ async def poll_queue() -> None:
 
             try:
                 data = json.loads(raw_payload)
+                payload_dict = data.get("payload", {}) or {}
+                # Derive REAL user_id from platformId when AGENT_USER_ID="shared".
+                # WhatsApp platformId is e.g. "6597901331@s.whatsapp.net" — we
+                # use the bare phone number as the per-user partition key for
+                # rate limiting, chat history, RAG, and S3 prefixes.
+                envelope_user = data.get("userId", "")
+                platform_id = payload_dict.get("platformId", "")
+                if envelope_user == "shared" and platform_id:
+                    real_user = str(platform_id).split("@")[0]
+                else:
+                    real_user = envelope_user
+                # Stash original envelope userId for reference, but use real_user
+                # as the addressing key for all downstream calls.
+                merged_meta = {
+                    "type": data.get("type", "chat"),
+                    "envelopeUserId": envelope_user,
+                    **payload_dict,
+                }
                 message = InboundMessage(
                     message_id=data.get("id", ""),
-                    user_id=data.get("userId", ""),
-                    content=data.get("payload", {}).get("content", data.get("content", "")),
+                    user_id=real_user or envelope_user,
+                    content=payload_dict.get("content", data.get("content", "")),
                     timestamp=data.get("timestamp", ""),
-                    metadata={
-                        "type": data.get("type", "chat"),
-                        **data.get("payload", {}),
-                    },
+                    metadata=merged_meta,
                 )
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error("Failed to parse inbound message: %s", e)
