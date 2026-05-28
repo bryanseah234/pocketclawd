@@ -35,6 +35,12 @@ export function stopContainer(name: string): void {
 
 /** Ensure the container runtime is running, starting it if needed. */
 export function ensureContainerRuntimeRunning(): void {
+  // Cloud mode bypass: orchestrator container has no docker socket — per-user
+  // agent containers are replaced by remote Fargate sub-agent via Redis dispatch.
+  if (process.env.SKIP_CONTAINER_RUNTIME_CHECK === '1') {
+    log.info('Container runtime check skipped (SKIP_CONTAINER_RUNTIME_CHECK=1)');
+    return;
+  }
   try {
     execSync(`${CONTAINER_RUNTIME_BIN} info`, {
       stdio: 'pipe',

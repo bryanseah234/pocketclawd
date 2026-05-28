@@ -123,6 +123,7 @@ jobs:
             -e WHATSAPP_ENABLED=false \
             -e ASSISTANT_NAME=Clawd \
             -e DATA_BUCKET=nanoclaw-data-709609992277 \
+            -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
             nanoclaw-orchestrator:next >/dev/null
 
           # Bridge network containers CAN reach IMDS at 169.254.169.254 by
