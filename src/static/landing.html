@@ -9,6 +9,7 @@
     <meta property="og:description" content="The AI assistant that actually gets to know you — organizing your life and learning your vibe with every interaction.">
     <meta property="og:image" content="/og-image.png">
     <meta property="og:url" content="https://clawd.ai">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 28 28'%3E%3Cellipse cx='14' cy='18' rx='8' ry='9' fill='%23C9973A'/%3E%3Cpolygon points='8,12 10.5,5 13,11' fill='%23C9973A'/%3E%3Cpolygon points='20,12 17.5,5 15,11' fill='%23C9973A'/%3E%3Ccircle cx='10' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='18' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='10' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Ccircle cx='18' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Ccircle cx='10.7' cy='15.8' r='0.6' fill='%23FDFAF4' opacity='0.6'/%3E%3Ccircle cx='18.7' cy='15.8' r='0.6' fill='%23FDFAF4' opacity='0.6'/%3E%3Cpolygon points='12,20 16,20 14,23' fill='%233D2B1F' opacity='0.7'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -57,50 +58,6 @@
 
         p { margin-bottom: 1rem; }
 
-        /* ─── Header / Nav ───────────────────────────────────── */
-        header {
-            padding: 20px 0;
-            border-bottom: 1px solid rgba(61, 43, 31, 0.1);
-        }
-
-        nav {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            max-width: var(--max-width);
-            margin: 0 auto;
-            padding: 0 24px;
-        }
-
-        .nav-brand {
-            font-family: var(--font-heading);
-            font-size: 1.5rem;
-            font-weight: 900;
-            color: var(--text-espresso);
-            text-decoration: none;
-        }
-
-        .nav-login {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-espresso);
-            text-decoration: none;
-            padding: 8px 16px;
-            border: 1.5px solid var(--text-espresso);
-            border-radius: 6px;
-            transition: background 0.2s, color 0.2s;
-        }
-
-        .nav-login:hover {
-            background: var(--text-espresso);
-            color: var(--bg-oatmeal);
-        }
-
-        .nav-login:focus-visible {
-            outline: 2px solid var(--accent-mustard);
-            outline-offset: 3px;
-        }
-
         /* ─── Sections ───────────────────────────────────────── */
         section {
             padding: 80px 0;
@@ -109,7 +66,12 @@
         /* ─── Hero ───────────────────────────────────────────── */
         .hero {
             text-align: center;
-            padding: 120px 0 96px;
+            padding: 96px 0 96px;
+        }
+
+        .hero-owl {
+            display: block;
+            margin: 0 auto 20px;
         }
 
         .hero h1 {
@@ -338,6 +300,17 @@
             opacity: 1;
         }
 
+        /* Sequential reveal for How It Works steps */
+        @keyframes sv1-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        @keyframes sv1-line { from { opacity: 0; transform: scaleY(0); } to { opacity: 1; transform: scaleY(1); } }
+        .sc-sv1 > * { opacity: 0; }
+        .sc-sv1 .doodle-arrow { transition: none; }
+        .sc-sv1.visible > :nth-child(1) { animation: sv1-in 0.5s cubic-bezier(0.22,1,0.36,1) 0.1s forwards; }
+        .sc-sv1.visible > :nth-child(2) { transform-origin: top; animation: sv1-line 0.3s ease-out 0.55s forwards; }
+        .sc-sv1.visible > :nth-child(3) { animation: sv1-in 0.5s cubic-bezier(0.22,1,0.36,1) 0.85s forwards; }
+        .sc-sv1.visible > :nth-child(4) { transform-origin: top; animation: sv1-line 0.3s ease-out 1.3s forwards; }
+        .sc-sv1.visible > :nth-child(5) { animation: sv1-in 0.5s cubic-bezier(0.22,1,0.36,1) 1.6s forwards; }
+
         .doodle-arrow svg {
             width: 2px;
             height: 32px;
@@ -466,6 +439,15 @@
             opacity: 0.4;
         }
 
+        .section-divider path {
+            stroke-dasharray: 250 250;
+            stroke-dashoffset: 250;
+            transition: stroke-dashoffset 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .section-divider.visible path {
+            stroke-dashoffset: 0;
+        }
+
         /* ─── Footer ─────────────────────────────────────────── */
         footer {
             padding: 48px 0 32px;
@@ -535,8 +517,6 @@
                 padding: 14px 28px;
                 font-size: 0.9rem;
             }
-
-            .nav-brand { font-size: 1.25rem; }
         }
     
         /* ─── Section heading centering ─────────────────────── */
@@ -581,33 +561,27 @@
         </style>
 </head>
 <body>
-    <header>
-        <nav>
-            <a href="/" class="nav-brand">Clawd</a>
-            <a href="/admin" class="nav-login">Login</a>
-        </nav>
-    </header>
-
     <main>
         <!-- Hero Section -->
         <section class="hero" id="hero">
             <div class="container">
                 <span class="status-badge status-coming-soon" id="wa-badge">Coming Soon</span>
+                <svg width="88" height="88" viewBox="0 0 28 28" fill="none" aria-hidden="true" class="hero-owl"><ellipse cx="14" cy="18" rx="8" ry="9" fill="#C9973A"/><polygon points="8,12 10.5,5 13,11" fill="#C9973A"/><polygon points="20,12 17.5,5 15,11" fill="#C9973A"/><circle cx="10" cy="16.5" r="3.5" fill="#FDFAF4"/><circle cx="18" cy="16.5" r="3.5" fill="#FDFAF4"/><circle cx="10" cy="16.5" r="2" fill="#3D2B1F"/><circle cx="18" cy="16.5" r="2" fill="#3D2B1F"/><circle cx="10.7" cy="15.8" r="0.6" fill="#FDFAF4" opacity="0.6"/><circle cx="18.7" cy="15.8" r="0.6" fill="#FDFAF4" opacity="0.6"/><polygon points="12,20 16,20 14,23" fill="#3D2B1F" opacity="0.7"/></svg>
                 <h1 class="highlight-swipe">Meet Clawd</h1>
                 <p class="hero-subheadline">The AI assistant that actually gets to know you — organizing your life and learning your vibe with every interaction. Available on WhatsApp soon.</p>
-                <button class="cta-btn cta-btn-disabled" id="wa-cta-btn" type="button" disabled aria-disabled="true">Joining Soon — WhatsApp Setup In Progress</button>
+                <button class="cta-btn cta-btn-disabled" id="wa-cta-btn" type="button" disabled aria-disabled="true">Coming Soon</button>
             </div>
         </section>
 
         <!-- Hand-drawn divider -->
         <svg class="section-divider" viewBox="0 0 200 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 12 C 30 4, 50 20, 80 12 S 130 4, 160 12 S 185 20, 198 12" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+            <path d="M2 12 C 30 4, 50 20, 80 12 S 130 4, 160 12 S 185 20, 198 12" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none"/>
         </svg>
 
         <!-- Features Section -->
         <section id="features">
             <div class="container">
-                <h2 class="highlight-swipe section-heading">What Clawd Does For You</h2>
+                <h2 class="highlight-swipe section-heading">What It Does</h2>
                 <div class="features-grid">
                     <div class="feature-item"><div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.2 6H8.2C6.3 13.7 5 11.5 5 9a7 7 0 0 1 7-7z"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></div><div class="feature-text"><h3 class="feature-title">Remembers Everything</h3><p class="feature-desc">A personal knowledge base that grows with you. Clawd recalls your preferences, notes, and conversations so you never lose a thought.</p></div></div>
 <div class="feature-item"><div class="feature-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div><div class="feature-text"><h3 class="feature-title">Document Intelligence</h3><p class="feature-desc">Upload PDFs, ask questions, and get cited answers. Clawd reads your documents so you don’t have to dig through pages.</p></div></div>
@@ -620,14 +594,14 @@
 
         <!-- Hand-drawn divider -->
         <svg class="section-divider" viewBox="0 0 200 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 16 C 40 8, 60 20, 100 12 S 150 6, 198 14" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+            <path d="M2 16 C 40 8, 60 20, 100 12 S 150 6, 198 14" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none"/>
         </svg>
 
         <!-- How It Works Section -->
         <section id="how-it-works">
             <div class="container">
                 <h2 class="highlight-swipe section-heading">How It Works</h2>
-                <div class="steps-container">
+                <div class="steps-container sc-sv1">
                     <div class="step"><div class="step-number">1</div><div class="step-content"><h3 class="step-title">Send a message</h3><p class="step-desc">Open WhatsApp and say hello to Clawd. No sign-up forms, no downloads—just start chatting.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 32" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="32" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
 <div class="step"><div class="step-number">2</div><div class="step-content"><h3 class="step-title">Clawd learns</h3><p class="step-desc">Every conversation helps Clawd understand your preferences, schedule, and priorities.</p></div></div><div class="doodle-arrow"><svg viewBox="0 0 2 32" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="1" y1="0" x2="1" y2="32" stroke="#C4A35A" stroke-width="1.5" stroke-dasharray="4 4"/></svg></div>
 <div class="step"><div class="step-number">3</div><div class="step-content"><h3 class="step-title">Ask anything</h3><p class="step-desc">Need a recap? A document summary? A reminder? Clawd has your back with instant, personalized answers.</p></div></div>                </div>
@@ -636,23 +610,27 @@
 
         <!-- Hand-drawn divider -->
         <svg class="section-divider" viewBox="0 0 200 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 10 C 50 18, 70 6, 100 12 S 160 18, 198 10" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+            <path d="M2 10 C 50 18, 70 6, 100 12 S 160 18, 198 10" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none"/>
         </svg>
 
         <!-- Social Proof Section -->
         <section id="social-proof">
             <div class="container testimonials">
-                <h2 class="highlight-swipe section-heading">What People Are Saying</h2>
+                <h2 class="highlight-swipe section-heading">Our Users' Feedbacks</h2>
                 <div class="testimonial-card">
                     <p class="testimonial-quote">Clawd remembers everything I tell it — my meeting notes, my preferences, even my coffee order. It's like having a personal assistant who actually pays attention.</p>
-                    <p class="testimonial-author">— Early Beta User</p>
+                    <p class="testimonial-author">— Beta User, Singapore</p>
+                </div>
+                <div class="testimonial-card">
+                    <p class="testimonial-quote">I told Clawd about a gift idea for my wife back in January. When her birthday came around, it brought it up without me asking. That kind of memory is priceless.</p>
+                    <p class="testimonial-author">— Beta User, Jakarta</p>
                 </div>
             </div>
         </section>
 
         <!-- Hand-drawn divider -->
         <svg class="section-divider" viewBox="0 0 200 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 14 C 35 6, 65 20, 100 12 S 140 4, 198 14" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.3"/>
+            <path d="M2 14 C 35 6, 65 20, 100 12 S 140 4, 198 14" stroke="#3D2B1F" stroke-width="1.5" stroke-linecap="round" fill="none"/>
         </svg>
 
         <!-- Pricing Section -->
@@ -660,7 +638,17 @@
             <div class="container">
                 <h2 class="highlight-swipe section-heading">Simple, Transparent Pricing</h2>
                 <div class="pricing-grid">
-                    <div class="pricing-card highlighted"><div class="pricing-name">Early Access — Free</div><div class="pricing-price">Free</div><p class="pricing-desc">Free to use while we’re in early access. No credit card, no commitment.</p><ul class="pricing-features"><li>Unlimited WhatsApp messages</li><li>Personal knowledge base</li><li>Document uploads & Q&A</li><li>Daily morning briefings</li><li>Calendar & email summaries</li></ul><button class="cta-btn cta-btn-disabled" id="wa-pricing-btn" type="button" disabled aria-disabled="true">Joining Soon</button>
+                    <div class="pricing-card highlighted">
+                        <div class="pricing-name">Early Access</div>
+                        <div class="pricing-price">Free</div>
+                        <ul class="pricing-features" style="width: fit-content; margin: 0 auto 40px; text-align: left">
+                            <li style="border-bottom-color: transparent">Unlimited WhatsApp messages</li>
+                            <li style="border-bottom-color: transparent">Personal knowledge base</li>
+                            <li style="border-bottom-color: transparent">Document uploads &amp; Q&amp;A</li>
+                            <li style="border-bottom-color: transparent">Daily morning briefings</li>
+                            <li style="border-bottom-color: transparent">Calendar &amp; email summaries</li>
+                        </ul>
+                        <button class="cta-btn cta-btn-disabled" id="wa-pricing-btn" type="button" disabled aria-disabled="true">Coming Soon</button>
                     </div>
                 </div>
             </div>
@@ -699,8 +687,8 @@
 
             headings.forEach(function(el) { headingObserver.observe(el); });
 
-            // Doodle arrow animations in How It Works
-            const arrows = document.querySelectorAll('.doodle-arrow');
+            // Doodle arrow animations (outside sequential containers)
+            const arrows = document.querySelectorAll('.doodle-arrow:not(.sc-sv1 .doodle-arrow)');
             const arrowObserver = new IntersectionObserver(function(entries) {
                 entries.forEach(function(entry) {
                     if (entry.isIntersecting) {
@@ -709,8 +697,31 @@
                     }
                 });
             }, { threshold: 0.2 });
-
             arrows.forEach(function(el) { arrowObserver.observe(el); });
+
+            // Sequential reveal for How It Works steps
+            const stepsContainers = document.querySelectorAll('.sc-sv1');
+            const stepsObserver = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        stepsObserver.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.2 });
+            stepsContainers.forEach(function(el) { stepsObserver.observe(el); });
+
+            // Draw-on animation for section dividers
+            const dividers = document.querySelectorAll('.section-divider');
+            const dividerObserver = new IntersectionObserver(function(entries) {
+                entries.forEach(function(entry) {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        dividerObserver.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.3 });
+            dividers.forEach(function(el) { dividerObserver.observe(el); });
 
             // Washi-tape accent decoration on CTA buttons
             const ctas = document.querySelectorAll('.washi-tape');
