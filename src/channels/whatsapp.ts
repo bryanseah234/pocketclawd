@@ -766,11 +766,18 @@ registerChannelAdapter('whatsapp', {
             const timestamp = new Date(Number(msg.messageTimestamp) * 1000).toISOString();
             const isGroup = chatJid.endsWith('@g.us');
 
-            // ── Hard ignore: never process group messages on the admin/owner account ──
-            // Clawd is a personal DM assistant. Any group the bot account is a member of
-            // (newsletters, newsletters-dressed-as-groups, family chats, work groups) MUST
-            // NOT trigger the agent. Drop silently before metadata/upload/dispatch.
-            if (isGroup) {
+            // ── STRICT DM-ONLY ALLOWLIST ──
+            // Clawd is a personal 1:1 DM assistant. ONLY `@s.whatsapp.net` JIDs
+            // are processed. Everything else is silently dropped before metadata/
+            // upload/dispatch:
+            //   @g.us              groups
+            //   @newsletter        WhatsApp Channels (newsletters)
+            //   @broadcast         broadcast lists
+            //   status@broadcast   status updates
+            //   @lid               linked-device pseudo-jids
+            //   @c.us              legacy contact format
+            const isPersonalDm = chatJid.endsWith('@s.whatsapp.net');
+            if (!isPersonalDm) {
               continue;
             }
 

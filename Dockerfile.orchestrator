@@ -66,6 +66,9 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 
+# Copy persona system prompt (used by cloud-responder for Clawd's identity/voice)
+COPY container/sub-agent/src/persona/system_prompt_template.json /app/persona/system_prompt_template.json
+
 # Rebuild native modules for glibc (better-sqlite3 was compiled for musl in build stage)
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
     npm rebuild better-sqlite3 --build-from-source && \

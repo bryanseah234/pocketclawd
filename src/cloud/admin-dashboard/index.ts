@@ -678,6 +678,35 @@ export async function handleAdminRequest(
             return true;
         }
 
+        // ── GET /admin/api/chat/users — list distinct users with latest preview ──
+        if (path === '/admin/api/chat/users' && method === 'GET') {
+            try {
+                const { listChatUsers } = await import('./chat-history.js');
+                const result = await listChatUsers(50);
+                sendJson(res, result);
+            } catch (err) {
+                log.error('Admin /api/chat/users error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // ── GET /admin/api/chat/history?userId=… — full conversation ──
+        if (path === '/admin/api/chat/history' && method === 'GET') {
+            try {
+                const userId = parsedUrl.searchParams.get('userId') ?? '';
+                if (!userId) { sendJson(res, { error: 'userId required' }, 400); return true; }
+                const limit = Math.max(1, Math.min(500, parseInt(parsedUrl.searchParams.get('limit') ?? '100', 10) || 100));
+                const { getChatHistory } = await import('./chat-history.js');
+                const result = await getChatHistory(userId, limit);
+                sendJson(res, result);
+            } catch (err) {
+                log.error('Admin /api/chat/history error', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
         // POST /admin/api/whatsapp/reconnect
         if (path === '/admin/api/whatsapp/reconnect' && method === 'POST') {
             const result = await config!.provider.reconnectWhatsApp();
