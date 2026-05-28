@@ -150,10 +150,10 @@ describe('enforceStartupBackoff — backoff schedule', () => {
     { label: 'first crash (attempt=2)', priorAttempt: 1, expectedDelaySec: 5 },
     { label: 'second crash (attempt=3)', priorAttempt: 2, expectedDelaySec: 10 },
     { label: 'third crash (attempt=4)', priorAttempt: 3, expectedDelaySec: 30 },
-    { label: 'fourth crash (attempt=5)', priorAttempt: 4, expectedDelaySec: 120 },
-    { label: 'fifth crash (attempt=6)', priorAttempt: 5, expectedDelaySec: 300 },
-    { label: 'sixth crash (attempt=7) — cap', priorAttempt: 6, expectedDelaySec: 900 },
-    { label: 'far past cap (attempt=20)', priorAttempt: 19, expectedDelaySec: 900 },
+    { label: 'fourth crash (attempt=5)', priorAttempt: 4, expectedDelaySec: 60 },
+    { label: 'fifth crash (attempt=6)', priorAttempt: 5, expectedDelaySec: 120 },
+    { label: 'sixth crash (attempt=7) — cap', priorAttempt: 6, expectedDelaySec: 300 },
+    { label: 'far past cap (attempt=20)', priorAttempt: 19, expectedDelaySec: 300 },
   ];
 
   for (const { label, priorAttempt, expectedDelaySec } of cases) {

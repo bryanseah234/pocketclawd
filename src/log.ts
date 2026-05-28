@@ -46,12 +46,32 @@ function emit(level: Level, msg: string, data?: Record<string, unknown>): void {
   stream.write(`[${ts()}] ${tag} ${MSG_COLOR}${msg}${RESET}${data ? formatData(data) : ''}\n`);
 }
 
+// Error sink: optional callback invoked for level >= error to persist to a
+// durable store (e.g. nanoclaw-system-errors DDB). Set via setErrorSink.
+// Sink failures are swallowed silently to prevent error-logging recursion.
+type ErrorSink = (level: 'error' | 'fatal', msg: string, data?: Record<string, unknown>) => void;
+let errorSink: ErrorSink | null = null;
+
+export function setErrorSink(sink: ErrorSink | null): void {
+  errorSink = sink;
+}
+
+function pushSink(level: Level, msg: string, data?: Record<string, unknown>): void {
+  if (level !== 'error' && level !== 'fatal') return;
+  if (!errorSink) return;
+  try {
+    errorSink(level, msg, data);
+  } catch {
+    // never let the sink itself break logging
+  }
+}
+
 export const log = {
   debug: (msg: string, data?: Record<string, unknown>) => emit('debug', msg, data),
-  info: (msg: string, data?: Record<string, unknown>) => emit('info', msg, data),
-  warn: (msg: string, data?: Record<string, unknown>) => emit('warn', msg, data),
-  error: (msg: string, data?: Record<string, unknown>) => emit('error', msg, data),
-  fatal: (msg: string, data?: Record<string, unknown>) => emit('fatal', msg, data),
+  info:  (msg: string, data?: Record<string, unknown>) => emit('info', msg, data),
+  warn:  (msg: string, data?: Record<string, unknown>) => emit('warn', msg, data),
+  error: (msg: string, data?: Record<string, unknown>) => { emit('error', msg, data); pushSink('error', msg, data); },
+  fatal: (msg: string, data?: Record<string, unknown>) => { emit('fatal', msg, data); pushSink('fatal', msg, data); },
 };
 
 process.on('uncaughtException', (err) => {

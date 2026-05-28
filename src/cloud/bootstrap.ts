@@ -20,7 +20,7 @@
 
 import { Redis } from 'ioredis';
 
-import { log } from '../log.js';
+import { log, setErrorSink } from '../log.js';
 
 import { DataGateway } from './data-gateway/index.js';
 import { HealthCheckAggregator } from './health/index.js';
@@ -101,6 +101,23 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         s3: config.s3,
     });
     log.info('Cloud bootstrap: Data Gateway ready');
+
+    // Wire log.error/log.fatal -> nanoclaw-system-errors DDB. Errors not
+    // tied to a specific user are bucketed under 'system'. Sink failures
+    // are swallowed by setErrorSink itself, but we still wrap defensively.
+    setErrorSink((level, msg, data) => {
+      // Fire-and-forget: do NOT await; logging should never block.
+      const userId = (data && typeof data.userId === 'string' ? data.userId : 'system');
+      const errVal = data && data.err;
+      const stackTrace = errVal instanceof Error
+        ? errVal.stack
+        : (typeof errVal === 'object' && errVal && 'stack' in errVal ? String((errVal as { stack: unknown }).stack) : undefined);
+      void dataGateway.logSystemError(userId, {
+        errorType: level,
+        message: msg,
+        stackTrace,
+      }).catch(() => {/* silent */});
+    });
 
     // Ensure OpenSearch index exists with proper mappings
     try {
