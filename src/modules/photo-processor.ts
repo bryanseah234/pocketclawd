@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Photo Processing Pipeline (PRD §7.8)
+ * Clawd — Photo Processing Pipeline (PRD §7.8)
  *
  * Pipeline: download → validate → resize → vision describe → mnemon
  * remember → delete cache.
@@ -216,7 +216,7 @@ export async function rememberInMnemon(
     source,
     source_id: sourceId,
     category: 'photo',
-    tags: ['pocketclaw', 'kind:photo', `src:${source}`],
+    tags: ['clawd', 'kind:photo', `src:${source}`],
     entities: description.keyElements ?? [],
     metadata: {
       description: description.description,

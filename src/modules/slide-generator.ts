@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * PocketClaw — Slide deck generator (PRD §17.5)
+ * Clawd — Slide deck generator (PRD §17.5)
  *
  * Renders a structured outline to a real .pptx file via `pptxgenjs`.
  * Three styles: minimal, corporate, creative. Speaker notes per slide

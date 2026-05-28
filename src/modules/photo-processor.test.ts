@@ -15,7 +15,7 @@ import {
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pocketclaw-photo-'));
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clawd-photo-'));
 });
 afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true });

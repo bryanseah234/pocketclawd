@@ -1,7 +1,7 @@
 /**
- * PocketClaw — Telegram MTProto runtime ingester.
+ * Clawd — Telegram MTProto runtime ingester.
  *
- * Started at host boot if `${POCKETCLAW_SECRETS_DIR}/telegram_session.txt`
+ * Started at host boot if `${CLAWD_SECRETS_DIR}/telegram_session.txt`
  * exists. Connects to Telegram AS THE USER (not a bot) via GramJS, then:
  *
  *   1. (Optional) Backfills message history from every dialog
@@ -47,9 +47,9 @@ let client: TelegramClient | null = null;
 
 function sessionPath(): string {
   if (process.env.TELEGRAM_SESSION_PATH) return expandHome(process.env.TELEGRAM_SESSION_PATH);
-  const secretsDir = process.env.POCKETCLAW_SECRETS_DIR
-    ? expandHome(process.env.POCKETCLAW_SECRETS_DIR)
-    : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
+  const secretsDir = process.env.CLAWD_SECRETS_DIR
+    ? expandHome(process.env.CLAWD_SECRETS_DIR)
+    : envPath('CLAWD_SECRETS_DIR', 'secrets');
   return path.join(secretsDir, 'telegram_session.txt');
 }
 

@@ -5,7 +5,7 @@
 //
 // Skills add a new provider by appending one import line below.
 
-// PocketClaw — register the claude provider so ANTHROPIC_BASE_URL
+// Clawd — register the claude provider so ANTHROPIC_BASE_URL
 // passthrough is wired in. Idempotent if ANTHROPIC_BASE_URL is unset;
 // the contribution is empty in that case.
 import './claude.js';

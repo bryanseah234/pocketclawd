@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * PocketClaw — Local research report generator (PRD §17.4)
+ * Clawd — Local research report generator (PRD §17.4)
  *
  * Strict privacy invariant: this module pulls ONLY from local mnemon and
  * the user's vault. NO web search, NO outbound calls. The LLM (when

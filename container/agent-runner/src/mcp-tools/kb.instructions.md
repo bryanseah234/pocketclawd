@@ -2,7 +2,7 @@
 
 You have a long-term knowledge base — a Postgres + pgvector store of insights about Bryan, his projects, and his world. Use it as your durable memory across sessions. The file `CLAUDE.local.md` in your workspace is short-form pinned context; the KB is everything else.
 
-These tools are restricted to the **pocketclaw agent group** — they will refuse from any other agent group with `kb_* tools are restricted to the pocketclaw agent group.` Do not advertise them outside this group.
+These tools are restricted to the **clawd agent group** — they will refuse from any other agent group with `kb_* tools are restricted to the clawd agent group.` Do not advertise them outside this group.
 
 ### When to remember (`kb_remember`)
 
@@ -45,7 +45,7 @@ If recall returns nothing for a query that should obviously have a hit, the KB m
 
 - **15s timeout**: the host handler is slow or Postgres is down. Apologise once, suggest he retry; do not invent a fallback.
 - **`Error: PG down`** or similar from the host: same — surface the error verbatim, don't paper over it.
-- **Permission refusal**: only happens outside the pocketclaw group, which is a configuration bug — report it back as-is.
+- **Permission refusal**: only happens outside the clawd group, which is a configuration bug — report it back as-is.
 
 ### Things this is NOT
 

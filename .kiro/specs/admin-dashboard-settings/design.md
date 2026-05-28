@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Admin Dashboard Settings feature adds a persistent, user-facing configuration panel to PocketClaw's existing admin dashboard (served at `/admin` on port 3000). Currently, all configuration lives in `.env` files and requires a service restart to take effect. This feature introduces a settings API and UI that allows the admin to view and modify runtime-configurable parameters — such as cron schedules, ingestion toggles, chat archive mode, notification preferences, and channel adapter options — without editing files or restarting the service.
+The Admin Dashboard Settings feature adds a persistent, user-facing configuration panel to Clawd's existing admin dashboard (served at `/admin` on port 3000). Currently, all configuration lives in `.env` files and requires a service restart to take effect. This feature introduces a settings API and UI that allows the admin to view and modify runtime-configurable parameters — such as cron schedules, ingestion toggles, chat archive mode, notification preferences, and channel adapter options — without editing files or restarting the service.
 
 Settings are persisted in the existing SQLite central database (`data/v2.db`) via a new `settings` table. Changes take effect immediately for hot-reloadable parameters, or on next cron tick for schedule-based ones. The design preserves the existing `.env` as the source of truth for secrets and infrastructure-level config (database DSNs, API keys, paths) while exposing operational knobs through the dashboard.
 
@@ -775,7 +775,7 @@ Properties to test:
 ## Security Considerations
 
 - **Authentication**: All settings endpoints are behind the existing HTTP Basic Auth + rate limiting. No new auth surface.
-- **Authorization**: Single admin role (same as existing dashboard). No per-setting ACLs needed for single-user PocketClaw.
+- **Authorization**: Single admin role (same as existing dashboard). No per-setting ACLs needed for single-user Clawd.
 - **Secrets exclusion**: Settings that contain secrets (API keys, passwords, tokens) are NOT exposed through this feature. They remain in `.env` only. The schema registry explicitly marks which keys are safe to expose.
 - **Input validation**: All values are validated against schema before persistence. No raw SQL injection risk (parameterized queries via better-sqlite3).
 - **Export security**: The export endpoint only includes non-secret settings. Import validates every value before applying.
@@ -788,5 +788,5 @@ Properties to test:
   - HTTP server (already running on port 3000)
   - SSE broadcast (already implemented in admin-dashboard)
   - Basic Auth (already implemented)
-  - Audit logging (already implemented in pocketclaw.ts)
+  - Audit logging (already implemented in clawd.ts)
   - readEnvFile utility (existing in src/env.ts)

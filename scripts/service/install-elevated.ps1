@@ -1,4 +1,4 @@
-# PocketClaw — Self-elevating service installer
+# Clawd — Self-elevating service installer
 #
 # Spawns an elevated PowerShell that cd's to the repo root and runs
 # install.ps1. Use when your normal shell isn't admin and you don't

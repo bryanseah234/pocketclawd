@@ -1,5 +1,5 @@
 /**
- * PocketClaw — LLM Wiki Generator (PRD §7.11)
+ * Clawd — LLM Wiki Generator (PRD §7.11)
  *
  * Pattern: Andrej Karpathy's LLM-supervised Wiki generation. Reads mnemon's
  * memory graph and emits structured Markdown wiki entries with WikiLink
@@ -41,7 +41,7 @@ export function buildWikiPrompt(
   entityName: string,
   mnemonRecallOutput: string,
 ): string {
-  return `You are a personal knowledge curator for PocketClaw.
+  return `You are a personal knowledge curator for Clawd.
 
 Generate a structured Obsidian-compatible Markdown wiki entry for the entity below.
 

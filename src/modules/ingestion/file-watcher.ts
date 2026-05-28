@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * PocketClaw — File auto-discovery (PRD §7.10)
+ * Clawd — File auto-discovery (PRD §7.10)
  *
  * Watches paths under `WATCH_PATHS_ROOT` for new/modified files. Each file
  * is fingerprinted (SHA256) and processed exactly once per content version.
@@ -15,7 +15,7 @@
  *   .vcf       → vCard regex
  *   .ics       → iCal regex
  *
- * The processed registry lives at `~/.pocketclaw/processed.db` (SQLite via
+ * The processed registry lives at `~/.clawd/processed.db` (SQLite via
  * better-sqlite3, already in NanoClaw's deps).
  */
 
@@ -27,9 +27,9 @@ import { stripHtml } from './types.js';
 import { envPath, expandHome } from '../paths.js';
 
 const WATCH_ROOT = envPath('WATCH_PATHS_ROOT', 'watch');
-const PROCESSED_DB_PATH = process.env.POCKETCLAW_PROCESSED_DB
-  ? expandHome(process.env.POCKETCLAW_PROCESSED_DB)
-  : envPath('POCKETCLAW_PROCESSED_DB', 'processed.db');
+const PROCESSED_DB_PATH = process.env.CLAWD_PROCESSED_DB
+  ? expandHome(process.env.CLAWD_PROCESSED_DB)
+  : envPath('CLAWD_PROCESSED_DB', 'processed.db');
 
 /** SHA256 of the file's bytes — content fingerprint. */
 export async function sha256(file: string): Promise<string> {
@@ -292,7 +292,7 @@ const DEFAULT_IGNORES: RegExp[] = [
   /(^|[\\/])\.bundle([\\/]|$)/,
   /(^|[\\/])\$RECYCLE\.BIN([\\/]|$)/,
   /(^|[\\/])System Volume Information([\\/]|$)/,
-  /(^|[\\/])PocketClawData([\\/]|$)/,    // don't ingest our own data dir
+  /(^|[\\/])ClawdData([\\/]|$)/,    // don't ingest our own data dir
   /(^|[\\/])tmp([\\/]|$)/,
   /(^|[\\/])temp([\\/]|$)/,
   /(^|[\\/])\.tmp([\\/]|$)/,
@@ -323,9 +323,9 @@ export function shouldIgnore(p: string): boolean {
  * eventually wedges with tens of thousands of libuv handles.
  *
  * Defence in depth:
- *   1. Reject bare drive roots unless `POCKETCLAW_WATCH_DRIVE_ROOT=true`.
- *   2. Bound recursion via `POCKETCLAW_WATCH_DEPTH` (default 8 — was 99).
- *   3. Hard cap watcher count via `POCKETCLAW_WATCH_MAX_DIRS`
+ *   1. Reject bare drive roots unless `CLAWD_WATCH_DRIVE_ROOT=true`.
+ *   2. Bound recursion via `CLAWD_WATCH_DEPTH` (default 8 — was 99).
+ *   3. Hard cap watcher count via `CLAWD_WATCH_MAX_DIRS`
  *      (default 2000); when the underlying handle count crosses the cap
  *      we close the watcher and log loudly. Better to lose ingestion on
  *      one root than wedge the whole host.
@@ -341,9 +341,9 @@ export async function watchDir(
   rootDir: string,
   onFile: (file: string) => Promise<void> | void,
 ): Promise<{ stop: () => Promise<void> }> {
-  if (isDriveRoot(rootDir) && process.env.POCKETCLAW_WATCH_DRIVE_ROOT !== 'true') {
+  if (isDriveRoot(rootDir) && process.env.CLAWD_WATCH_DRIVE_ROOT !== 'true') {
     throw new Error(
-      `[file-watcher] refusing to watch drive root ${rootDir}: chokidar opens one FSEventWrap per directory and will exhaust libuv handles on a multi-TB drive. Set POCKETCLAW_WATCH_DRIVE_ROOT=true to override, or scope WATCH_PATHS_ROOT to a specific folder.`,
+      `[file-watcher] refusing to watch drive root ${rootDir}: chokidar opens one FSEventWrap per directory and will exhaust libuv handles on a multi-TB drive. Set CLAWD_WATCH_DRIVE_ROOT=true to override, or scope WATCH_PATHS_ROOT to a specific folder.`,
     );
   }
 
@@ -364,17 +364,17 @@ export async function watchDir(
     return false;
   };
 
-  const depth = Number(process.env.POCKETCLAW_WATCH_DEPTH ?? 8);
-  const maxDirs = Number(process.env.POCKETCLAW_WATCH_MAX_DIRS ?? 2000);
+  const depth = Number(process.env.CLAWD_WATCH_DEPTH ?? 8);
+  const maxDirs = Number(process.env.CLAWD_WATCH_MAX_DIRS ?? 2000);
 
   const watcher = chokidar.default.watch(rootDir, {
     ignored,
     persistent: true,
     // Default: don't ingest the initial snapshot — only react to NEW changes
-    // from now on. Override with POCKETCLAW_WATCH_INITIAL=true if you want
+    // from now on. Override with CLAWD_WATCH_INITIAL=true if you want
     // to bulk-ingest the existing tree (warning: 50k+ files possible on
     // an X:\\ drive).
-    ignoreInitial: process.env.POCKETCLAW_WATCH_INITIAL !== 'true',
+    ignoreInitial: process.env.CLAWD_WATCH_INITIAL !== 'true',
     awaitWriteFinish: { stabilityThreshold: 1000, pollInterval: 100 },
     // Bounded recursion — see file-header notes about handle leak.
     depth: Number.isFinite(depth) && depth > 0 ? depth : 8,
@@ -399,7 +399,7 @@ export async function watchDir(
         // eslint-disable-next-line no-console
         console.error(
           `[file-watcher] CAP TRIPPED for ${rootDir}: ${dirCount} watched dirs > ${maxDirs}. ` +
-            `Closing watcher to prevent handle exhaustion. Lower scope or raise POCKETCLAW_WATCH_MAX_DIRS.`,
+            `Closing watcher to prevent handle exhaustion. Lower scope or raise CLAWD_WATCH_MAX_DIRS.`,
         );
         void watcher.close();
         clearInterval(interval);

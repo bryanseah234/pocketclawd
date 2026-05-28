@@ -1,13 +1,13 @@
-# PocketClaw — Service Installer (Windows + NSSM)
+# Clawd — Service Installer (Windows + NSSM)
 #
-# Registers PocketClaw host as a Windows service that auto-starts on boot
+# Registers Clawd host as a Windows service that auto-starts on boot
 # and restarts on crash. Idempotent: safe to re-run (will re-install if
 # already present). Does not touch your .env, vault, or mnemon database.
 #
 # Requires: PowerShell 5.1+, admin rights for service registration.
 #
 # Usage (from repo root):
-#   .\scripts\service\install.ps1                 # default service name "pocketclaw"
+#   .\scripts\service\install.ps1                 # default service name "clawd"
 #   .\scripts\service\install.ps1 -Name custom    # custom name
 #   .\scripts\service\install.ps1 -DryRun         # show plan, don't apply
 #
@@ -15,7 +15,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Name = "pocketclaw",
+    [string]$Name = "clawd",
     [switch]$DryRun
 )
 
@@ -145,7 +145,7 @@ function Resolve-EnvPath($key, $default) {
     if ($v.StartsWith('~')) { return Join-Path $env:USERPROFILE $v.Substring(2) }
     return $v.Replace('/', '\')
 }
-$logDir = Resolve-EnvPath "LOG_PATH" (Join-Path $env:USERPROFILE ".pocketclaw\logs")
+$logDir = Resolve-EnvPath "LOG_PATH" (Join-Path $env:USERPROFILE ".clawd\logs")
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Write-Ok "Logs will go to: $logDir"
 
@@ -258,7 +258,7 @@ Write-Step "Registering NSSM service..."
 # Point NSSM at the wrapper batch — single token, no quoting headaches.
 & $nssm install $Name $wrapperBat
 & $nssm set $Name AppDirectory $repoRoot
-& $nssm set $Name DisplayName "PocketClaw Personal Assistant"
+& $nssm set $Name DisplayName "Clawd Personal Assistant"
 & $nssm set $Name Description "Personal AI assistant — Telegram/WhatsApp + cloud ingestion + mnemon memory."
 & $nssm set $Name Start SERVICE_AUTO_START
 & $nssm set $Name AppStdout $stdoutLog

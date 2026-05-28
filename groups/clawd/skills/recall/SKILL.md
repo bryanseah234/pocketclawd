@@ -1,6 +1,6 @@
 ---
 name: recall
-description: Search PocketClaw's memory for facts related to a query.
+description: Search Clawd's memory for facts related to a query.
 ---
 
 # /recall — search the knowledge base

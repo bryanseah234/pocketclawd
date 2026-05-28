@@ -1,7 +1,7 @@
 param(
   [int]$WaitSeconds = 120
 )
-# Verify-PocketClaw-Patches.ps1
+# Verify-Clawd-Patches.ps1
 # Tails service.stdout.log, looks for new tracer markers introduced by the May 23 patches:
 #   - "Inbound DM received" lines now carry attachments= / textLen= / isMention=
 #   - new "Inbound new message" / "Inbound subscribed message" tracer lines (chat-sdk-bridge.ts)
@@ -10,21 +10,21 @@ param(
 # Prints a verdict at the end so we don't have to eyeball.
 
 $ErrorActionPreference = 'Stop'
-$Log = 'X:\PocketClawData\logs\service.stdout.log'
+$Log = 'X:\ClawdData\logs\service.stdout.log'
 if (-not (Test-Path $Log)) { Write-Error "log not found: $Log"; exit 2 }
 
 # Confirm service PID + start time first
 $proc = Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
   Where-Object { $_.CommandLine -and $_.CommandLine -notmatch 'cavemem' } |
   Select-Object -First 1
-if (-not $proc) { Write-Host "[FAIL] no PocketClaw node.exe running"; exit 3 }
+if (-not $proc) { Write-Host "[FAIL] no Clawd node.exe running"; exit 3 }
 $started = $proc.CreationDate
 Write-Host ("[INFO] service PID={0} started={1}" -f $proc.ProcessId, $started)
 
 # Anchor at current end-of-file so we only see NEW lines
 $startSize = (Get-Item $Log).Length
 Write-Host ("[INFO] tailing from byte={0} for {1}s" -f $startSize, $WaitSeconds)
-Write-Host "[INFO] now send your test messages (TG photo to bot DM, WA '@PocketClaw hello again' to Prawn Hub)"
+Write-Host "[INFO] now send your test messages (TG photo to bot DM, WA '@Clawd hello again' to Prawn Hub)"
 
 $deadline = (Get-Date).AddSeconds($WaitSeconds)
 $buf = New-Object System.Collections.Generic.List[string]

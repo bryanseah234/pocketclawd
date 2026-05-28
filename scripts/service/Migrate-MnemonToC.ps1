@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Migrate PocketClaw mnemon SQLite store from X: (exFAT) to C: (NTFS).
+  Migrate Clawd mnemon SQLite store from X: (exFAT) to C: (NTFS).
   Run elevated.
 
 .DESCRIPTION
@@ -9,7 +9,7 @@
   even from an idle shell. Reproduced: `mnemon status` against the
   X: store fails with SQLITE_BUSY without any concurrent writer.
 
-  Fix: keep ONLY the mnemon SQLite on C: (NTFS). All other PocketClaw
+  Fix: keep ONLY the mnemon SQLite on C: (NTFS). All other Clawd
   data — vault, photos, logs, ingest staging, processed.db — stays
   on X:. Mnemon is capped via periodic `mnemon gc` cron.
 
@@ -17,7 +17,7 @@
     1. Direct-kills the wedged service node + any mnemon orphans
        (does NOT use `schtasks /End` — it dirty-shuts and trips
        the circuit breaker on next start).
-    2. Snapshot-copies X:\PocketClawData\mnemon -> C:\Users\bryan\.mnemon-pocketclaw
+    2. Snapshot-copies X:\ClawdData\mnemon -> C:\Users\bryan\.mnemon-clawd
     3. Verifies the C: copy (mnemon status → reads insight count).
     4. Deletes circuit-breaker.json (safe to do; we're about to start
        cleanly).
@@ -27,7 +27,7 @@
   Idempotent. Re-runnable. The X: copy is preserved as a backup.
 
 .NOTES
-  .env is already pointing at C:\Users\bryan\.mnemon-pocketclaw — the
+  .env is already pointing at C:\Users\bryan\.mnemon-clawd — the
   running service has the OLD path cached because it started before
   the .env change. This script does NOT modify .env.
 #>
@@ -35,7 +35,7 @@
 [CmdletBinding()]
 param(
   [switch]$SkipRestart,
-  [string]$DataDir = 'C:\Users\bryan\.mnemon-pocketclaw'
+  [string]$DataDir = 'C:\Users\bryan\.mnemon-clawd'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,14 +47,14 @@ if (-not $me.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   exit 1
 }
 
-$repo    = 'X:\01 REPOSITORIES\pocketclaw'
-$srcDir  = 'X:\PocketClawData\mnemon'
+$repo    = 'X:\01 REPOSITORIES\clawd'
+$srcDir  = 'X:\ClawdData\mnemon'
 $dstDir  = $DataDir
 $cbFile  = Join-Path $repo 'data\circuit-breaker.json'
 $mnBin   = 'C:\Users\bryan\go\bin\mnemon.exe'
 
 Write-Host '======================================================'
-Write-Host ' PocketClaw mnemon migration: X: (exFAT) -> C: (NTFS)'
+Write-Host ' Clawd mnemon migration: X: (exFAT) -> C: (NTFS)'
 Write-Host '======================================================'
 Write-Host ''
 Write-Host ('  src: ' + $srcDir)
@@ -76,7 +76,7 @@ Write-Host '[1/5] Killing service host + any mnemon orphans...'
 
 $killed = @()
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ForEach-Object {
-  if ($_.CommandLine -and $_.CommandLine.Contains('pocketclaw')) {
+  if ($_.CommandLine -and $_.CommandLine.Contains('clawd')) {
     Write-Host ("  Killing node PID={0}" -f $_.ProcessId)
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
     $killed += "node:$($_.ProcessId)"
@@ -92,14 +92,14 @@ Get-Process mnemon -ErrorAction SilentlyContinue | ForEach-Object {
 for ($i = 0; $i -lt 10; $i++) {
   Start-Sleep -Seconds 1
   $stillNode = Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
-    Where-Object { $_.CommandLine -and $_.CommandLine.Contains('pocketclaw') }
+    Where-Object { $_.CommandLine -and $_.CommandLine.Contains('clawd') }
   $stillMn   = Get-Process mnemon -ErrorAction SilentlyContinue
   if (-not $stillNode -and -not $stillMn) { break }
 }
 
 $remain = @()
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ForEach-Object {
-  if ($_.CommandLine -and $_.CommandLine.Contains('pocketclaw')) { $remain += "node:$($_.ProcessId)" }
+  if ($_.CommandLine -and $_.CommandLine.Contains('clawd')) { $remain += "node:$($_.ProcessId)" }
 }
 Get-Process mnemon -ErrorAction SilentlyContinue | ForEach-Object { $remain += "mnemon:$($_.Id)" }
 if ($remain.Count -gt 0) {
@@ -168,10 +168,10 @@ if ($SkipRestart) {
 }
 
 Write-Host '[5/5] Relaunching scheduled task and watching for 60s...'
-schtasks /Run /TN PocketClaw 2>&1 | Out-Null
+schtasks /Run /TN Clawd 2>&1 | Out-Null
 Start-Sleep -Seconds 5
 
-$stderrLog = 'X:\PocketClawData\logs\service.stderr.log'
+$stderrLog = 'X:\ClawdData\logs\service.stderr.log'
 $startMark = Get-Date
 $busy = 0
 $timeout = 0
@@ -202,6 +202,6 @@ if ($timeout -eq 0 -and $busy -eq 0) {
   Write-Host '  to mnemon and is the bridge.setup retry loop.)'
 } else {
   Write-Host (' [PARTIAL] Errors: timeout=' + $timeout + ' busy=' + $busy) -ForegroundColor Yellow
-  Write-Host '            Tail X:\PocketClawData\logs\service.stderr.log'
+  Write-Host '            Tail X:\ClawdData\logs\service.stderr.log'
 }
 Write-Host '======================================================'

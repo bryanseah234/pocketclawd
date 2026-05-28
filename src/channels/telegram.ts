@@ -186,7 +186,7 @@ async function tryHandleConnectFlow(args: HandleConnectArgs): Promise<boolean> {
       [
         '🔌 Telegram MTProto sign-in',
         '',
-        'This signs PocketClaw in AS YOU so it can read your DMs and group history.',
+        'This signs Clawd in AS YOU so it can read your DMs and group history.',
         '⚠️ Treat the resulting session like a password — anyone with it can read your Telegram.',
         '',
         'Reply with your phone number in international format (e.g. +6592348112).',
@@ -277,7 +277,7 @@ function createPairingInterceptor(
         return;
       }
 
-      // PocketClaw /connect_telegram flow — short-circuits routing on match.
+      // Clawd /connect_telegram flow — short-circuits routing on match.
       const handledByConnect = await tryHandleConnectFlow({
         text,
         platformId,

@@ -43,7 +43,7 @@ function makeStubKb(overrides: Partial<KnowledgeBase> = {}): KnowledgeBase {
   };
 }
 
-function makeSession(agent_group_id = 'pocketclaw'): Session {
+function makeSession(agent_group_id = 'clawd'): Session {
   return {
     id: 'sess-1',
     agent_group_id,
@@ -80,7 +80,7 @@ describe('handleKbRequest', () => {
     expect(stub.store).toHaveBeenCalledWith(expect.objectContaining({ text: 'hello world', source: 'test' }));
     expect(writeSessionMessageMock).toHaveBeenCalledTimes(1);
     const [agentGroupId, sessionId, message] = writeSessionMessageMock.mock.calls[0];
-    expect(agentGroupId).toBe('pocketclaw');
+    expect(agentGroupId).toBe('clawd');
     expect(sessionId).toBe('sess-1');
     expect(message.kind).toBe('system');
     expect(message.trigger).toBe(0);
@@ -134,7 +134,7 @@ describe('handleKbRequest', () => {
     });
   });
 
-  it('refuses kb_* outside the pocketclaw agent group', async () => {
+  it('refuses kb_* outside the clawd agent group', async () => {
     const stub = makeStubKb();
     _setKbResolverForTest(async () => stub);
 
@@ -147,7 +147,7 @@ describe('handleKbRequest', () => {
     expect(stub.store).not.toHaveBeenCalled();
     const body = JSON.parse(writeSessionMessageMock.mock.calls[0][2].content);
     expect(body.ok).toBe(false);
-    expect(body.error).toMatch(/restricted to the pocketclaw agent group/);
+    expect(body.error).toMatch(/restricted to the clawd agent group/);
     expect(body.error).toContain('random-group');
   });
 

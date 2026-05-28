@@ -1,6 +1,6 @@
-# PocketClaw — Service Uninstaller
+# Clawd — Service Uninstaller
 #
-# Cleanly removes the PocketClaw Windows service. By default leaves
+# Cleanly removes the Clawd Windows service. By default leaves
 # .env, vault, mnemon DB, and logs intact so you can reinstall later
 # without losing data. Pass -Purge to wipe everything.
 #
@@ -12,7 +12,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Name = "pocketclaw",
+    [string]$Name = "clawd",
     [switch]$Purge,
     [switch]$DryRun
 )
@@ -37,7 +37,7 @@ if (-not $nssm) {
 }
 
 # --- 3. Show plan -----------------------------------------------------------
-$pocketDir = Join-Path $env:USERPROFILE ".pocketclaw"
+$pocketDir = Join-Path $env:USERPROFILE ".clawd"
 $mnemonDir = Join-Path $env:USERPROFILE ".mnemon"
 
 Write-Host ""

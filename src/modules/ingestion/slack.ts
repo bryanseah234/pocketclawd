@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Slack ingestion (PRD §17.2)
+ * Clawd — Slack ingestion (PRD §17.2)
  *
  * Uses user token (xoxp-) to read channels as the user themselves.
  * NOT a bot — acts as the user, can read all channels user has joined.

@@ -24,7 +24,7 @@ Write-Host 'PID 2436 gone.'
 
 Write-Host ''
 Write-Host '=== Reset circuit breaker ==='
-$cb = 'X:\01 REPOSITORIES\pocketclaw\data\circuit-breaker.json'
+$cb = 'X:\01 REPOSITORIES\clawd\data\circuit-breaker.json'
 if (Test-Path $cb) {
     Remove-Item $cb -Force
     Write-Host 'breaker deleted'
@@ -34,14 +34,14 @@ if (Test-Path $cb) {
 
 Write-Host ''
 Write-Host '=== Restart task ==='
-schtasks /Run /TN PocketClaw
+schtasks /Run /TN Clawd
 Start-Sleep -Seconds 8
 
 Write-Host ''
 Write-Host '--- 60s tail ---'
 $end = (Get-Date).AddSeconds(60)
 while ((Get-Date) -lt $end) {
-    $err = Get-Content 'X:\PocketClawData\logs\service.stderr.log' -Tail 200 -ErrorAction SilentlyContinue
+    $err = Get-Content 'X:\ClawdData\logs\service.stderr.log' -Tail 200 -ErrorAction SilentlyContinue
     $t = ($err | Select-String 'TIMEOUT' | Measure-Object).Count
     $b = ($err | Select-String 'BUSY' | Measure-Object).Count
     $d = ($err | Select-String 'BACKPRESSURE' | Measure-Object).Count
@@ -56,8 +56,8 @@ while ((Get-Date) -lt $end) {
 
 Write-Host ''
 Write-Host '=== Final summary ==='
-$err = Get-Content 'X:\PocketClawData\logs\service.stderr.log' -Tail 500 -ErrorAction SilentlyContinue
-$tail = Get-Content 'X:\PocketClawData\logs\service.stdout.log' -Tail 10 -ErrorAction SilentlyContinue
+$err = Get-Content 'X:\ClawdData\logs\service.stderr.log' -Tail 500 -ErrorAction SilentlyContinue
+$tail = Get-Content 'X:\ClawdData\logs\service.stdout.log' -Tail 10 -ErrorAction SilentlyContinue
 Write-Host ("stderr tail TIMEOUT=" + (($err | Select-String 'TIMEOUT' | Measure-Object).Count) + " BUSY=" + (($err | Select-String 'BUSY' | Measure-Object).Count) + " BACKPRESSURE=" + (($err | Select-String 'BACKPRESSURE' | Measure-Object).Count))
 Write-Host ''
 Write-Host '--- last 10 stdout lines ---'

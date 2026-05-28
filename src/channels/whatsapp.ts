@@ -45,10 +45,10 @@ import { envPath } from '../modules/paths.js';
 /**
  * Aliases the user can prefix when summoning the bot from their own number.
  * Comma-separated, case-insensitive, matched at start of trimmed message content.
- * Default '@pocketclaw' — extend via WHATSAPP_OWNER_ALIASES env var.
+ * Default '@clawd' — extend via WHATSAPP_OWNER_ALIASES env var.
  * Only meaningful when ASSISTANT_HAS_OWN_NUMBER=false (single-number setup).
  */
-const OWNER_ALIASES: string[] = (process.env.WHATSAPP_OWNER_ALIASES || '@pocketclaw')
+const OWNER_ALIASES: string[] = (process.env.WHATSAPP_OWNER_ALIASES || '@clawd')
   .split(',')
   .map((a) => a.trim().toLowerCase())
   .filter((a) => a.length > 0);
@@ -908,15 +908,15 @@ registerChannelAdapter('whatsapp', {
             // Single-number override: when the bot shares the user's WA number,
             // the user can still summon the bot from their own phone by prefixing
             // a message with one of WHATSAPP_OWNER_ALIASES (comma-separated, default
-            // '@pocketclaw'). The sentMessageCache check below still excludes the
+            // '@clawd'). The sentMessageCache check below still excludes the
             // bot's own outbound echoes; bot replies are prefixed `${ASSISTANT_NAME}: `
-            // not `@pocketclaw`, so they cannot match the alias gate.
+            // not `@clawd`, so they cannot match the alias gate.
             if (fromMe) {
               const isSelfChat = botPhoneJid && chatJid === botPhoneJid;
               const trimmed = content.trim().toLowerCase();
               // Require the alias to be followed by a word boundary (space,
               // punctuation, newline) or end-of-string. Plain startsWith()
-              // would let `@pocketclawing the cat` masquerade as a summon —
+              // would let `@clawding the cat` masquerade as a summon —
               // a real concern when the bot shares the user's number and
               // an accidental wake costs round-trip latency + token spend.
               const isOwnerAliasMention = OWNER_ALIASES.some((alias) => {

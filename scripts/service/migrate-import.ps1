@@ -1,6 +1,6 @@
-# PocketClaw — Migrate Import
+# Clawd — Migrate Import
 #
-# Restores a PocketClaw export onto a new machine. Run this BEFORE
+# Restores a Clawd export onto a new machine. Run this BEFORE
 # install.ps1 so the service has all its credentials + memory.
 #
 # Usage (from repo root, on the destination machine):
@@ -21,7 +21,7 @@ function Write-Warn($msg) { Write-Host "[import] $msg" -ForegroundColor Yellow }
 function Write-Err($msg)  { Write-Host "[import] $msg" -ForegroundColor Red }
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$pocketDir = Join-Path $env:USERPROFILE ".pocketclaw"
+$pocketDir = Join-Path $env:USERPROFILE ".clawd"
 $mnemonDir = Join-Path $env:USERPROFILE ".mnemon"
 
 if (-not (Test-Path $ExportDir)) {
@@ -29,7 +29,7 @@ if (-not (Test-Path $ExportDir)) {
     exit 1
 }
 if (-not (Test-Path "$ExportDir\MANIFEST.json")) {
-    Write-Err "No MANIFEST.json in $ExportDir — is this a PocketClaw export?"
+    Write-Err "No MANIFEST.json in $ExportDir — is this a Clawd export?"
     exit 1
 }
 

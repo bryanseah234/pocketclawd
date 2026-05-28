@@ -326,19 +326,19 @@ launchctl kickstart -k gui/$(id -u)/com.nanoclaw   # macOS
 
 ---
 
-# PocketClaw
+# Clawd
 
-This repo extends NanoClaw v2 with a PocketClaw-specific agent group at `groups/pocketclaw/`. PocketClaw is a personal AI assistant: Telegram + WhatsApp interfaces, a Postgres + pgvector knowledge base for capture, cloud ingestion (Gmail / Outlook / iCloud), photo processing, and an Obsidian wiki output layer.
+This repo extends NanoClaw v2 with a Clawd-specific agent group at `groups/clawd/`. Clawd is a personal AI assistant: Telegram + WhatsApp interfaces, a Postgres + pgvector knowledge base for capture, cloud ingestion (Gmail / Outlook / iCloud), photo processing, and an Obsidian wiki output layer.
 
 Architecture follows Vivian Balakrishnan's capture-layer + curation-layer pattern: capture stays vendor-neutral behind the `KnowledgeBase` interface (`src/modules/knowledge-base/`), and the Obsidian wiki is the curation layer over it.
 
-## PocketClaw Quick Reference
+## Clawd Quick Reference
 
-- **Agent identity**: `groups/pocketclaw/CLAUDE.md` (PocketClaw directives)
-- **Active branch convention**: `feature/pocketclaw-build` (per `CONTRIBUTING.md`)
-- **Plan**: `.omo/plans/pocketclaw.md` (T0-T19 + F1-F4 final review)
-- **Knowledge re-arch plan**: `.omo/plans/pocketclaw-knowledge-rearch.md`
-- **Notepad**: `.omo/notepads/pocketclaw/` (learnings, blockers)
+- **Agent identity**: `groups/clawd/CLAUDE.md` (Clawd directives)
+- **Active branch convention**: `feature/clawd-build` (per `CONTRIBUTING.md`)
+- **Plan**: `.omo/plans/clawd.md` (T0-T19 + F1-F4 final review)
+- **Knowledge re-arch plan**: `.omo/plans/clawd-knowledge-rearch.md`
+- **Notepad**: `.omo/notepads/clawd/` (learnings, blockers)
 
 ### Knowledge base
 
@@ -360,15 +360,15 @@ The agent container talks to the host-side `KnowledgeBase` through five MCP tool
 
 **Transport.** Each tool call writes a `kind='system'` row into `outbound.db` with `content` = `{ action: 'kb_request', request_id, tool, args }`. The host's `delivery.ts` polling loop (independent of agent state) calls `handleKbRequest` (`src/modules/knowledge-base/kb-actions.ts`), executes the tool against `getKnowledgeBase()`, then writes a `kind='system'` row into `inbound.db` with `content` = `{ action: 'kb_response', request_id, ok, result }`. The container's MCP-tool sidecar polls `messages_in` for the matching `request_id` (15s timeout). The agent loop already filters `kind='system'` rows out before the agent sees them, so kb_response rows never enter the agent's prompt — only the sidecar reader picks them up.
 
-**Permission gate.** Hard-coded pocketclaw-only in `kb-actions.ts`. Any other agent group calling `kb_*` gets `{ ok: false, error: 'kb_* tools are restricted to the pocketclaw agent group.' }` and the tool surfaces that as `isError`.
+**Permission gate.** Hard-coded clawd-only in `kb-actions.ts`. Any other agent group calling `kb_*` gets `{ ok: false, error: 'kb_* tools are restricted to the clawd agent group.' }` and the tool surfaces that as `isError`.
 
-**Prompt fragment.** `container/agent-runner/src/mcp-tools/kb.instructions.md` is auto-discovered by `claude-md-compose.ts` and emitted as `groups/pocketclaw/.claude-fragments/module-kb.md` at next session spawn.
+**Prompt fragment.** `container/agent-runner/src/mcp-tools/kb.instructions.md` is auto-discovered by `claude-md-compose.ts` and emitted as `groups/clawd/.claude-fragments/module-kb.md` at next session spawn.
 
 **Source-tag convention.** `chat` (user typed it via `/memory`), `agent-memory` (agent's own observation), `manual-photo` (user typed it via `/photo`), `photo` (host auto-pipeline), `gmail`/`outlook`/`icloud`/etc (host ingestion adapters). Don't reuse the host-reserved tags from the container side.
 
 ### Claude provider
 
-**Active deployment: AWS Bedrock in `ap-southeast-1`.** PocketClaw is deployed on AWS as a multi-user WhatsApp AI assistant. Bedrock is the runtime LLM provider; the agent calls Claude (Sonnet/Haiku/Opus 4.x) via `bedrock-runtime` and Titan v2 for embeddings. See [`docs/AWS-DEPLOYMENT.md`](docs/AWS-DEPLOYMENT.md) for the full procedure and [`docs/aws-resource-inventory.md`](docs/aws-resource-inventory.md) for live resource names.
+**Active deployment: AWS Bedrock in `ap-southeast-1`.** Clawd is deployed on AWS as a multi-user WhatsApp AI assistant. Bedrock is the runtime LLM provider; the agent calls Claude (Sonnet/Haiku/Opus 4.x) via `bedrock-runtime` and Titan v2 for embeddings. See [`docs/AWS-DEPLOYMENT.md`](docs/AWS-DEPLOYMENT.md) for the full procedure and [`docs/aws-resource-inventory.md`](docs/aws-resource-inventory.md) for live resource names.
 
 Live resources (account `709609992277`, region `ap-southeast-1`):
 - DynamoDB: `nanoclaw-chat-messages`, `nanoclaw-user-preferences`, `nanoclaw-system-errors`, `nanoclaw-webhook-tokens`
@@ -386,7 +386,7 @@ All runtime config (model id, table names, endpoints, limits) is read from `nano
 
 The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provider` / `SKIP | no-handler`; re-wiring them through the AWS Bedrock agent container is a follow-on project.
 
-### Skills installed for PocketClaw
+### Skills installed for Clawd
 
 - `/add-telegram` — Telegram Chat SDK channel adapter
 - `/add-whatsapp` — WhatsApp Baileys channel adapter
@@ -394,7 +394,7 @@ The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provi
 - `/add-gmail-tool`, `/add-gcal-tool` — Google ingestion
 - `/add-ollama-provider` — local Ollama for embeddings + vision (llava)
 
-### PocketClaw-specific modules (under `src/modules/`)
+### Clawd-specific modules (under `src/modules/`)
 
 - `knowledge-base/` — `KnowledgeBase` interface + pgvector implementation + Ollama embedding client
 - `debouncer.ts` — 5s unified message batch queue (Telegram + WhatsApp)
@@ -422,4 +422,4 @@ The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provi
 
 - exFAT drive (`X:`) needs `node-linker=hoisted` in `.npmrc` (no symlinks)
 - `.nvmrc` = Node 22; `better-sqlite3@11` won't compile against Node 26
-- `WHATSAPP_AUTH_DIR` env var sets the Baileys session path; defaults to `~/.pocketclaw/whatsapp/`
+- `WHATSAPP_AUTH_DIR` env var sets the Baileys session path; defaults to `~/.clawd/whatsapp/`

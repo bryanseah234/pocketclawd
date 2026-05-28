@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * PocketClaw — Meeting minutes generator (PRD §17.3)
+ * Clawd — Meeting minutes generator (PRD §17.3)
  *
  * Auto-generates structured meeting minutes from calendar events + email
  * threads stored in mnemon. Output: .docx file in `vault/meetings/`.

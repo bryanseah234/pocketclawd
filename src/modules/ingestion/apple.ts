@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Apple iCloud ingestion (IMAP / CalDAV / CardDAV) — PRD §7.9.3
+ * Clawd — Apple iCloud ingestion (IMAP / CalDAV / CardDAV) — PRD §7.9.3
  *
  * Auth: APPLE_ID_EMAIL + APPLE_APP_PASSWORD (app-specific password from
  * https://appleid.apple.com → Security → App-Specific Passwords).

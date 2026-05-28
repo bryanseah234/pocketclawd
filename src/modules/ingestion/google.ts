@@ -1,7 +1,7 @@
 /**
- * PocketClaw — Google ingestion (Gmail / Calendar / Contacts) — PRD §7.9.1
+ * Clawd — Google ingestion (Gmail / Calendar / Contacts) — PRD §7.9.1
  *
- * OAuth2 (Desktop app) → token cached at `~/.pocketclaw/secrets/google_token.json`.
+ * OAuth2 (Desktop app) → token cached at `~/.clawd/secrets/google_token.json`.
  * Scopes: gmail.readonly, calendar.readonly, contacts.readonly.
  *
  * The googleapis SDK is loaded lazily so this file can compile before
@@ -15,9 +15,9 @@ import { stripHtml } from './types.js';
 import { envPath, expandHome } from '../paths.js';
 
 const SECRETS_DIR =
-  process.env.POCKETCLAW_SECRETS_DIR
-    ? expandHome(process.env.POCKETCLAW_SECRETS_DIR)
-    : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
+  process.env.CLAWD_SECRETS_DIR
+    ? expandHome(process.env.CLAWD_SECRETS_DIR)
+    : envPath('CLAWD_SECRETS_DIR', 'secrets');
 const TOKEN_PATH = path.join(SECRETS_DIR, 'google_token.json');
 const CREDENTIALS_PATH = path.join(SECRETS_DIR, 'google_credentials.json');
 

@@ -1,7 +1,7 @@
-# PocketClaw — Self-elevating service uninstaller
+# Clawd — Self-elevating service uninstaller
 #
 # Same pattern as install-elevated.ps1 but for uninstall.
-# Pass -Purge through if you want to also wipe X:\PocketClawData.
+# Pass -Purge through if you want to also wipe X:\ClawdData.
 #
 # Usage:
 #   pnpm svc:uninstall:elevated

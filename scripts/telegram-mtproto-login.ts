@@ -1,8 +1,8 @@
 /**
- * PocketClaw — Telegram MTProto sign-in (one-shot, interactive)
+ * Clawd — Telegram MTProto sign-in (one-shot, interactive)
  *
  * Run ONCE while the user is awake to capture an MTProto session string.
- * The session string is written to `~/.pocketclaw/secrets/telegram_session.txt`
+ * The session string is written to `~/.clawd/secrets/telegram_session.txt`
  * (path overridable via TELEGRAM_SESSION_PATH). Subsequent service restarts
  * pick it up automatically — no SMS code, no prompts.
  *
@@ -41,9 +41,9 @@ if (!apiId || !apiHash || !phone) {
   process.exit(1);
 }
 
-const secretsDir = process.env.POCKETCLAW_SECRETS_DIR
-  ? process.env.POCKETCLAW_SECRETS_DIR.replace(/^~/, process.env.USERPROFILE ?? process.env.HOME ?? '~')
-  : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
+const secretsDir = process.env.CLAWD_SECRETS_DIR
+  ? process.env.CLAWD_SECRETS_DIR.replace(/^~/, process.env.USERPROFILE ?? process.env.HOME ?? '~')
+  : envPath('CLAWD_SECRETS_DIR', 'secrets');
 const sessionPath = process.env.TELEGRAM_SESSION_PATH ?? path.join(secretsDir, 'telegram_session.txt');
 
 // If a session already exists, load and verify it instead of re-prompting.
@@ -85,7 +85,7 @@ console.log('✅ Signed in as:', meAny.firstName ?? '(no name)', meAny.username 
 console.log(`   user-id:  ${meAny.id?.toString() ?? 'unknown'}`);
 console.log(`   session:  ${sessionPath} (${session.length} chars)`);
 console.log('');
-console.log('You can now restart the host (`nssm restart pocketclaw`) and');
+console.log('You can now restart the host (`nssm restart clawd`) and');
 console.log('Telegram MTProto ingestion will start running.');
 
 await client.disconnect();

@@ -2,7 +2,7 @@
  * Graceful Restart Trigger — signals the orchestrator to complete in-progress
  * work and then restart.
  *
- * The PocketClaw host process runs as a Windows Scheduled Task. On receiving
+ * The Clawd host process runs as a Windows Scheduled Task. On receiving
  * SIGTERM/SIGINT, the main `shutdown()` handler in `src/index.ts` drains
  * in-flight work (delivery polls, response polls, channel adapters, cloud
  * services) and exits with code 0. The scheduled task is configured to

@@ -39,7 +39,7 @@ NanoClaw v2 AWS deployment: EC2, DynamoDB, OpenSearch Serverless, ElastiCache Re
 - Container reads secrets at boot via SDK
 
 ### Infrastructure
-- GitHub Actions OIDC role (`github-actions-pocketclaw`) — no static AWS keys
+- GitHub Actions OIDC role (`github-actions-clawd`) — no static AWS keys
 - IAM role with minimum required permissions (ECR, SSM, S3, EC2)
 - EC2 instance profile for runtime AWS API access (no inline creds)
 

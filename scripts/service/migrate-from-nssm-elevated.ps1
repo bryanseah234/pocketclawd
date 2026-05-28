@@ -1,4 +1,4 @@
-# PocketClaw — Self-elevating NSSM-to-Task migration
+# Clawd — Self-elevating NSSM-to-Task migration
 #
 # Spawns an elevated PowerShell that runs migrate-from-nssm.ps1.
 # Single UAC prompt for the entire migration.

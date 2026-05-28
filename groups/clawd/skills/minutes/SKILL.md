@@ -26,4 +26,4 @@ This delivers the *content* of the skill (a structured meeting summary from loca
 
 ## Forward link
 
-Tracked in: the follow-on `.omo/plans/pocketclaw-agent-side-docx-pipeline.md` (to be written). Same pipeline will unblock `/research` (PDF) and `/slides` (.pptx).
+Tracked in: the follow-on `.omo/plans/clawd-agent-side-docx-pipeline.md` (to be written). Same pipeline will unblock `/research` (PDF) and `/slides` (.pptx).

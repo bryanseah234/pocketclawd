@@ -13,7 +13,7 @@
  * entirely — the MCP tool's sidecar reader picks them up directly.
  *
  * Permission gate (v1, plan §2.4): only sessions belonging to the
- * `pocketclaw` agent group may invoke kb_* tools. Other agent groups get
+ * `clawd` agent group may invoke kb_* tools. Other agent groups get
  * a structured refusal back (the response still ships, with ok:false).
  */
 import type Database from 'better-sqlite3';
@@ -25,7 +25,7 @@ import { getKnowledgeBase } from './index.js';
 import type { Insight, KnowledgeBase, RecallOptions } from './index.js';
 
 /** Hard-coded gate for v1. Future: lift into a wiring table. */
-const ALLOWED_AGENT_GROUPS = new Set<string>(['pocketclaw']);
+const ALLOWED_AGENT_GROUPS = new Set<string>(['clawd']);
 
 /**
  * Test seam: lets unit tests inject a stub KnowledgeBase without spinning
@@ -162,7 +162,7 @@ export async function handleKbRequest(
       action: 'kb_response',
       request_id: requestId,
       ok: false,
-      error: `kb_* tools are restricted to the pocketclaw agent group (this is "${session.agent_group_id}").`,
+      error: `kb_* tools are restricted to the clawd agent group (this is "${session.agent_group_id}").`,
     };
     log.warn('kb_request refused by permission gate', {
       sessionId: session.id,

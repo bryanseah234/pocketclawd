@@ -5,7 +5,7 @@
  *   ANTHROPIC_BASE_URL set in .env -> forward base URL + a placeholder
  *   auth token; OneCLI rewrites the Authorization header on the wire.
  *
- * (The Bedrock path was removed when PocketClaw moved to the Claude Code
+ * (The Bedrock path was removed when Clawd moved to the Claude Code
  * subscription model. Containers no longer mint AWS creds at spawn.)
  */
 import { readEnvFile } from '../env.js';

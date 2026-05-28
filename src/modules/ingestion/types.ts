@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Shared ingestion types
+ * Clawd — Shared ingestion types
  */
 
 /**

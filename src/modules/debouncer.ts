@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Unified Message Debouncer
+ * Clawd — Unified Message Debouncer
  *
  * Per PRD §7.5: collects rapid-fire messages from Telegram + WhatsApp into
  * a single batched prompt for Claude Code, with a 5-second batch window.

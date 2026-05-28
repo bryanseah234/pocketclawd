@@ -433,7 +433,7 @@ function evaluateEngage(
         // case, which admins can't predict). Admins who genuinely need
         // case-sensitive matching can express it via character classes,
         // e.g. \`[Pp]ocketclaw\`. Without \`i\`, a wiring with pattern
-        // \`@pocketclaw\` silently drops every \`@PocketClaw\` from the
+        // \`@clawd\` silently drops every \`@Clawd\` from the
         // WhatsApp adapter (which rewrites mention text to ASSISTANT_NAME).
         return new RegExp(pat, 'i').test(text);
       } catch {

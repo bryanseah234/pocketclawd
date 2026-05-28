@@ -1,4 +1,4 @@
-# PocketClaw — Personal AI Assistant
+# Clawd — Personal AI Assistant
 
 Local-first personal assistant built on top of [NanoClaw v2](https://github.com/nanocoai/nanoclaw). Talks to you via Telegram + WhatsApp with shared memory across both, ingests email / calendar / contacts from Google / Microsoft / Apple, processes photos via local vision, and generates an Obsidian wiki you can sync peer-to-peer with Syncthing.
 
@@ -26,7 +26,7 @@ Local-first personal assistant built on top of [NanoClaw v2](https://github.com/
 
 - [docs/SETUP.md](docs/SETUP.md) — clone-to-first-message walkthrough
 - [docs/SERVICE.md](docs/SERVICE.md) — Windows service lifecycle (install / migrate / teardown)
-- [docs/POCKETCLAW.md](docs/POCKETCLAW.md) — PocketClaw-specific architecture
+- [docs/CLAWD.md](docs/CLAWD.md) — Clawd-specific architecture
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — underlying NanoClaw architecture
 - [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md) — AWS cloud deployment guide (NanoClaw multi-user)
 - [PRD.md](PRD.md) — full product spec v3.0 + v1.1 extensions (§17)
@@ -54,18 +54,18 @@ Send these in Telegram or WhatsApp:
 | `/slides <topic> [--style minimal\|corporate\|creative]` | Generate `.pptx` deck from the knowledge base (§17.5) |
 | `/speech <topic> [--duration 5m] [--tone formal\|casual\|persuasive]` | Draft a speech as Markdown (§17.6) |
 
-Beyond commands, PocketClaw also passively archives chat messages to the knowledge base when `INGEST_CHAT_MODE` is set in `.env`. See the [Chat archive](#chat-archive-telegram--whatsapp-passive-ingestion) section.
+Beyond commands, Clawd also passively archives chat messages to the knowledge base when `INGEST_CHAT_MODE` is set in `.env`. See the [Chat archive](#chat-archive-telegram--whatsapp-passive-ingestion) section.
 
 ---
 
 ## Where data lives
 
-PocketClaw keeps **everything on disk in one folder** that you control. Configurable via `.env`. By default it's `~/.pocketclaw/`, but you should put it on a drive with space — emails, vault wikis, presentations, and the knowledge base will grow into GBs over time.
+Clawd keeps **everything on disk in one folder** that you control. Configurable via `.env`. By default it's `~/.clawd/`, but you should put it on a drive with space — emails, vault wikis, presentations, and the knowledge base will grow into GBs over time.
 
-This install uses **`X:\PocketClawData\`** (~580 GB free). Layout:
+This install uses **`X:\ClawdData\`** (~580 GB free). Layout:
 
 ```
-X:\PocketClawData\
+X:\ClawdData\
 ├── secrets\                      OAuth tokens (Google / Microsoft / Apple)
 ├── vault\                        Obsidian-compatible knowledge base
 │   ├── wiki\                     auto-generated wiki entries (.md)
@@ -77,24 +77,24 @@ X:\PocketClawData\
 ├── logs\                         service.stdout.log / service.stderr.log / audit.log
 └── processed.db                  SHA256 fingerprints for file-watcher idempotency
                                   (knowledge base lives in the local Postgres,
-                                   not in PocketClawData/)
+                                   not in ClawdData/)
 ```
 
 The `.env` env-vars that control these paths:
 
 ```env
-VAULT_PATH=X:/PocketClawData/vault
+VAULT_PATH=X:/ClawdData/vault
 # Knowledge base lives in Postgres (started via `docker compose up -d postgres`).
-# Default DSN: postgres://pocketclaw@127.0.0.1:5432/pocketclaw — override with PGHOST / PGPORT / PGDATABASE / PGUSER if needed.
-WATCH_PATHS_ROOT=X:/PocketClawData/watch
-LOG_PATH=X:/PocketClawData/logs
-POCKETCLAW_SECRETS_DIR=X:/PocketClawData/secrets
-POCKETCLAW_PROCESSED_DB=X:/PocketClawData/processed.db
+# Default DSN: postgres://clawd@127.0.0.1:5432/clawd — override with PGHOST / PGPORT / PGDATABASE / PGUSER if needed.
+WATCH_PATHS_ROOT=X:/ClawdData/watch
+LOG_PATH=X:/ClawdData/logs
+CLAWD_SECRETS_DIR=X:/ClawdData/secrets
+CLAWD_PROCESSED_DB=X:/ClawdData/processed.db
 ```
 
 To move data to a different drive later, edit `.env`, run `pnpm svc:export` to bundle current state, copy the zip to the new location, run `migrate-import.ps1` (see [Service lifecycle](#service-lifecycle)).
 
-> **Repo itself stays at `X:\01 REPOSITORIES\pocketclaw\`** — only the data lives at `X:\PocketClawData\`.
+> **Repo itself stays at `X:\01 REPOSITORIES\clawd\`** — only the data lives at `X:\ClawdData\`.
 
 ---
 
@@ -103,12 +103,12 @@ To move data to a different drive later, edit `.env`, run `pnpm svc:export` to b
 This repo is two things stacked:
 
 1. **NanoClaw v2 harness** — `src/`, `container/`, `groups/global/`, `groups/main/`, channel adapters, host orchestration. Runs as a Node service.
-2. **PocketClaw layer** — `groups/pocketclaw/` agent identity + skills, `src/modules/debouncer.ts`, `src/modules/photo-processor.ts`, `src/modules/ingestion/*`, `src/modules/wiki-generator.ts`, `src/modules/meeting-minutes.ts`, `src/modules/research-report.ts`, `src/modules/slide-generator.ts`, `src/modules/pocketclaw.ts` (cron driver).
+2. **Clawd layer** — `groups/clawd/` agent identity + skills, `src/modules/debouncer.ts`, `src/modules/photo-processor.ts`, `src/modules/ingestion/*`, `src/modules/wiki-generator.ts`, `src/modules/meeting-minutes.ts`, `src/modules/research-report.ts`, `src/modules/slide-generator.ts`, `src/modules/clawd.ts` (cron driver).
 
 Layout details:
 
 - NanoClaw: [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
-- PocketClaw: [docs/POCKETCLAW.md](docs/POCKETCLAW.md)
+- Clawd: [docs/CLAWD.md](docs/CLAWD.md)
 - Cloud (AWS): [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md) — Terraform + EC2 + managed services for multi-user deployment
 
 ---
@@ -129,7 +129,7 @@ Layout details:
 
 ```powershell
 # 1. Clone the repo (or you already have it)
-cd "X:\01 REPOSITORIES\pocketclaw"
+cd "X:\01 REPOSITORIES\clawd"
 
 # 2. Install Node deps (skip-scripts because sharp's postinstall is buggy on Windows)
 pnpm install --ignore-scripts --frozen-lockfile
@@ -144,9 +144,9 @@ Copy-Item .env.example .env
 # and update the path env-vars to point at your data drive (see "Where data lives")
 
 # 4. Create your data root
-New-Item -ItemType Directory -Path X:\PocketClawData -Force
+New-Item -ItemType Directory -Path X:\ClawdData -Force
 foreach ($s in @("vault","secrets","logs","watch")) {
-  New-Item -ItemType Directory -Path "X:\PocketClawData\$s" -Force
+  New-Item -ItemType Directory -Path "X:\ClawdData\$s" -Force
 }
 
 # 5. Build
@@ -162,7 +162,7 @@ You should see facts ingest from any cloud source you've credentialed. Now regis
 
 ## Service lifecycle
 
-PocketClaw runs as a Windows service (via [NSSM](https://nssm.cc/)) so the cron jobs (02:00 ingest / 03:00 wiki / 07:00 digest) fire automatically. All commands have `pnpm run` shortcuts:
+Clawd runs as a Windows service (via [NSSM](https://nssm.cc/)) so the cron jobs (02:00 ingest / 03:00 wiki / 07:00 digest) fire automatically. All commands have `pnpm run` shortcuts:
 
 ### Install (one-time, needs admin)
 
@@ -177,13 +177,13 @@ If you'd rather elevate manually:
 
 ```powershell
 # Right-click PowerShell -> "Run as administrator", then:
-cd "X:\01 REPOSITORIES\pocketclaw"
+cd "X:\01 REPOSITORIES\clawd"
 pnpm svc:install
 ```
 
 > **Why elevation matters**: NSSM service registration calls `sc.exe create` which requires admin. The elevated wrapper handles `cd` to the repo for you so you don't get `ERR_PNPM_NO_PKG_MANIFEST` from `C:\WINDOWS\system32`.
 
-This auto-installs NSSM (via Chocolatey or winget if missing), registers the `pocketclaw` service to start on boot, sets up log rotation at 10 MB, and starts the service.
+This auto-installs NSSM (via Chocolatey or winget if missing), registers the `clawd` service to start on boot, sets up log rotation at 10 MB, and starts the service.
 
 ### Day-to-day
 
@@ -193,22 +193,22 @@ pnpm svc:status          # alias for pnpm svc
 pnpm svc:tail            # tail logs in real time (Ctrl-C to stop)
 
 # Stop/start/restart need admin:
-nssm stop pocketclaw
-nssm start pocketclaw
-nssm restart pocketclaw
+nssm stop clawd
+nssm start clawd
+nssm restart clawd
 ```
 
 ### After code changes
 
 ```powershell
 pnpm run build
-nssm restart pocketclaw   # admin
+nssm restart clawd   # admin
 ```
 
 ### After `.env` changes
 
 ```powershell
-nssm restart pocketclaw   # admin
+nssm restart clawd   # admin
 ```
 
 ### Migrate to another machine
@@ -216,7 +216,7 @@ nssm restart pocketclaw   # admin
 ```powershell
 # On THIS machine — bundle everything (creds + memory + vault):
 pnpm svc:export
-# -> pocketclaw-export-YYYYMMDD-HHMM.zip in current dir
+# -> clawd-export-YYYYMMDD-HHMM.zip in current dir
 
 # Copy zip to new machine. On NEW machine after cloning + pnpm install + build:
 pnpm svc:install
@@ -224,7 +224,7 @@ pnpm svc:install
 
 # Then on THIS machine, tear down:
 pnpm svc:uninstall          # remove service, KEEP data
-pnpm svc:uninstall:purge    # remove service AND wipe X:\PocketClawData
+pnpm svc:uninstall:purge    # remove service AND wipe X:\ClawdData
 ```
 
 ### Dry-run anything
@@ -239,7 +239,7 @@ Full lifecycle docs: [docs/SERVICE.md](docs/SERVICE.md).
 
 ## Sign-in walkthroughs
 
-Each cloud source needs its own credential. PocketClaw never holds raw passwords — only OAuth tokens or app-specific passwords that you can revoke from the provider's portal.
+Each cloud source needs its own credential. Clawd never holds raw passwords — only OAuth tokens or app-specific passwords that you can revoke from the provider's portal.
 
 ### Google (Gmail + Calendar + Contacts) — easiest
 
@@ -247,8 +247,8 @@ Each cloud source needs its own credential. PocketClaw never holds raw passwords
 2. **APIs & Services → Library** → enable: `Gmail API`, `Google Calendar API`, `People API`
 3. **APIs & Services → OAuth consent screen** → External, fill in app name + your email, save
 4. **APIs & Services → Credentials → Create credentials → OAuth client ID → Desktop app**
-5. Download the JSON, save as `X:\PocketClawData\secrets\google_credentials.json`
-6. From Telegram or WhatsApp, send: `/auth google` — PocketClaw prints a URL, you sign in, paste the code back. Token caches at `X:\PocketClawData\secrets\google_token.json`.
+5. Download the JSON, save as `X:\ClawdData\secrets\google_credentials.json`
+6. From Telegram or WhatsApp, send: `/auth google` — Clawd prints a URL, you sign in, paste the code back. Token caches at `X:\ClawdData\secrets\google_token.json`.
 
 ### Microsoft (Outlook Mail + Calendar + Contacts) — currently parked
 
@@ -261,7 +261,7 @@ If you ever want to revisit, the options are:
 - **Phone Microsoft support** with the AADSTS5000225 trace ID and ask for tenant reactivation (free, 15-30 min on the phone)
 - **Subscribe to Microsoft 365 Personal** ($7/mo trial, free first month) — paid subscriptions auto-keep the tenant active
 - **Use a corporate/school account** where app registration is allowed by IT
-- Skip Outlook entirely — the rest of PocketClaw works fine without it
+- Skip Outlook entirely — the rest of Clawd works fine without it
 
 The ingester code at `src/modules/ingestion/microsoft.ts` and the `/auth microsoft` flow remain ready. Setting `MS_CLIENT_ID` in `.env` is enough to wake it up later.
 
@@ -270,7 +270,7 @@ The ingester code at `src/modules/ingestion/microsoft.ts` and the `/auth microso
 Apple does NOT support OAuth for these APIs — only **app-specific passwords** with 2FA enabled.
 
 1. [account.apple.com](https://account.apple.com) → **Sign-In and Security → App-Specific Passwords → Generate**
-2. Label: `PocketClaw`. Apple shows the password ONCE — copy immediately.
+2. Label: `Clawd`. Apple shows the password ONCE — copy immediately.
 3. In `.env`:
 
    ```env
@@ -278,7 +278,7 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
    APPLE_APP_PASSWORD=xxxx-xxxx-xxxx-xxxx
    ```
 
-4. Restart service. No `/auth` flow needed — PocketClaw uses these on every IMAP/CalDAV/CardDAV connection.
+4. Restart service. No `/auth` flow needed — Clawd uses these on every IMAP/CalDAV/CardDAV connection.
 
 ### GitHub (PRs + commits + issues)
 
@@ -324,7 +324,7 @@ Apple does NOT support OAuth for these APIs — only **app-specific passwords** 
 | Slack | ⏸ needs `SLACK_USER_TOKEN` | recent messages from joined channels | 02:00 daily |
 | Telegram chat archive | controlled by `INGEST_CHAT_MODE` | every inbound message (text + media metadata) | continuous (realtime hook) |
 | WhatsApp chat archive | controlled by `INGEST_CHAT_MODE` | every inbound message (text + media metadata) | continuous (realtime hook) |
-| File watcher | ✅ live | drop files into `X:\PocketClawData\watch\` | continuous |
+| File watcher | ✅ live | drop files into `X:\ClawdData\watch\` | continuous |
 
 Run `pnpm svc` for live status of each source.
 
@@ -332,7 +332,7 @@ Run `pnpm svc` for live status of each source.
 
 ## Chat archive (Telegram + WhatsApp passive ingestion)
 
-Beyond the cron-based cloud sources above, PocketClaw can also archive **every chat message** in real time as it flows through Telegram or WhatsApp. This is **opt-in** via `INGEST_CHAT_MODE` in `.env`.
+Beyond the cron-based cloud sources above, Clawd can also archive **every chat message** in real time as it flows through Telegram or WhatsApp. This is **opt-in** via `INGEST_CHAT_MODE` in `.env`.
 
 ### Modes
 
@@ -345,7 +345,7 @@ Beyond the cron-based cloud sources above, PocketClaw can also archive **every c
 
 ### What gets stored
 
-- Knowledge-base entry per message, tagged: `pocketclaw, src:whatsapp-chat` (or `telegram-chat`), `chat:<chatId>`, `kind:group|dm`, `from:self|other`, `sender:<id>`
+- Knowledge-base entry per message, tagged: `clawd, src:whatsapp-chat` (or `telegram-chat`), `chat:<chatId>`, `kind:group|dm`, `from:self|other`, `sender:<id>`
 - Format: `WhatsApp group "Family" — Bryan: just landed at SIN`
 - Attachments are **noted but not downloaded** (just `[image]`, `[voice note]`, `[2 documents]` markers)
 - Stickers and protocol messages are skipped
@@ -370,7 +370,7 @@ If any of that gives you pause, use `self` or `dms`. They're plenty useful as jo
 INGEST_CHAT_MODE=all
 ```
 
-Restart service: `nssm restart pocketclaw` (admin). Within seconds of receiving the next chat message, the knowledge base will have a new entry tagged `src:<platform>-chat`. Verify:
+Restart service: `nssm restart clawd` (admin). Within seconds of receiving the next chat message, the knowledge base will have a new entry tagged `src:<platform>-chat`. Verify:
 
 ```powershell
 /recall <some keyword from a recent chat>
@@ -410,7 +410,7 @@ Set `INGEST_CHAT_MODE=off` in `.env` and restart. Future messages stop being arc
 
 ```powershell
 pnpm svc                 # check Status field
-Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 50
+Get-Content X:\ClawdData\logs\service.stderr.log -Tail 50
 ```
 
 Common issues:
@@ -434,19 +434,19 @@ Run `pnpm svc` — if `Insights` count is 0, ingestion hasn't fired yet. Trigger
 
 ### Move data to a different drive
 
-1. Stop service: `nssm stop pocketclaw`
-2. Move folder: `Move-Item X:\PocketClawData D:\PocketClawData`
-3. Update `.env` — change every `X:/PocketClawData` to `D:/PocketClawData`
-4. `pnpm run build && nssm start pocketclaw`
+1. Stop service: `nssm stop clawd`
+2. Move folder: `Move-Item X:\ClawdData D:\ClawdData`
+3. Update `.env` — change every `X:/ClawdData` to `D:/ClawdData`
+4. `pnpm run build && nssm start clawd`
 
 ### Disk getting full
 
 The big consumers, in order:
 
-1. Postgres knowledge-base volume (`pocketclaw_pgdata`) — grows ~2 KB per entry incl. embedding. 100k entries ≈ 200 MB.
-2. `X:\PocketClawData\vault\research\` — PDFs from `/research`, ~50-200 KB each
-3. `X:\PocketClawData\vault\presentations\` — PPTX, ~50-100 KB each
-4. `X:\PocketClawData\logs\` — capped at 10 MB rotation by NSSM
+1. Postgres knowledge-base volume (`clawd_pgdata`) — grows ~2 KB per entry incl. embedding. 100k entries ≈ 200 MB.
+2. `X:\ClawdData\vault\research\` — PDFs from `/research`, ~50-200 KB each
+3. `X:\ClawdData\vault\presentations\` — PPTX, ~50-100 KB each
+4. `X:\ClawdData\logs\` — capped at 10 MB rotation by NSSM
 
 To reclaim space: delete unwanted vault files manually (won't affect the knowledge base), or `pnpm svc:uninstall:purge` for a full reset.
 
@@ -455,7 +455,7 @@ To reclaim space: delete unwanted vault files manually (won't affect the knowled
 If you can see your inbound message in the logs but the bot never replies, walk the 7-link chain:
 
 ```powershell
-Get-Content X:\PocketClawData\logs\service.stdout.log -Tail 80 | Select-String 'Inbound|Message routed|MESSAGE DROPPED|delivered'
+Get-Content X:\ClawdData\logs\service.stdout.log -Tail 80 | Select-String 'Inbound|Message routed|MESSAGE DROPPED|delivered'
 ```
 
 Healthy chain:
@@ -468,7 +468,7 @@ Message delivered id=... platformMsgId=...
 
 If a link is missing, that's where to look. Common causes:
 
-- **No `Inbound` line at all** — adapter early-return guard ate it. Most often the WhatsApp `fromMe` echo-loop guard dropping your own messages because the bot shares your phone number. Fix by setting `WHATSAPP_OWNER_ALIASES=@pocketclaw,@pocketclaw234` in `.env` (already set in the default install) and prefixing your messages with `@pocketclaw`.
+- **No `Inbound` line at all** — adapter early-return guard ate it. Most often the WhatsApp `fromMe` echo-loop guard dropping your own messages because the bot shares your phone number. Fix by setting `WHATSAPP_OWNER_ALIASES=@clawd,@clawd234` in `.env` (already set in the default install) and prefixing your messages with `@clawd`.
 - **`MESSAGE DROPPED — unknown sender (strict policy) accessReason="not_member"`** — your platform identity (e.g. `whatsapp:6592348112@s.whatsapp.net`) isn't a member or owner of the agent group. Telegram-you and WhatsApp-you are *separate* user rows; granting owner on one does NOT carry to the other. Fix by inserting a `user_roles` row for the new identity (see the `chat-platform-silent-drop-debugging` Hermes skill for the exact SQL).
 - **`ENOENT mkdir ...inbox\<chatId>:<msgId>:...`** — colons in path components on NTFS are interpreted as Alternate Data Stream separators. Already fixed by `src/attachment-safety.ts` `sanitizeForFilesystem()` — if you see this, you're on a stale build, run `pnpm run build` and restart.
 - **`Message delivered` line is present but WhatsApp shows "Waiting for this message. This may take a while."** — Signal-protocol session-key desync between the bot's Baileys session and your phone. Not a bot bug. Open WhatsApp → Settings → Linked Devices to force a key refresh, or have anyone else send a message in the same group to trigger a sender-key re-fetch. Last resort: log out the bot's Baileys session and re-pair.
@@ -477,7 +477,7 @@ Full debugging walkthrough including diagnostic tracers and exact patch sites: s
 
 ### Service won't stop (Scheduled Task)
 
-The current host runs as a Windows Scheduled Task (`PocketClaw`), not NSSM. The old `nssm stop pocketclaw` command does nothing — use `.\scripts\service\Restart-PocketClaw-v2.ps1` (auto-elevates, anchors on `Get-NetTCPConnection -LocalPort 3000` + `taskkill /F /T /PID`). Plain `schtasks /End /TN PocketClaw` does NOT kill the detached child node.exe holding port 3000 — always use the v2 restart script.
+The current host runs as a Windows Scheduled Task (`Clawd`), not NSSM. The old `nssm stop clawd` command does nothing — use `.\scripts\service\Restart-Clawd-v2.ps1` (auto-elevates, anchors on `Get-NetTCPConnection -LocalPort 3000` + `taskkill /F /T /PID`). Plain `schtasks /End /TN Clawd` does NOT kill the detached child node.exe holding port 3000 — always use the v2 restart script.
 
 Full troubleshooting: [docs/SERVICE.md#troubleshooting](docs/SERVICE.md#troubleshooting).
 

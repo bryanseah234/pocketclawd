@@ -21,4 +21,4 @@ You — the in-container agent — cannot drive wiki regeneration. There is no M
 
 ## Forward link
 
-Tracked in: `.omo/plans/pocketclaw-knowledge-rearch.md` (P5 audit log) and the follow-on `.omo/plans/pocketclaw-wiki-cron-rewire.md` (to be written).
+Tracked in: `.omo/plans/clawd-knowledge-rearch.md` (P5 audit log) and the follow-on `.omo/plans/clawd-wiki-cron-rewire.md` (to be written).

@@ -1,16 +1,16 @@
-# PocketClaw — Restart helper (self-elevating)
+# Clawd — Restart helper (self-elevating)
 #
-# Stops and restarts the PocketClaw Scheduled Task. Because the task runs as
+# Stops and restarts the Clawd Scheduled Task. Because the task runs as
 # NT AUTHORITY\SYSTEM with RunLevel=Highest, schtasks /End and /Run both require
 # admin to call. This script auto-elevates via UAC if launched non-elevated.
 #
 # Usage:
-#   pwsh .\scripts\service\Restart-PocketClaw.ps1
-#   pwsh .\scripts\service\Restart-PocketClaw.ps1 -Name custom
+#   pwsh .\scripts\service\Restart-Clawd.ps1
+#   pwsh .\scripts\service\Restart-Clawd.ps1 -Name custom
 
 [CmdletBinding()]
 param(
-    [string]$Name = "PocketClaw"
+    [string]$Name = "Clawd"
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,7 +47,7 @@ Write-Host "[restart] Stopping task '$Name' (current state: $($existing.State)).
 $timeout = [DateTime]::Now.AddSeconds(15)
 while ([DateTime]::Now -lt $timeout) {
     $stillUp = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -and $_.CommandLine -match 'pocketclaw.*dist\\index\.js' }
+        Where-Object { $_.CommandLine -and $_.CommandLine -match 'clawd.*dist\\index\.js' }
     if (-not $stillUp) { break }
     Start-Sleep -Milliseconds 500
 }
@@ -66,13 +66,13 @@ Write-Host "[restart] Last run:     $($info.LastRunTime)" -ForegroundColor Green
 Write-Host "[restart] Last result:  0x$([Convert]::ToString($info.LastTaskResult, 16).ToUpper())" -ForegroundColor Green
 
 $nodeProc = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -and $_.CommandLine -match 'pocketclaw.*dist\\index\.js' } |
+    Where-Object { $_.CommandLine -and $_.CommandLine -match 'clawd.*dist\\index\.js' } |
     Select-Object -First 1
 if ($nodeProc) {
     Write-Host "[restart] node.exe PID=$($nodeProc.ProcessId) is up." -ForegroundColor Green
 } else {
     Write-Host "[restart] WARN: no node.exe matching dist\index.js found yet — task may still be spawning." -ForegroundColor Yellow
-    Write-Host "[restart] Check logs: Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 50" -ForegroundColor Yellow
+    Write-Host "[restart] Check logs: Get-Content X:\ClawdData\logs\service.stderr.log -Tail 50" -ForegroundColor Yellow
 }
 
 Write-Host ""

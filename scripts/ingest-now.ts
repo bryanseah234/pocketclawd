@@ -34,7 +34,7 @@ const onFact = dry
     }
   : undefined;
 
-console.log(`PocketClaw ingest — window ${hours}h, ${dry ? 'DRY-RUN (no mnemon writes)' : 'writes to mnemon'}`);
+console.log(`Clawd ingest — window ${hours}h, ${dry ? 'DRY-RUN (no mnemon writes)' : 'writes to mnemon'}`);
 const t0 = Date.now();
 const summary = await sched.runAll({ since, onFact });
 const wall = ((Date.now() - t0) / 1000).toFixed(1);

@@ -24,9 +24,9 @@ import './agent-to-agent/index.js';
 import './self-mod/index.js';
 import './knowledge-base/register.js';
 
-// PocketClaw — registers cron driver for cloud ingestion, wiki, digest.
-import './pocketclaw.js';
-// PocketClaw wiring — host-side cron handler stubs (no Claude provider wired)
-// to the cron driver. Must come AFTER pocketclaw.js so setWikiProvider /
+// Clawd — registers cron driver for cloud ingestion, wiki, digest.
+import './clawd.js';
+// Clawd wiring — host-side cron handler stubs (no Claude provider wired)
+// to the cron driver. Must come AFTER clawd.js so setWikiProvider /
 // setDigestHandler symbols are bound when this side-effect import runs.
-import './pocketclaw-wiring.js';
+import './clawd-wiring.js';

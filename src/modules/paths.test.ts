@@ -43,17 +43,17 @@ describe('envPath', () => {
     expect(envPath('MY_TEST_PATH_VAR', 'fallback')).toBe(path.join(os.homedir(), 'configured'));
   });
 
-  it('returns ~/.pocketclaw/<defaultSubdir> when env var unset', () => {
+  it('returns ~/.clawd/<defaultSubdir> when env var unset', () => {
     delete process.env.MY_TEST_PATH_VAR;
     expect(envPath('MY_TEST_PATH_VAR', 'subdir')).toBe(
-      path.join(os.homedir(), '.pocketclaw', 'subdir'),
+      path.join(os.homedir(), '.clawd', 'subdir'),
     );
   });
 
   it('returns default when env var is empty string', () => {
     process.env.MY_TEST_PATH_VAR = '';
     expect(envPath('MY_TEST_PATH_VAR', 'sub')).toBe(
-      path.join(os.homedir(), '.pocketclaw', 'sub'),
+      path.join(os.homedir(), '.clawd', 'sub'),
     );
   });
 });

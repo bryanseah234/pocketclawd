@@ -36,4 +36,4 @@ This gives the user the same shape of message they'd get from the auto-digest, j
 
 ## Forward link
 
-Tracked in: the follow-on `.omo/plans/pocketclaw-morning-digest-rewire.md` (to be written). Will use the M0 host-side kb_request handler as the read path.
+Tracked in: the follow-on `.omo/plans/clawd-morning-digest-rewire.md` (to be written). Will use the M0 host-side kb_request handler as the read path.

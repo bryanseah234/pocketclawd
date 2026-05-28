@@ -14,7 +14,7 @@ import { readdir, readFile } from 'node:fs/promises';
  * Coerce Postgres BIGINT (oid 20) from string to JS number.
  *
  * pg's default behaviour is to return BIGINT as string to preserve
- * precision beyond 2^53. PocketClaw's id columns will never approach that,
+ * precision beyond 2^53. Clawd's id columns will never approach that,
  * and the `Insight.id` interface is typed `number`. Centralising the parser
  * here means impl code doesn't need per-query casts.
  *
@@ -40,8 +40,8 @@ export function getPool(): Pool {
   _pool = new Pool({
     host: process.env.PGHOST ?? '127.0.0.1',
     port: Number(process.env.PGPORT ?? 5432),
-    database: process.env.PGDATABASE ?? 'pocketclaw',
-    user: process.env.PGUSER ?? 'pocketclaw',
+    database: process.env.PGDATABASE ?? 'clawd',
+    user: process.env.PGUSER ?? 'clawd',
     password: process.env.PGPASSWORD,
     max: Number(process.env.PG_POOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,

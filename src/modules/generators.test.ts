@@ -14,7 +14,7 @@ import { MeetingMinutesGenerator } from './meeting-minutes.js';
 import { ResearchReportGenerator } from './research-report.js';
 import { SlideGenerator } from './slide-generator.js';
 
-const TEST_VAULT = path.join(os.tmpdir(), 'pocketclaw-render-test', String(Date.now()));
+const TEST_VAULT = path.join(os.tmpdir(), 'clawd-render-test', String(Date.now()));
 
 beforeAll(async () => {
   process.env.VAULT_PATH = TEST_VAULT;
@@ -32,7 +32,7 @@ describe('§17.3 MeetingMinutesGenerator', () => {
       title: 'Render test',
       date: new Date(),
       durationMinutes: 30,
-      attendees: ['Bryan', 'PocketClaw'],
+      attendees: ['Bryan', 'Clawd'],
       agenda: 'Verify generator',
       discussion: ['it works'],
       actions: ['ship'],
@@ -67,7 +67,7 @@ describe('§17.5 SlideGenerator', () => {
     const gen = new SlideGenerator();
     const result = await gen.render({
       topic: 'Smoke test deck',
-      author: 'PocketClaw',
+      author: 'Clawd',
       date: new Date(),
       style: 'minimal',
       slides: [

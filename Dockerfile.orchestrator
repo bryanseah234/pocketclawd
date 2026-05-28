@@ -59,7 +59,7 @@ WORKDIR /app
 LABEL org.opencontainers.image.title="nanoclaw-orchestrator" \
       org.opencontainers.image.description="NanoClaw WhatsApp AI Assistant — Orchestrator" \
       org.opencontainers.image.vendor="NanoClaw" \
-      org.opencontainers.image.source="https://github.com/pocketclaw/pocketclaw"
+      org.opencontainers.image.source="https://github.com/clawd/clawd"
 
 # Copy compiled output and production dependencies
 COPY --from=build /app/dist ./dist

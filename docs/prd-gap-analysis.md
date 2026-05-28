@@ -84,7 +84,7 @@ CI/CD (PRD Section 10)
 [DONE] deploy.yml exists for main/staging → ECR → SSM deploy with rollback
 [JUST ADDED] deploy-feature.yml — fires on feature/nanoclaw-aws-deployment push,
              typecheck+test → ECR build → SSM deploy → health check. Running NOW.
-             Pipeline: https://github.com/tokenlab42/pocketclaw/actions/runs/26496606290
+             Pipeline: https://github.com/tokenlab42/clawd/actions/runs/26496606290
 [MISSING] Coverage threshold check in CI (deploy.yml has it but it checks main only)
 [MISSING] k6 smoke tests in CI pipeline
 [MISSING] tfsec findings not all passing (soft_fail=false but previous runs showed failures)

@@ -23,11 +23,11 @@ describe('shouldIgnore', () => {
     expect(shouldIgnore('X:/$RECYCLE.BIN/foo')).toBe(true);
     expect(shouldIgnore('X:/System Volume Information/log.bin')).toBe(true);
   });
-  it('ignores PocketClawData (own data dir)', () => {
-    expect(shouldIgnore('X:/PocketClawData/vault/wiki/foo.md')).toBe(true);
+  it('ignores ClawdData (own data dir)', () => {
+    expect(shouldIgnore('X:/ClawdData/vault/wiki/foo.md')).toBe(true);
   });
   it('does NOT ignore typical user docs', () => {
-    expect(shouldIgnore('X:/01 REPOSITORIES/pocketclaw/PRD.md')).toBe(false);
+    expect(shouldIgnore('X:/01 REPOSITORIES/clawd/PRD.md')).toBe(false);
     expect(shouldIgnore('X:/00 DATA/notes/journal.md')).toBe(false);
   });
   it('does NOT ignore vault notes (they go through later extension filter)', () => {

@@ -1,6 +1,6 @@
 ---
 name: audit
-description: Show PocketClaw's audit log entries for a date.
+description: Show Clawd's audit log entries for a date.
 ---
 
 # /audit — review tool-call audit log

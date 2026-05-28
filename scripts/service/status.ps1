@@ -1,4 +1,4 @@
-# PocketClaw — Service Status
+# Clawd — Service Status
 #
 # Shows current service state, recent logs, mnemon health, and last
 # ingestion result. Read-only — runs even without admin.
@@ -10,7 +10,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Name = "pocketclaw",
+    [string]$Name = "clawd",
     [int]$Tail = 30,
     [switch]$Follow
 )
@@ -64,8 +64,8 @@ function Get-EnvOrDefault($key, $defaultPath) {
     return $defaultPath
 }
 
-$logDir   = Get-EnvOrDefault "LOG_PATH"               (Join-Path $env:USERPROFILE ".pocketclaw\logs")
-$vaultDir = Get-EnvOrDefault "VAULT_PATH"             (Join-Path $env:USERPROFILE ".pocketclaw\vault")
+$logDir   = Get-EnvOrDefault "LOG_PATH"               (Join-Path $env:USERPROFILE ".clawd\logs")
+$vaultDir = Get-EnvOrDefault "VAULT_PATH"             (Join-Path $env:USERPROFILE ".clawd\vault")
 $mnemonDir = Get-EnvOrDefault "MNEMON_DATA_DIR"       (Join-Path $env:USERPROFILE ".mnemon")
 
 # --- mnemon ----
@@ -124,7 +124,7 @@ if (Test-Path $vaultDir) {
 # --- source health (which creds are configured) ----
 Heading "Sources"
 $sources = @(
-    @{ Name = "Google";    Required = @("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"); Files = @("$($envHash['POCKETCLAW_SECRETS_DIR'] -replace '/','\')\google_token.json") }
+    @{ Name = "Google";    Required = @("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"); Files = @("$($envHash['CLAWD_SECRETS_DIR'] -replace '/','\')\google_token.json") }
     @{ Name = "Microsoft"; Required = @("MS_CLIENT_ID");                              Files = @() }
     @{ Name = "Apple";     Required = @("APPLE_ID_EMAIL", "APPLE_APP_PASSWORD");      Files = @() }
     @{ Name = "GitHub";    Required = @("GITHUB_PAT");                                Files = @() }

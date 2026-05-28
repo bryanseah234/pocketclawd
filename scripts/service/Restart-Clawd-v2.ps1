@@ -1,4 +1,4 @@
-# PocketClaw — Restart helper v2 (robust, port-3000-anchored)
+# Clawd — Restart helper v2 (robust, port-3000-anchored)
 #
 # Why v2: the v1 script identified the service by CommandLine regex, but S4U-launched
 # node processes report blank CommandLine to non-admin readers. So the "is it dead?"
@@ -11,7 +11,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Name = "PocketClaw",
+    [string]$Name = "Clawd",
     [int]$Port    = 3000,
     [int]$KillTimeoutSec = 20,
     [int]$StartTimeoutSec = 30
@@ -119,7 +119,7 @@ if ($oldPid) {
 }
 
 # --- Optional: clear circuit breaker so backoff doesn't bite ----------------
-$breaker = "X:\01 REPOSITORIES\pocketclaw\data\circuit-breaker.json"
+$breaker = "X:\01 REPOSITORIES\clawd\data\circuit-breaker.json"
 if (Test-Path $breaker) {
     Remove-Item -Force $breaker
     Write-Host "[restart] cleared circuit breaker" -ForegroundColor DarkGray
@@ -142,7 +142,7 @@ if (-not $newPid) {
     Write-Host "[restart] FAIL: nothing started listening on port $Port within ${StartTimeoutSec}s" -ForegroundColor Red
     $info = Get-ScheduledTaskInfo -TaskName $Name
     Write-Host "[restart] task LastResult=0x$([Convert]::ToString($info.LastTaskResult,16))" -ForegroundColor Yellow
-    Write-Host "[restart] check stderr: Get-Content X:\PocketClawData\logs\service.stderr.log -Tail 80" -ForegroundColor Yellow
+    Write-Host "[restart] check stderr: Get-Content X:\ClawdData\logs\service.stderr.log -Tail 80" -ForegroundColor Yellow
     Read-Host "Press Enter to close"
     exit 4
 }

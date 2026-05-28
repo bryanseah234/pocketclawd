@@ -1,18 +1,18 @@
-# PocketClaw — Architecture (PocketClaw layer)
+# Clawd — Architecture (Clawd layer)
 
-This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2. For the underlying NanoClaw architecture (host/container split, two-DB model, channel adapter registry) see [ARCHITECTURE.md](./ARCHITECTURE.md).
+This doc describes the **Clawd-specific** layer added on top of NanoClaw v2. For the underlying NanoClaw architecture (host/container split, two-DB model, channel adapter registry) see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-## Where PocketClaw lives
+## Where Clawd lives
 
 | Path | Owner | Purpose |
 |------|-------|---------|
-| `groups/pocketclaw/CLAUDE.md` | PocketClaw | Agent identity + behavioural directives |
-| `groups/pocketclaw/skills/` | PocketClaw | 9 slash commands (memory, recall, wiki, ingest, status, digest, audit, auth, photo) |
-| `src/modules/debouncer.ts` | PocketClaw | 5s unified message batch queue |
-| `src/modules/photo-processor.ts` | PocketClaw | Vision pipeline: validate → resize → describe → store → delete |
-| `src/modules/ingestion/` | PocketClaw | Google / Microsoft / Apple cloud ingesters + scheduler + file watcher |
-| `src/modules/wiki-generator.ts` | PocketClaw | Karpathy-style LLM wiki for Obsidian |
-| `src/modules/pocketclaw.ts` | PocketClaw | Cron driver — self-registers at import |
+| `groups/clawd/CLAUDE.md` | Clawd | Agent identity + behavioural directives |
+| `groups/clawd/skills/` | Clawd | 9 slash commands (memory, recall, wiki, ingest, status, digest, audit, auth, photo) |
+| `src/modules/debouncer.ts` | Clawd | 5s unified message batch queue |
+| `src/modules/photo-processor.ts` | Clawd | Vision pipeline: validate → resize → describe → store → delete |
+| `src/modules/ingestion/` | Clawd | Google / Microsoft / Apple cloud ingesters + scheduler + file watcher |
+| `src/modules/wiki-generator.ts` | Clawd | Karpathy-style LLM wiki for Obsidian |
+| `src/modules/clawd.ts` | Clawd | Cron driver — self-registers at import |
 | `src/channels/telegram.ts` | NanoClaw skill (`/add-telegram`) | Telegram Chat SDK adapter |
 | `src/channels/whatsapp.ts` | NanoClaw skill (`/add-whatsapp`) | Baileys adapter |
 | `.claude/skills/add-karpathy-llm-wiki/` | NanoClaw skill | wiki support |
@@ -35,13 +35,13 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
 │                    NANOCLAW HOST (Node + pnpm)                        │
 │   src/router.ts → session-manager.ts → inbound.db                    │
 │   src/delivery.ts ← outbound.db ← container/agent-runner             │
-│   src/modules/pocketclaw.ts → cron driver (02:00 / 03:00 / 07:00)    │
+│   src/modules/clawd.ts → cron driver (02:00 / 03:00 / 07:00)    │
 └────────────────────────────────────────────┬─────────────────────────┘
                                              ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │              AGENT CONTAINER (Docker / Bun + Claude Code)             │
-│   groups/pocketclaw/CLAUDE.md → identity + directives                │
-│   groups/pocketclaw/skills/   → /memory /recall /wiki ...            │
+│   groups/clawd/CLAUDE.md → identity + directives                │
+│   groups/clawd/skills/   → /memory /recall /wiki ...            │
 │   Claude Code orchestrates:                                          │
 │     - kb.recall before answering                                    │
 │     - kb.remember for new facts                                      │
@@ -56,9 +56,9 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
 │  - nomic-embed-text           - knowledge table (vector(768))        │
 │  - llava (vision)             - shared across Telegram + WhatsApp    │
 │                                                                      │
-│  ~/.pocketclaw/vault/  ◄────────────────────  Syncthing  ◄──── peers │
-│  ~/.pocketclaw/watch/  → file-watcher.ts (read-only mount)           │
-│  ~/.pocketclaw/logs/audit.log                                        │
+│  ~/.clawd/vault/  ◄────────────────────  Syncthing  ◄──── peers │
+│  ~/.clawd/watch/  → file-watcher.ts (read-only mount)           │
+│  ~/.clawd/logs/audit.log                                        │
 └──────────────────────────────────────────────────────────────────────┘
                 │
                 │  (only assembled prompts leave the machine)
@@ -70,7 +70,7 @@ This doc describes the **PocketClaw-specific** layer added on top of NanoClaw v2
 
 ## Cron jobs (PRD §10)
 
-Driven by `src/modules/pocketclaw.ts`. Runs every minute, fires when a job's scheduled time falls within the most recent minute window:
+Driven by `src/modules/clawd.ts`. Runs every minute, fires when a job's scheduled time falls within the most recent minute window:
 
 | Time (local) | Job | Effect |
 |---|---|---|
@@ -150,9 +150,9 @@ The container is a **stateless worker** that clocks in when needed and clocks ou
 
 ## Auth Configuration
 
-> **Note (2026-05-27):** PocketClaw now exists in two forms — the original single-user Windows host (described below) and a multi-user AWS deployment that uses **AWS Bedrock** for the LLM. The Bedrock path is documented in [`AWS-DEPLOYMENT.md`](./AWS-DEPLOYMENT.md) and [`aws-resource-inventory.md`](./aws-resource-inventory.md). This section describes the host-mode subscription path.
+> **Note (2026-05-27):** Clawd now exists in two forms — the original single-user Windows host (described below) and a multi-user AWS deployment that uses **AWS Bedrock** for the LLM. The Bedrock path is documented in [`AWS-DEPLOYMENT.md`](./AWS-DEPLOYMENT.md) and [`aws-resource-inventory.md`](./aws-resource-inventory.md). This section describes the host-mode subscription path.
 
-PocketClaw uses the **Claude Code subscription** path that ships with NanoClaw v2. The agent container talks to `api.anthropic.com` through the OneCLI proxy; OneCLI injects credentials at request time so no API key is passed in env vars or chat context.
+Clawd uses the **Claude Code subscription** path that ships with NanoClaw v2. The agent container talks to `api.anthropic.com` through the OneCLI proxy; OneCLI injects credentials at request time so no API key is passed in env vars or chat context.
 
 First-time auth: when the host spawns the first agent container, run `claude /login` inside that container (or use the OneCLI web UI at `http://127.0.0.1:10254`). After that the credentials persist in the OneCLI vault and are reused on every subsequent container.
 
@@ -161,7 +161,7 @@ What this arch does **not** use:
 - `ANTHROPIC_API_KEY` env var (subscription handles auth)
 - `CLAUDE_CODE_USE_BEDROCK`, `AWS_*` env vars (host mode only — the AWS cloud deployment uses Bedrock natively, see [`AWS-DEPLOYMENT.md`](./AWS-DEPLOYMENT.md))
 - `scripts/refresh-bedrock-creds.ps1` (deleted)
-- `PocketClaw-RefreshBedrock` Windows Task Scheduler entry (delete it; it has nothing to refresh)
+- `Clawd-RefreshBedrock` Windows Task Scheduler entry (delete it; it has nothing to refresh)
 
 ### Switching models
 

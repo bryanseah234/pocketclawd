@@ -1,10 +1,10 @@
-# PocketClaw — Service Installer (Windows Scheduled Task)
+# Clawd — Service Installer (Windows Scheduled Task)
 #
-# Registers PocketClaw host as a Scheduled Task running as the interactive user (S4U) that:
+# Registers Clawd host as a Scheduled Task running as the interactive user (S4U) that:
 #   - starts on boot (no logon required, same as NSSM service)
 #   - restarts every 1 min if the process exits, indefinitely
 #   - logs stdout/stderr to $LOG_PATH (read from .env, default
-#     X:\PocketClawData\logs\)
+#     X:\ClawdData\logs\)
 #   - can be stopped/started/restarted from a non-elevated shell
 #     via `schtasks /End` and `schtasks /Run` (no UAC prompt)
 #
@@ -15,13 +15,13 @@
 # Requires: PowerShell 5.1+, admin rights for task registration.
 #
 # Usage (from repo root, in elevated PowerShell):
-#   .\scripts\service\install-task.ps1                 # default name "PocketClaw"
+#   .\scripts\service\install-task.ps1                 # default name "Clawd"
 #   .\scripts\service\install-task.ps1 -Name custom    # custom name
 #   .\scripts\service\install-task.ps1 -DryRun         # show plan, don't apply
 
 [CmdletBinding()]
 param(
-    [string]$Name = "PocketClaw",
+    [string]$Name = "Clawd",
     [switch]$DryRun
 )
 
@@ -112,7 +112,7 @@ function Resolve-EnvPath($key, $default) {
     if ($v.StartsWith('~')) { return Join-Path $env:USERPROFILE $v.Substring(2) }
     return $v.Replace('/', '\')
 }
-$logDir = Resolve-EnvPath "LOG_PATH" (Join-Path $env:USERPROFILE ".pocketclaw\logs")
+$logDir = Resolve-EnvPath "LOG_PATH" (Join-Path $env:USERPROFILE ".clawd\logs")
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Write-Ok "Logs will go to: $logDir"
 
@@ -196,7 +196,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description "PocketClaw personal AI assistant — Telegram/WhatsApp + cloud ingestion + mnemon memory. Replaces NSSM service." `
+    -Description "Clawd personal AI assistant — Telegram/WhatsApp + cloud ingestion + mnemon memory. Replaces NSSM service." `
     | Out-Null
 
 # --- 9b. Force ExecutionTimeLimit=PT0S via XML patch -----------------------
@@ -233,7 +233,7 @@ $childProcs = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorActi
 $found = $false
 foreach ($p in $childProcs) {
     if ($p.CommandLine -and $p.CommandLine -match [regex]::Escape("dist\index.js")) {
-        Write-Ok "node.exe PID=$($p.ProcessId) is running PocketClaw host."
+        Write-Ok "node.exe PID=$($p.ProcessId) is running Clawd host."
         $found = $true
         break
     }
@@ -251,6 +251,6 @@ Write-Host ""
 Write-Host "  Restart (no UAC needed once task exists):"
 Write-Host "    schtasks /End /TN $Name; schtasks /Run /TN $Name"
 Write-Host "  Or use the helper:"
-Write-Host "    pwsh .\scripts\service\Restart-PocketClaw.ps1"
+Write-Host "    pwsh .\scripts\service\Restart-Clawd.ps1"
 Write-Host ""
 Write-Host "  Uninstall: .\scripts\service\uninstall-task.ps1"

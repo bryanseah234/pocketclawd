@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Cloud ingestion scheduler (PRD §7.9.4)
+ * Clawd — Cloud ingestion scheduler (PRD §7.9.4)
  *
  * Runs every cloud ingester in parallel with fault isolation: one source
  * failing does not block the others. Returns a per-source IngestSummary.
@@ -124,7 +124,7 @@ async function runOne(
  * locking; no SQLITE_BUSY storms like the mnemon CLI had).
  */
 async function defaultOnFact(fact: Fact): Promise<void> {
-  const tags = ['pocketclaw', `src:${fact.source}`];
+  const tags = ['clawd', `src:${fact.source}`];
   if (fact.sourceId) tags.push(`id:${truncateForTag(fact.sourceId)}`);
 
   const kb = await getKnowledgeBase();

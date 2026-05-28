@@ -37,8 +37,8 @@ aws sts get-caller-identity
 ## 1. Clone and Install
 
 ```bash
-git clone https://github.com/tokenlab42/pocketclaw.git
-cd pocketclaw
+git clone https://github.com/tokenlab42/clawd.git
+cd clawd
 pnpm install
 pnpm run build
 ```

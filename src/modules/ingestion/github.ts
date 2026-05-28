@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * PocketClaw — GitHub ingestion (PRD §17.1)
+ * Clawd — GitHub ingestion (PRD §17.1)
  *
  * Read-only across all user repos. Pulls:
  *   - Open/merged PRs (last 24h or since last run)

@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Telegram MTProto sign-in service.
+ * Clawd — Telegram MTProto sign-in service.
  *
  * Drives the GramJS sign-in state machine. The Telegram bot adapter calls
  * these functions in response to user DMs (`/connect_telegram`, then the
@@ -10,7 +10,7 @@
  * in-progress sign-in.
  *
  * After successful sign-in the session string is written to disk at
- * `${POCKETCLAW_SECRETS_DIR}/telegram_session.txt`. Future host starts
+ * `${CLAWD_SECRETS_DIR}/telegram_session.txt`. Future host starts
  * pick it up automatically — no re-prompt.
  *
  * Why this exists in the host (not just a CLI script):
@@ -48,9 +48,9 @@ const pending = new Map<string, PendingSignIn>();
 
 function sessionPath(): string {
   if (process.env.TELEGRAM_SESSION_PATH) return expandHome(process.env.TELEGRAM_SESSION_PATH);
-  const secretsDir = process.env.POCKETCLAW_SECRETS_DIR
-    ? expandHome(process.env.POCKETCLAW_SECRETS_DIR)
-    : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
+  const secretsDir = process.env.CLAWD_SECRETS_DIR
+    ? expandHome(process.env.CLAWD_SECRETS_DIR)
+    : envPath('CLAWD_SECRETS_DIR', 'secrets');
   return path.join(secretsDir, 'telegram_session.txt');
 }
 
@@ -237,7 +237,7 @@ export async function submitPassword(userKey: string, password: string): Promise
     pending.delete(userKey);
     return {
       step: 'connected',
-      message: '✅ Connected. Telegram MTProto session saved. Restart the host with `nssm restart pocketclaw` to start ingesting.',
+      message: '✅ Connected. Telegram MTProto session saved. Restart the host with `nssm restart clawd` to start ingesting.',
     };
   }
   const msg = state.errorMessage ?? 'unknown';

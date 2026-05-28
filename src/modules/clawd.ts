@@ -1,9 +1,9 @@
 /**
- * PocketClaw — runtime wiring (T16).
+ * Clawd — runtime wiring (T16).
  *
  * Imported for side effects from `src/modules/index.ts`. On host startup:
  *   - Registers three scheduled jobs (02:00 ingest, 03:00 wiki, 07:00 digest)
- *   - Writes a `POCKETCLAW_START` audit-log line so we can confirm the
+ *   - Writes a `CLAWD_START` audit-log line so we can confirm the
  *     module loaded.
  *
  * Cron uses `cron-parser` (already in package.json) for next-run calculation
@@ -109,7 +109,7 @@ async function runMnemonGc(): Promise<void> {
 async function runMorningDigest(): Promise<void> {
   await audit('CRON | morning-digest START');
   // Morning digest is delivery-driven: it composes a message and pushes it
-  // through NanoClaw's outbound channel for the pocketclaw group. Concrete
+  // through NanoClaw's outbound channel for the clawd group. Concrete
   // wiring is added by the runtime that owns delivery.ts; this stub keeps
   // the cron contract live and audited.
   if (!digestCallback) {
@@ -184,7 +184,7 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startPocketClawCron(): void {
+export function startClawdCron(): void {
   if (driverTimer) return;
   // Validate every cron pattern before starting — nextRunFromCron only
   // supports `M H * * *`, so any other pattern would silently never fire.
@@ -193,14 +193,14 @@ export function startPocketClawCron(): void {
   for (const job of SCHEDULES) {
     if (nextRunFromCron(job.cron) === null) {
       void audit(
-        `POCKETCLAW_CRON_UNPARSEABLE | job=${job.name} cron=${job.cron} ` +
+        `CLAWD_CRON_UNPARSEABLE | job=${job.name} cron=${job.cron} ` +
           `(supported pattern: 'M H * * *'). Job will NOT fire.`,
       );
     }
   }
-  void audit('POCKETCLAW_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, mnemon-gc@04:00, morning-digest@07:00');
+  void audit('CLAWD_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, mnemon-gc@04:00, morning-digest@07:00');
   driverTimer = setInterval(() => void tick(), driverInterval);
-  // Don't keep the event loop alive on shutdown — stopPocketClawCron clears
+  // Don't keep the event loop alive on shutdown — stopClawdCron clears
   // explicitly, but unref guards against forgetting to call it on SIGTERM.
   if (typeof driverTimer.unref === 'function') driverTimer.unref();
   // Kick off file-watcher in background; failure here must not prevent
@@ -253,7 +253,7 @@ async function startFileWatcher(): Promise<void> {
       for (const fact of result.facts) {
         await mnemonRemember(
           fact.text,
-          ['pocketclaw', `src:file`, `path:${truncForTag(fact.source)}`],
+          ['clawd', `src:file`, `path:${truncForTag(fact.source)}`],
           fact.source,
           fact.sourceId ?? fact.source,
         );
@@ -274,7 +274,7 @@ function truncForTag(value: string): string {
   return value.replace(/[\s,]/g, '_').slice(0, 80);
 }
 
-export function stopPocketClawCron(): void {
+export function stopClawdCron(): void {
   if (driverTimer) {
     clearInterval(driverTimer);
     driverTimer = null;
@@ -282,4 +282,4 @@ export function stopPocketClawCron(): void {
 }
 
 // Self-register on import — same pattern as other modules in this folder.
-startPocketClawCron();
+startClawdCron();

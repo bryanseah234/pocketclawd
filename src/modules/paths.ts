@@ -1,13 +1,13 @@
 /**
- * PocketClaw — shared path helpers.
+ * Clawd — shared path helpers.
  *
  * Keeps tilde-expansion in one place so every module that reads a path
  * env-var (`VAULT_PATH`, `MNEMON_DB_PATH`, `WATCH_PATHS_ROOT`, `LOG_PATH`)
  * resolves `~` to the user's home directory.
  *
- * Node does NOT expand `~` automatically — `~/.pocketclaw` is treated as
+ * Node does NOT expand `~` automatically — `~/.clawd` is treated as
  * a literal directory called `~` inside the cwd, which is what bit us
- * during the §17 smoke test (files landed in `<repo>/~/.pocketclaw/`).
+ * during the §17 smoke test (files landed in `<repo>/~/.clawd/`).
  */
 
 import * as os from 'node:os';
@@ -28,12 +28,12 @@ export function expandHome(p: string): string {
 
 /**
  * Read an env-var path with home-expansion + a default that lives inside
- * `~/.pocketclaw/`. Use this for any user-facing path config.
+ * `~/.clawd/`. Use this for any user-facing path config.
  */
 export function envPath(envVar: string, defaultSubdir: string): string {
   const raw = process.env[envVar];
   if (raw && raw.length > 0) return expandHome(raw);
-  return path.join(os.homedir(), '.pocketclaw', defaultSubdir);
+  return path.join(os.homedir(), '.clawd', defaultSubdir);
 }
 
 /**

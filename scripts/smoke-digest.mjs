@@ -1,5 +1,5 @@
 /**
- * Fire-now smoke test: loads PocketClaw wiring and exercises the digest path
+ * Fire-now smoke test: loads Clawd wiring and exercises the digest path
  * end-to-end (mnemon recall + bedrock + delivery resolution) WITHOUT actually
  * sending a Telegram message. We monkey-patch the delivery adapter to print
  * what would have been sent.
@@ -13,7 +13,7 @@ import * as path from 'node:path';
 
 // Initialize the central DB so queries work
 const DB_PATH = process.env.NANOCLAW_DB || path.join(process.env.LOG_PATH ? path.dirname(process.env.LOG_PATH) : process.cwd(), 'data', 'v2.db');
-const actualDbPath = process.env.NANOCLAW_DB || 'X:\\01 REPOSITORIES\\pocketclaw\\data\\v2.db';
+const actualDbPath = process.env.NANOCLAW_DB || 'X:\\01 REPOSITORIES\\clawd\\data\\v2.db';
 initDb(actualDbPath);
 console.log('[smoke] DB initialized:', actualDbPath);
 
@@ -41,8 +41,8 @@ console.log('[smoke] Modules loaded.');
 // Wait a tick for any onDeliveryAdapterReady handlers to wire up.
 await new Promise((r) => setTimeout(r, 100));
 
-// Load pocketclaw module to access the registered digest callback.
-const pc = await import('../dist/modules/pocketclaw.js');
+// Load clawd module to access the registered digest callback.
+const pc = await import('../dist/modules/clawd.js');
 
 // We can't directly call runMorningDigest (module-private). But we can fire
 // the callback the wiring set via setDigestHandler — which is what the cron
@@ -54,7 +54,7 @@ const pc = await import('../dist/modules/pocketclaw.js');
 //
 // Since the wiring exports its runDigest function, just call
 // THAT directly — it's the same function the digest handler runs.
-const wiring = await import('../dist/modules/pocketclaw-wiring.js');
+const wiring = await import('../dist/modules/clawd-wiring.js');
 console.log('[smoke] Available exports:', Object.keys(wiring));
 
 if (typeof wiring.runDigest === 'function') {

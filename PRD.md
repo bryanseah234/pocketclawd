@@ -1,11 +1,11 @@
-# PocketClaw — Personal AI Assistant
+# Clawd — Personal AI Assistant
 
 ## Product Requirements Document v2.0
 
 **Date:** 2026-05-24
 **Status:** Active (v2.0 — R0-R7 complete)
 **Replaces:** PRD v3.0 (deleted at R7; content preserved in git history at commit `c76d488` and recoverable via `git show c76d488:PRD.v1.archived.md`)
-**Branch of record:** `feature/pocketclaw-build`
+**Branch of record:** `feature/clawd-build`
 **Single user:** Bryan Tan
 
 ---
@@ -14,11 +14,11 @@
 
 ## Deployment status (added 2026-05-27)
 
-This PRD documents the **PocketClaw single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for local development, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two are deliberately co-existing:
+This PRD documents the **Clawd single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for local development, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two are deliberately co-existing:
 
 | Surface | Source of truth | Provider |
 |---|---|---|
-| Local single-user host (this PRD) | `PRD.md`, `docs/POCKETCLAW.md` | Claude Code subscription |
+| Local single-user host (this PRD) | `PRD.md`, `docs/CLAWD.md` | Claude Code subscription |
 | AWS multi-user cloud | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `src/cloud/` | AWS Bedrock |
 | Azure variant (future option) | `nanoclaw-prd.html` | Azure OpenAI gpt-4o |
 
@@ -28,7 +28,7 @@ When this PRD says *“no Bedrock, no AWS env vars,”* it is describing the hos
 
 ## 1. Product Vision
 
-PocketClaw is a personal AI assistant for one user (Bryan Tan), running on his
+Clawd is a personal AI assistant for one user (Bryan Tan), running on his
 Windows host as a Scheduled Task. It is not a product; it is infrastructure.
 The goal is to give one human a single agent that remembers everything he tells
 it, ingests the corners of his digital life he can't be bothered to file, and
@@ -48,7 +48,7 @@ swappable. The PRD is written so it survives the next swap.
 
 Forked from NanoClaw v2. Inherits the host/container/two-DB split, the
 OneCLI credential gateway, and the agent-runner sidecar pattern. Diverges
-in workspace topology (one always-on `pocketclaw` agent group, not many),
+in workspace topology (one always-on `clawd` agent group, not many),
 in transport (Claude Code subscription, no Bedrock), and in surface area
 (KB + ingestion + photo pipeline, not in trunk NanoClaw).
 
@@ -63,9 +63,9 @@ There is one user. The stories are first-person.
 > I said about X' and it tells me, with the date and approximate context."
 
 Wired today. `/memory <text>` is a slash-command in
-`groups/pocketclaw/skills/memory/SKILL.md` (rewritten in M5 to call
+`groups/clawd/skills/memory/SKILL.md` (rewritten in M5 to call
 `kb_remember`; pending the kb-mcp-tool transport from
-`.omo/plans/pocketclaw-kb-mcp-tool.md`). Without the MCP tool, plain
+`.omo/plans/clawd-kb-mcp-tool.md`). Without the MCP tool, plain
 inbound messages are still archived by `src/modules/chat-archive.ts` —
 recall works; structured tagging via `/memory` is what's pending.
 
@@ -99,7 +99,7 @@ Recall over ingested email is the same shape as recall over chat.
 
 Wired today via the agent's underlying chat archive + ad-hoc semantic
 recall. The cleanest form (`/recall <query>`) is in
-`groups/pocketclaw/skills/recall/SKILL.md` and depends on the kb-mcp-tool
+`groups/clawd/skills/recall/SKILL.md` and depends on the kb-mcp-tool
 transport for structured invocation; ad-hoc recall already works because
 the agent can describe what it knows from any past conversation in this
 session's archive.
@@ -111,7 +111,7 @@ session's archive.
 
 Aspirational. The 07:00 cron ticks but the handler is parked
 (`audit log: morning-digest | SKIP | no-handler`). Re-wire spec lives at
-`.omo/plans/pocketclaw-morning-digest-rewire.md`.
+`.omo/plans/clawd-morning-digest-rewire.md`.
 
 ### 2.6 Wiki
 
@@ -121,7 +121,7 @@ Aspirational. The 07:00 cron ticks but the handler is parked
 Aspirational. `src/modules/wiki-generator.ts` works as a pure transform
 over the KB; the 03:00 cron that drives it is parked
 (`audit log: wiki-regen | SKIP | no-provider`). Re-wire spec at
-`.omo/plans/pocketclaw-wiki-cron-rewire.md`. Manual entries via
+`.omo/plans/clawd-wiki-cron-rewire.md`. Manual entries via
 `/wiki <topic>` (in the skill) work via inline recall + plaintext today.
 
 ### 2.7 Document artefacts
@@ -134,13 +134,13 @@ Aspirational. The three artefact skills (`/minutes` → docx,
 The host-side generators (`src/modules/meeting-minutes.ts`,
 `research-report.ts`, `slide-generator.ts`) exist; the container-side
 MCP tool family that drives them does not. Spec at
-`.omo/plans/pocketclaw-agent-side-docx-pipeline.md`.
+`.omo/plans/clawd-agent-side-docx-pipeline.md`.
 
 ## 3. Goals and Non-Goals
 
 ### 3.1 Goals
 
-1. **One agent, always on.** A single `pocketclaw` agent group, one
+1. **One agent, always on.** A single `clawd` agent group, one
    container, reachable from any wired channel. No per-task agents.
 2. **Capture that doesn't ask permission.** Anything the user sends to
    the bot is stored without confirmation prompts. Stickers and
@@ -227,13 +227,13 @@ are about reliability, not scale.
 
 ## 5. Competitive Analysis
 
-PocketClaw is single-user personal infra; "competitive" here means
+Clawd is single-user personal infra; "competitive" here means
 "prior art the design borrows from or deliberately diverges from".
 Five reference points:
 
 ### 5.1 NanoClaw v2 (parent)
 
-PocketClaw is a fork. Inherits the host/container/two-DB session
+Clawd is a fork. Inherits the host/container/two-DB session
 split, the OneCLI credential gateway, the agent-runner sidecar, the
 `ncl` admin CLI, and the channel adapter pattern. See `CLAUDE.md`
 for the inherited architecture.
@@ -241,17 +241,17 @@ for the inherited architecture.
 Diverges in:
 
 - **Workspace topology.** NanoClaw is many-agent-groups, many-DMs,
-  many-users. PocketClaw is one always-on `pocketclaw` agent group,
+  many-users. Clawd is one always-on `clawd` agent group,
   one user (`telegram:bryanb_t`, `whatsapp:6592348112`, etc), one
   Obsidian vault.
 - **Provider (host mode).** NanoClaw default ships Claude Code subscription;
-  PocketClaw host-mode locks that in (no Bedrock fallback, no AWS env vars in `.env.sample`).
+  Clawd host-mode locks that in (no Bedrock fallback, no AWS env vars in `.env.sample`).
   The AWS cloud deployment uses Bedrock by design — see `docs/AWS-DEPLOYMENT.md` and the
   Deployment status banner above. The host vs cloud surface choice is intentional, not contradictory.
 - **KnowledgeBase.** NanoClaw has no persistent cross-session memory
-  beyond per-session DBs. PocketClaw adds the `KnowledgeBase` module
+  beyond per-session DBs. Clawd adds the `KnowledgeBase` module
   family and its Postgres+pgvector backing store as first-class.
-- **Ingestion.** NanoClaw has no scheduled ingestion. PocketClaw
+- **Ingestion.** NanoClaw has no scheduled ingestion. Clawd
   adds `src/modules/ingestion/` with five adapter families and a
   fault-isolated scheduler.
 - **Photo pipeline.** Same.
@@ -261,7 +261,7 @@ Diverges in:
 ChatGPT's "memory" feature is the closest mass-market analogue.
 Rejected as the substrate because:
 
-- **Cloud-only.** PocketClaw stores in local Postgres; the user owns
+- **Cloud-only.** Clawd stores in local Postgres; the user owns
   the bytes.
 - **No source attribution.** ChatGPT memory does not preserve
   "where did I learn this". The `KnowledgeBase` row schema preserves
@@ -272,7 +272,7 @@ Rejected as the substrate because:
 
 ### 5.3 Obsidian (curation reference)
 
-PocketClaw uses Obsidian-format Markdown as its curation surface,
+Clawd uses Obsidian-format Markdown as its curation surface,
 not as the source of truth. `src/modules/wiki-generator.ts` writes
 WikiLinks; the user reads with Obsidian Desktop.
 
@@ -293,9 +293,9 @@ not for the substrate.
 
 ### 5.5 Bedrock + mnemon (predecessor stack)
 
-The previous PocketClaw stack used AWS Bedrock for inference and a
+The previous Clawd stack used AWS Bedrock for inference and a
 custom Python service ("mnemon") for memory. Both removed during
-the knowledge re-arch (`.omo/plans/pocketclaw-knowledge-rearch.md`,
+the knowledge re-arch (`.omo/plans/clawd-knowledge-rearch.md`,
 phases P1–P7). Reasons:
 
 - Bedrock added per-token billing and AWS auth ceremony for a
@@ -312,7 +312,7 @@ client is boring enough.
 ## 6. System Architecture
 
 Two diagrams — one for the inherited host/container/two-DB pattern,
-one for the PocketClaw-specific capture+curation overlay.
+one for the Clawd-specific capture+curation overlay.
 
 ### 6.1 Host / container / two-DB (inherited from NanoClaw v2)
 
@@ -356,7 +356,7 @@ Key invariants (inherited; restated for completeness):
 - **Container = Docker** on this Windows host (Apple containers
   selected on macOS via `src/container-runtime.ts`).
 
-### 6.2 Capture + Curation (PocketClaw overlay)
+### 6.2 Capture + Curation (Clawd overlay)
 
 ```
         ┌─── Telegram ────┐
@@ -461,7 +461,7 @@ a forward-link to the relevant plan.
   (768-dim). Fails closed: a row with no embedding is not inserted.
 - `kb-actions.ts` — host-side handler for the `kb_request` /
   `kb_response` system actions from the container. Permission gate:
-  pocketclaw agent group only. Returns `{ ok: false, error }` for
+  clawd agent group only. Returns `{ ok: false, error }` for
   any other group.
 - `register.ts` — wires the KB instance into the host's module
   registry so `delivery.ts` can resolve it.
@@ -518,11 +518,11 @@ Cron registration is in the scheduler; the host startup calls
   cross-references. No LLM call.
 - The 03:00 cron handler that drives `wiki-generator.ts` is parked
   (audit log: `wiki-regen | SKIP | no-provider`). Re-wire spec:
-  `.omo/plans/pocketclaw-wiki-cron-rewire.md`.
+  `.omo/plans/clawd-wiki-cron-rewire.md`.
 - `src/modules/meeting-minutes.ts`, `research-report.ts`,
   `slide-generator.ts` — host-side document renderers. Built and
   type-correct, but no transport drives them yet. The transport spec
-  is in `.omo/plans/pocketclaw-agent-side-docx-pipeline.md`.
+  is in `.omo/plans/clawd-agent-side-docx-pipeline.md`.
 
 ### 7.5 Channel adapters
 
@@ -535,7 +535,7 @@ Cron registration is in the scheduler; the host startup calls
 - `whatsapp.ts` — Baileys; shared-number mode (bot=#6592348112,
   `ASSISTANT_HAS_OWN_NUMBER=false`); summon phrases via
   `WHATSAPP_OWNER_ALIASES`. Auth dir = `WHATSAPP_AUTH_DIR`,
-  default `~/.pocketclaw/whatsapp/`.
+  default `~/.clawd/whatsapp/`.
 - `chat-sdk-bridge.ts` — generic Chat SDK bridge for skill-installed
   channels (Discord, Slack, etc); not used by Telegram-bot or
   WhatsApp-Baileys paths today.
@@ -543,11 +543,11 @@ Cron registration is in the scheduler; the host startup calls
 - `ask-question.ts` — generic per-channel question/response helper.
 - `adapter.ts`, `index.ts` — types and barrel.
 
-### 7.6 PocketClaw module glue
+### 7.6 Clawd module glue
 
-- `src/modules/pocketclaw.ts` — startup wiring: KB instance, photo
+- `src/modules/clawd.ts` — startup wiring: KB instance, photo
   processor, debouncer, ingestion scheduler.
-- `src/modules/pocketclaw-wiring.ts` — agent group + messaging group
+- `src/modules/clawd-wiring.ts` — agent group + messaging group
   wiring shortcuts, used by setup scripts.
 
 ### 7.7 Container-side MCP tools
@@ -558,7 +558,7 @@ Cron registration is in the scheduler; the host startup calls
 - `kb.ts` — `kb_remember`, `kb_recall`, `kb_list_top_entities`,
   `kb_status`, `kb_forget`. Talks to the host via
   `kb_request` / `kb_response` system actions on the two-DB
-  transport. Permission-gated to pocketclaw at the host side.
+  transport. Permission-gated to clawd at the host side.
 - `agents.ts` — agent-to-agent messaging tools.
 - `cli.ts` — in-container `ncl` shim.
 - `interactive.ts` — `ask_question` family.
@@ -593,7 +593,7 @@ Cron registration is in the scheduler; the host startup calls
 
 - Every module exports through its directory's `index.ts`.
 - Path resolution goes through `src/modules/paths.ts` (`envPath`),
-  defaulting under `~/.pocketclaw/<subdir>`.
+  defaulting under `~/.clawd/<subdir>`.
 - Tests live next to the module (`*.test.ts`), run via vitest on
   the host and bun test in the container.
 - Modules that hold I/O (DB pools, sockets, file watchers) expose a
@@ -602,9 +602,9 @@ Cron registration is in the scheduler; the host startup calls
 
 ## 8. UX / Interaction Design
 
-PocketClaw has no UI of its own. Every interaction surface is one of:
+Clawd has no UI of its own. Every interaction surface is one of:
 
-- **Telegram bot** (`@pocketclaw_bot` or whatever the user named it)
+- **Telegram bot** (`@clawd_bot` or whatever the user named it)
 - **WhatsApp** (shared-number summon via `WHATSAPP_OWNER_ALIASES`)
 - **Host CLI** (`src/channels/cli.ts`)
 - **Obsidian vault** (read-only view of curation output, opened in
@@ -623,20 +623,20 @@ unless the message is bare `.` or `..` (silence convention).
 
 ### 8.2 Slash commands
 
-The skill set is in `groups/pocketclaw/skills/<name>/SKILL.md`.
+The skill set is in `groups/clawd/skills/<name>/SKILL.md`.
 Status reflects the live tree as of R3.
 
 | Command       | What it does                                           | Status |
 |---------------|--------------------------------------------------------|--------|
-| `/memory <text>` | Tag a fact for retrieval (`source='chat'`)          | wired (pending kb-mcp-tool transport, M0-M7 in `pocketclaw-kb-mcp-tool.md`) |
+| `/memory <text>` | Tag a fact for retrieval (`source='chat'`)          | wired (pending kb-mcp-tool transport, M0-M7 in `clawd-kb-mcp-tool.md`) |
 | `/recall <q>` | Semantic search over the KB                            | wired (same transport pending) |
 | `/status`     | KB row count, top entities, last ingestion             | wired (same transport pending) |
 | `/photo` (caption on image) | Manual tag for an image                  | wired |
 | `/ingest`     | On-demand cloud-source ingest                          | wired |
 | `/audit`      | Show recent system audit-log lines                     | wired |
-| `/wiki <topic>` | Inline recall + plaintext; full vault regen pending  | partially wired; cron parked, see `pocketclaw-wiki-cron-rewire.md` |
-| `/digest`     | Manual morning-digest formatting                       | aspirational; cron parked, see `pocketclaw-morning-digest-rewire.md` |
-| `/minutes <title>` | Render docx minutes                               | aspirational, see `pocketclaw-agent-side-docx-pipeline.md` |
+| `/wiki <topic>` | Inline recall + plaintext; full vault regen pending  | partially wired; cron parked, see `clawd-wiki-cron-rewire.md` |
+| `/digest`     | Manual morning-digest formatting                       | aspirational; cron parked, see `clawd-morning-digest-rewire.md` |
+| `/minutes <title>` | Render docx minutes                               | aspirational, see `clawd-agent-side-docx-pipeline.md` |
 | `/research <topic>` | Render PDF research report                       | aspirational, same plan |
 | `/slides <topic>` | Render pptx deck                                   | aspirational, same plan |
 | `/auth`       | OneCLI auth flow (re-auth a source)                    | wired |
@@ -646,7 +646,7 @@ Status reflects the live tree as of R3.
 
 Replies stay in-channel. No file uploads from the bot today (the
 docx/pdf/pptx artefacts will land in the vault on disk; Telegram
-upload is out of scope, see `pocketclaw-agent-side-docx-pipeline.md`
+upload is out of scope, see `clawd-agent-side-docx-pipeline.md`
 §"Out of scope"). Replies are plain text or Telegram markdown
 (sanitized via `src/channels/telegram-markdown-sanitize.ts`); no
 inline-keyboard buttons; no images back from the agent.
@@ -665,10 +665,10 @@ inline-keyboard buttons; no images back from the agent.
 
 The user can be summoned from Telegram, WhatsApp, or CLI for the
 same intent. The agent group is one — they all land in one
-`pocketclaw` session. If the user pings on Telegram and then on
+`clawd` session. If the user pings on Telegram and then on
 WhatsApp 30 seconds later, the second message routes to the same
 session DB and the agent has full context. (Inherited NanoClaw
-behaviour; PocketClaw does not customise it.)
+behaviour; Clawd does not customise it.)
 
 ## 9. Security Architecture
 
@@ -685,7 +685,7 @@ goal is to keep the blast radius small.
   pointing at OneCLI, which rewrites the auth header server-side.
 - **Per-agent secret allow-list.** Each agent group has its own
   secret-mode setting (`selective` default, `all` opt-in). The
-  pocketclaw agent runs in `all` mode by convention — single-user,
+  clawd agent runs in `all` mode by convention — single-user,
   one agent, one identity, all secrets relevant. See the inherited
   CLAUDE.md "Gotcha: auto-created agents start in selective".
 - **Approvals.** Credentialed actions go through
@@ -709,18 +709,18 @@ goal is to keep the blast radius small.
 
 - **Postgres KB** is unencrypted on disk. The host disk is the
   trust boundary. (User runs Bitlocker or equivalent on the host
-  drive — out of scope for PocketClaw to enforce.)
+  drive — out of scope for Clawd to enforce.)
 - **Photo bytes** are deleted after the description is committed to
   the KB. The description text is what persists.
 - **Channel session state** (Baileys auth, Telegram session) lives
-  under `~/.pocketclaw/<channel>/`. Treated as credentials.
+  under `~/.clawd/<channel>/`. Treated as credentials.
 - **Obsidian vault** is plaintext Markdown — by design, since it's
   meant to be read with Obsidian Desktop.
 
 ### 9.4 Container isolation
 
 Inherited from NanoClaw v2: per-agent-group container, per-session
-DB mounts. The pocketclaw container has access to its own session
+DB mounts. The clawd container has access to its own session
 DBs and the OneCLI proxy URL. It does NOT have access to the host
 filesystem outside the workspace mount, the central `data/v2.db`,
 or Postgres directly (KB access goes through the `kb_*` MCP tool
@@ -732,7 +732,7 @@ The agent can request `install_packages` or `add_mcp_server` via
 the `self-mod` MCP tool. Each request is one approval; the host
 rebuilds the image and respawns the container. Direct source-level
 edits are not implemented (per inherited CLAUDE.md). The `cli_scope`
-on the pocketclaw agent group is `global` (single-user owner agent);
+on the clawd agent group is `global` (single-user owner agent);
 this allows broad `ncl` use from inside the container.
 
 ## 10. Data Flow
@@ -850,7 +850,7 @@ Representative real test files in the live tree:
 
 - `src/modules/knowledge-base/kb-actions.test.ts` — 8 tests; covers
   the host-side handler for `kb_request` system actions, including
-  the pocketclaw-only permission gate.
+  the clawd-only permission gate.
 - `src/modules/debouncer.test.ts` — 5s window coalesce behaviour,
   sticker drop, multi-attachment burst.
 - `src/modules/ingestion/scheduler.test.ts` — `Promise.allSettled`
@@ -863,9 +863,9 @@ Representative real test files in the live tree:
 Vitest baseline at the time of writing (R5): 142 failures / 273
 passing / 10 skipped (425 total). The 142 failures are pre-existing
 better-sqlite3 native-binding issues against a missing
-`data/v2.db`; they trace to the central DB rather than to PocketClaw
+`data/v2.db`; they trace to the central DB rather than to Clawd
 modules. Restoring `data/v2.db` is its own deferred plan
-(`pocketclaw-central-db-pg.md`, not yet written) and out of scope for
+(`clawd-central-db-pg.md`, not yet written) and out of scope for
 the current PRD pass.
 
 ### 11.2 Container (bun test)
@@ -915,7 +915,7 @@ The gate does NOT run the full vitest suite; that's manual.
 
 ## 12. Cross-Platform Environment
 
-PocketClaw runs on the user's Windows host today. Code is written
+Clawd runs on the user's Windows host today. Code is written
 to be portable; macOS and Linux are supported for development and
 for the inherited NanoClaw v2 multi-host scenario, but the
 production installation is one Windows machine.
@@ -970,7 +970,7 @@ The full reference is generated as Appendix B at R7. Highlights:
 - `POSTGRES_*` — KB connection.
 - `OLLAMA_BASE_URL` — embedding + vision.
 - `WHATSAPP_AUTH_DIR` — Baileys session persistence
-  (default `~/.pocketclaw/whatsapp/`).
+  (default `~/.clawd/whatsapp/`).
 - `WHATSAPP_OWNER_ALIASES` — summon phrases on shared-number mode.
 - `VAULT_PATH` — Obsidian vault root.
 
@@ -983,7 +983,7 @@ provenance.
 
 ### 13.1 Knowledge re-arch (P1-P7) — DONE
 
-Plan: `.omo/plans/pocketclaw-knowledge-rearch.md`.
+Plan: `.omo/plans/clawd-knowledge-rearch.md`.
 
 | Phase | Commit  | Headline |
 |-------|---------|----------|
@@ -1000,7 +1000,7 @@ Two services removed (mnemon, Bedrock). One service added
 
 ### 13.2 KB MCP tool (M0-M7) — DONE
 
-Plan: `.omo/plans/pocketclaw-kb-mcp-tool.md`.
+Plan: `.omo/plans/clawd-kb-mcp-tool.md`.
 
 | Phase | Commit  | Headline |
 |-------|---------|----------|
@@ -1023,7 +1023,7 @@ them.
 
 ### 13.3 PRD rewrite (R0-R7) — IN PROGRESS
 
-Plan: `.omo/plans/pocketclaw-prd-rewrite.md`.
+Plan: `.omo/plans/clawd-prd-rewrite.md`.
 
 The phase you're reading. R0 archived the v3 PRD, R1-R5 fill
 sections 1-13, R6 fills risks and NFRs, R7 finalises with
@@ -1033,11 +1033,11 @@ appendices and deletes the v1 archive.
 
 Forward-linked from the M5/M6 deferred skills:
 
-- `pocketclaw-wiki-cron-rewire.md` — re-wire the 03:00 cron (today
+- `clawd-wiki-cron-rewire.md` — re-wire the 03:00 cron (today
   parked: `wiki-regen | SKIP | no-provider`).
-- `pocketclaw-morning-digest-rewire.md` — re-wire the 07:00 cron
+- `clawd-morning-digest-rewire.md` — re-wire the 07:00 cron
   (today parked: `morning-digest | SKIP | no-handler`).
-- `pocketclaw-agent-side-docx-pipeline.md` — new MCP tool family
+- `clawd-agent-side-docx-pipeline.md` — new MCP tool family
   (`doc_write_minutes`, `doc_write_research`, `doc_write_slides`)
   driving the existing host-side renderers.
 
@@ -1047,7 +1047,7 @@ All three are scoped, sized, and ready to ralph in priority order.
 
 - Restore `data/v2.db` (or migrate central DB to Postgres) to clear
   the 142 vitest failures. Plan name reserved:
-  `pocketclaw-central-db-pg.md`, not yet written.
+  `clawd-central-db-pg.md`, not yet written.
 - End-to-end smoke harness with mocked channels.
 - Document upload from the bot back into Telegram (the docx
   pipeline writes to vault today; sending as Telegram document
@@ -1058,7 +1058,7 @@ All three are scoped, sized, and ready to ralph in priority order.
 ## 14. Risks and Mitigations
 
 Single-user product → most "risk" is operational, not strategic.
-The list below is what could plausibly stop PocketClaw from doing
+The list below is what could plausibly stop Clawd from doing
 its job for a week.
 
 ### 14.1 Host machine dies / OS reinstall
@@ -1069,7 +1069,7 @@ up. The user has to re-pair WhatsApp, re-bootstrap Telegram, and
 re-ingest cloud sources.
 
 **Mitigation:**
-- Channel session state under `~/.pocketclaw/<channel>/` is small
+- Channel session state under `~/.clawd/<channel>/` is small
   (KB) and worth including in the user's regular backup rotation.
 - Postgres data volume is the load-bearing thing. Recommend
   scheduled `pg_dump` to a path that gets backed up. (Not
@@ -1089,7 +1089,7 @@ ABI. Already happened once (Node 26 default install).
 - `pnpm install` rebuilds the binary; if rebuild fails, the user
   has to drop back to Node 22 (winget-installable).
 - Restoring the central DB itself is a separate plan
-  (`pocketclaw-central-db-pg.md`); migrating to Postgres would
+  (`clawd-central-db-pg.md`); migrating to Postgres would
   remove this risk altogether.
 
 ### 14.3 OneCLI auth expires silently
@@ -1107,7 +1107,7 @@ weekly check.
 - The `/auth` skill triggers a re-auth from the bot.
 - The morning digest will surface "no new email in 36h" as a
   weak signal once the digest cron is wired
-  (`pocketclaw-morning-digest-rewire.md`).
+  (`clawd-morning-digest-rewire.md`).
 
 ### 14.4 Ollama model swap breaks embedding compatibility
 
@@ -1248,28 +1248,28 @@ they sit on the dependency graph.
 
 ### 16.1 Plan stubs (ready to ralph)
 
-- **`pocketclaw-wiki-cron-rewire.md`** — re-wire the 03:00 cron.
+- **`clawd-wiki-cron-rewire.md`** — re-wire the 03:00 cron.
   Two options sketched (host-only transform vs agent-driven prose);
   recommend ship A first.
-- **`pocketclaw-morning-digest-rewire.md`** — re-wire the 07:00
+- **`clawd-morning-digest-rewire.md`** — re-wire the 07:00
   cron. Host-only handler; needs a destination-config decision
   (env var vs DM convention).
-- **`pocketclaw-agent-side-docx-pipeline.md`** — new MCP tool family
+- **`clawd-agent-side-docx-pipeline.md`** — new MCP tool family
   driving existing host renderers. Mirrors the M0 kb_request
   transport.
 
 ### 16.2 Plans not yet written (named / scoped)
 
-- **`pocketclaw-central-db-pg.md`** — migrate `data/v2.db` from
+- **`clawd-central-db-pg.md`** — migrate `data/v2.db` from
   better-sqlite3 to Postgres (or restore from backup). Clears the
   142 vitest failures and removes the Node-version-coupling risk
   in §14.2.
-- **`pocketclaw-kb-reembed.md`** — stand up a re-embed pass that
+- **`clawd-kb-reembed.md`** — stand up a re-embed pass that
   re-processes rows whose `embed_model` differs from the current
   configured model.
-- **`pocketclaw-pg-backup.md`** — scheduled `pg_dump` to a
+- **`clawd-pg-backup.md`** — scheduled `pg_dump` to a
   user-chosen backup path; one cron entry plus a restore script.
-- **`pocketclaw-e2e-smoke.md`** — automated end-to-end harness
+- **`clawd-e2e-smoke.md`** — automated end-to-end harness
   with mocked channel adapters.
 
 ### 16.3 Aspirational (no plan yet)
@@ -1299,15 +1299,15 @@ they sit on the dependency graph.
 
 | Term | Meaning |
 |------|---------|
-| Agent group | A logical agent identity (workspace, skills, container config). PocketClaw has one (`pocketclaw`). |
-| Capture layer | Vivian Balakrishnan's term for the "ingest everything, lossy-on-the-side-of-keep" half of a personal AI. PocketClaw capture = the `KnowledgeBase` and its writers. |
-| Curation layer | The on-demand half. PocketClaw curation = the agent's recall behaviour + the Obsidian vault + the morning digest (when wired). |
+| Agent group | A logical agent identity (workspace, skills, container config). Clawd has one (`clawd`). |
+| Capture layer | Vivian Balakrishnan's term for the "ingest everything, lossy-on-the-side-of-keep" half of a personal AI. Clawd capture = the `KnowledgeBase` and its writers. |
+| Curation layer | The on-demand half. Clawd curation = the agent's recall behaviour + the Obsidian vault + the morning digest (when wired). |
 | Central DB | `data/v2.db` — SQLite via better-sqlite3, holds users / agent-groups / messaging-groups / wirings / approvals / schema-version. Inherited from NanoClaw v2. |
 | Channel adapter | Code that translates a platform-specific protocol (Telegram bot polling, WhatsApp Baileys, CLI stdin) into the internal `Message` shape. Lives in `src/channels/`. |
 | Debouncer | 5s message-batch queue (`src/modules/debouncer.ts`) that coalesces rapid bursts before downstream modules act. |
 | Inbound DB | `data/v2-sessions/<id>/inbound.db` — host writes, container reads. |
 | KB / KnowledgeBase | The interface in `src/modules/knowledge-base/index.ts`. The pgvector implementation is one impl of that interface. |
-| MCP tool | Model Context Protocol tool exposed to the agent inside its container. PocketClaw adds the `kb_*` family. |
+| MCP tool | Model Context Protocol tool exposed to the agent inside its container. Clawd adds the `kb_*` family. |
 | Messaging group | A single chat / channel on one platform (e.g. one Telegram chat, one WhatsApp DM). |
 | mnemon | The previous (now-deleted) Python memory service. Replaced by `KnowledgeBase` over pgvector in P3-P4. |
 | ncl | Admin CLI for the central DB. Host: Unix socket. Container: session-DB transport. |
@@ -1315,7 +1315,7 @@ they sit on the dependency graph.
 | Outbound DB | `data/v2-sessions/<id>/outbound.db` — container writes, host reads. |
 | Phase | A unit of work in a plan, with one commit per phase. P1-P7 = re-arch; M0-M7 = KB MCP tool; R0-R7 = PRD rewrite. |
 | Plan | Markdown spec under `.omo/plans/` that precedes any multi-phase work. |
-| Pocketclaw agent | The single always-on agent group on this host, named `pocketclaw`. |
+| Pocketclaw agent | The single always-on agent group on this host, named `clawd`. |
 | Ralph | Shorthand for the user's "execute a plan phase by phase, one commit per phase" workflow. |
 | Sentinel row | A `kind='system'` row in inbound.db / outbound.db used as MCP transport. Filtered out of the agent's view. |
 | Session | A per-(agent-group, messaging-group, thread) container instance with its own inbound/outbound DBs. |
@@ -1352,7 +1352,7 @@ pay-per-use fallback; both are extracted by the host into
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `TELEGRAM_BOT_TOKEN` | (unset) | Bot token from @BotFather. Stored in OneCLI in production; env is the development convenience. |
-| `WHATSAPP_AUTH_DIR` | `~/.pocketclaw/whatsapp/` | Baileys session directory. |
+| `WHATSAPP_AUTH_DIR` | `~/.clawd/whatsapp/` | Baileys session directory. |
 | `WHATSAPP_OWNER_ALIASES` | (unset) | Comma-separated summon phrases for shared-number mode. |
 | `ASSISTANT_HAS_OWN_NUMBER` | `false` | Whether the WA bot has a dedicated number (false on this host). |
 
@@ -1371,8 +1371,8 @@ pay-per-use fallback; both are extracted by the host into
 |-----|---------|---------|
 | `POSTGRES_HOST` | `127.0.0.1` | KB host. docker-compose binds to localhost. |
 | `POSTGRES_PORT` | `5432` | |
-| `POSTGRES_DB` | `pocketclaw` | |
-| `POSTGRES_USER` | `pocketclaw` | |
+| `POSTGRES_DB` | `clawd` | |
+| `POSTGRES_USER` | `clawd` | |
 | `POSTGRES_PASSWORD` | (unset) | Single-user → empty / trust auth on `127.0.0.1`. |
 
 ### B.5 Runtime config
@@ -1381,9 +1381,9 @@ pay-per-use fallback; both are extracted by the host into
 |-----|---------|---------|
 | `BATCH_WINDOW_MS` | `5000` | Debouncer window. |
 | `CONTAINER_MEMORY_LIMIT` | `2g` | Per-session container memory cap. |
-| `VAULT_PATH` | `~/.pocketclaw/vault` | Obsidian vault root. |
-| `WATCH_PATHS_ROOT` | `~/.pocketclaw/watch` | File-watcher ingest root. |
-| `LOG_PATH` | `~/.pocketclaw/logs` | Audit log destination. |
+| `VAULT_PATH` | `~/.clawd/vault` | Obsidian vault root. |
+| `WATCH_PATHS_ROOT` | `~/.clawd/watch` | File-watcher ingest root. |
+| `LOG_PATH` | `~/.clawd/logs` | Audit log destination. |
 
 ### B.6 Cleaned up
 
@@ -1400,7 +1400,7 @@ commit `3c9bca4`:
 Top-level layout as of R7:
 
 ```
-pocketclaw/
+clawd/
 ├── .githooks/                  pre-commit hooks (PowerShell + bash)
 ├── .github/                    workflows (CI placeholder)
 ├── .husky/                     husky hook adapter
@@ -1424,7 +1424,7 @@ pocketclaw/
 │        self-customize, slack-formatting, vercel-cli, welcome)
 ├── docs/                       inherited NanoClaw architecture docs
 ├── groups/
-│   └── pocketclaw/             single agent-group filesystem
+│   └── clawd/             single agent-group filesystem
 │       ├── CLAUDE.md           agent's per-group prompt
 │       └── skills/             13 skills (memory, recall, status, photo,
 │                                ingest, audit, wiki, digest, minutes,

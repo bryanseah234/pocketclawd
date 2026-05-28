@@ -1,9 +1,9 @@
-# Kill the wedged PocketClaw service node process and trigger the
+# Kill the wedged Clawd service node process and trigger the
 # Scheduled Task to relaunch (the AtStartup trigger does NOT auto-fire
 # again after manual exit; an explicit /Run is required).
 #
 # Run from elevated PowerShell (Win+X -> Terminal (Admin)):
-#   powershell -NoProfile -ExecutionPolicy Bypass -File "X:\01 REPOSITORIES\pocketclaw\scripts\service\Kill-Wedged.ps1"
+#   powershell -NoProfile -ExecutionPolicy Bypass -File "X:\01 REPOSITORIES\clawd\scripts\service\Kill-Wedged.ps1"
 
 $ErrorActionPreference = 'Continue'
 
@@ -20,7 +20,7 @@ if ($port) {
 $killed = @()
 Get-Process node -ErrorAction SilentlyContinue | Where-Object {
     $cmdLine = (Get-CimInstance Win32_Process -Filter ("ProcessId=" + $_.Id) -ErrorAction SilentlyContinue).CommandLine
-    $cmdLine -and $cmdLine -match 'pocketclaw\\dist\\index\.js'
+    $cmdLine -and $cmdLine -match 'clawd\\dist\\index\.js'
 } | ForEach-Object {
     Write-Host ("Killing node pid=" + $_.Id + " handles=" + $_.Handles)
     Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
@@ -60,7 +60,7 @@ if ($port) {
 }
 
 # Reset breaker so re-launch isnt backed-off
-$breaker = 'X:\01 REPOSITORIES\pocketclaw\data\circuit-breaker.json'
+$breaker = 'X:\01 REPOSITORIES\clawd\data\circuit-breaker.json'
 if (Test-Path $breaker) {
     Remove-Item $breaker -Force
     Write-Host 'breaker deleted'
@@ -73,14 +73,14 @@ if (Test-Path $breaker) {
 # 22 May 2026: without /Run the host stays down indefinitely.
 Write-Host ''
 Write-Host '=== Triggering Scheduled Task ==='
-$proc = Start-Process -FilePath schtasks.exe -ArgumentList '/Run','/TN','PocketClaw' -Wait -PassThru -NoNewWindow
+$proc = Start-Process -FilePath schtasks.exe -ArgumentList '/Run','/TN','Clawd' -Wait -PassThru -NoNewWindow
 if ($proc.ExitCode -eq 0) {
-    Write-Host 'schtasks /Run PocketClaw OK'
+    Write-Host 'schtasks /Run Clawd OK'
 } else {
-    Write-Host ("schtasks /Run failed rc=" + $proc.ExitCode + " - run manually: schtasks /Run /TN PocketClaw")
+    Write-Host ("schtasks /Run failed rc=" + $proc.ExitCode + " - run manually: schtasks /Run /TN Clawd")
 }
 
 Write-Host ''
 Write-Host 'NEXT: ~10-20s for service to come up, then verify with:'
 Write-Host '  Get-NetTCPConnection -LocalPort 3000 -State Listen'
-Write-Host '  Get-Content X:\PocketClawData\logs\service.stdout.log -Tail 10'
+Write-Host '  Get-Content X:\ClawdData\logs\service.stdout.log -Tail 10'

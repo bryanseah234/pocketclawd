@@ -1,6 +1,6 @@
 ---
 name: memory
-description: Manually save a fact to PocketClaw's persistent memory.
+description: Manually save a fact to Clawd's persistent memory.
 ---
 
 # /memory — store a fact in the knowledge base

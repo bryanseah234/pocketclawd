@@ -1,6 +1,6 @@
-# PocketClaw — Scheduled Task Uninstaller
+# Clawd — Scheduled Task Uninstaller
 #
-# Cleanly removes the PocketClaw Scheduled Task. By default leaves
+# Cleanly removes the Clawd Scheduled Task. By default leaves
 # .env, vault, mnemon DB, and logs intact. Pass -Purge to wipe data.
 #
 # Usage (from repo root, in elevated PowerShell):
@@ -11,7 +11,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Name = "PocketClaw",
+    [string]$Name = "Clawd",
     [switch]$Purge,
     [switch]$DryRun
 )
@@ -30,7 +30,7 @@ if (-not $isAdmin) {
 }
 
 # --- 2. Plan ----------------------------------------------------------------
-$pocketDir = "X:\PocketClawData"
+$pocketDir = "X:\ClawdData"
 $mnemonDir = Join-Path $env:USERPROFILE ".mnemon"
 
 Write-Host ""
@@ -77,7 +77,7 @@ if ($existing) {
     # asked nicely but node didn't exit)
     $nodeProcs = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue
     foreach ($p in $nodeProcs) {
-        if ($p.CommandLine -and $p.CommandLine -match 'pocketclaw.*dist\\index\.js') {
+        if ($p.CommandLine -and $p.CommandLine -match 'clawd.*dist\\index\.js') {
             Write-Warn "Killing leftover node.exe PID $($p.ProcessId)..."
             Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
         }

@@ -1,9 +1,9 @@
 ---
 name: status
-description: Show PocketClaw runtime health. Use when the user types `/status`, asks "are you up?", "what's your memory count?", "how many facts have you ingested?", "when was the last ingestion?", or wants a quick health check.
+description: Show Clawd runtime health. Use when the user types `/status`, asks "are you up?", "what's your memory count?", "how many facts have you ingested?", "when was the last ingestion?", or wants a quick health check.
 ---
 
-# /status — PocketClaw Health Check
+# /status — Clawd Health Check
 
 ## When to invoke
 
@@ -26,7 +26,7 @@ If you want a longer entity list (top 20 instead of top 10), use `kb_list_top_en
 
 ### 2. Read audit log — find last ingestion run
 
-The audit log lives at `${LOG_PATH}/audit.log` (LOG_PATH from env, defaults to `~/.pocketclaw/logs/`). Read the last 20 lines and pull out the most recent line containing `cloud-ingest` or `runAll`.
+The audit log lives at `${LOG_PATH}/audit.log` (LOG_PATH from env, defaults to `~/.clawd/logs/`). Read the last 20 lines and pull out the most recent line containing `cloud-ingest` or `runAll`.
 
 ```bash
 tail -n 20 "$LOG_PATH/audit.log"
@@ -52,7 +52,7 @@ Compute from the env file:
 
 | Source | Live if | Parked if |
 |---|---|---|
-| Google (Gmail / GCal / GContacts) | `~/.pocketclaw/secrets/google_token.json` exists OR `POCKETCLAW_SECRETS_DIR/google_token.json` exists | else |
+| Google (Gmail / GCal / GContacts) | `~/.clawd/secrets/google_token.json` exists OR `CLAWD_SECRETS_DIR/google_token.json` exists | else |
 | Microsoft (Outlook x3) | `MS_CLIENT_ID` is set AND non-empty | else |
 | Apple (iCloud x3) | `APPLE_ID_EMAIL` AND `APPLE_APP_PASSWORD` set | else |
 | GitHub (PRs / commits / issues) | `GITHUB_PAT` set | else |
@@ -68,11 +68,11 @@ Produce a compact message that fits in one Telegram bubble (≤2000 chars). Use 
 ### Example reply (Telegram)
 
 ```
-*PocketClaw status*
+*Clawd status*
 🧠 Memory: 204 insights
 📂 Vault: 1 wiki · 1 minutes · 1 research · 1 slides · 0 speeches
 🕐 Last ingest: 2026-05-21 22:15 (47 min ago)
-🔝 Top entities: GitHub, gmail, PocketClaw, README, mail
+🔝 Top entities: GitHub, gmail, Clawd, README, mail
 
 Live: Google ✅ ×3 · iCloud ✅ ×3 · GitHub ✅ ×3
 Parked: Outlook ⏸ ×3 · Slack ⏸ ×1
@@ -81,11 +81,11 @@ Parked: Outlook ⏸ ×3 · Slack ⏸ ×1
 ### Example reply (WhatsApp)
 
 ```
-PocketClaw status
+Clawd status
 - Memory: 204 insights
 - Vault: wiki=1 minutes=1 research=1 slides=1 speeches=0
 - Last ingest: 22:15 (47 min ago)
-- Top entities: GitHub, gmail, PocketClaw, README, mail
+- Top entities: GitHub, gmail, Clawd, README, mail
 
 Live: Google x3, iCloud x3, GitHub x3
 Parked: Outlook x3, Slack x1

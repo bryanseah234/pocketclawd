@@ -1,10 +1,10 @@
-# PocketClaw — Migrate from NSSM service to Scheduled Task
+# Clawd — Migrate from NSSM service to Scheduled Task
 #
 # One-shot: removes the existing NSSM service AND uninstalls NSSM itself,
 # then registers the SYSTEM Scheduled Task as the replacement supervisor.
 #
 # Run this from a single elevated PowerShell. After this completes, you
-# never need elevation again — restart the host with Restart-PocketClaw.ps1
+# never need elevation again — restart the host with Restart-Clawd.ps1
 # from a normal shell.
 #
 # Usage (from repo root, in elevated PowerShell):
@@ -14,8 +14,8 @@
 
 [CmdletBinding()]
 param(
-    [string]$NssmServiceName = "pocketclaw",
-    [string]$TaskName = "PocketClaw",
+    [string]$NssmServiceName = "clawd",
+    [string]$TaskName = "Clawd",
     [switch]$DryRun,
     [switch]$RemoveNssmBinary
 )
@@ -143,8 +143,8 @@ Write-Host "  Old NSSM service:  REMOVED"
 Write-Host "  New Scheduled Task: $TaskName ($($task.State))"
 Write-Host ""
 Write-Host "  From now on, restart the host without UAC:"
-Write-Host "    pwsh .\scripts\service\Restart-PocketClaw.ps1"
+Write-Host "    pwsh .\scripts\service\Restart-Clawd.ps1"
 Write-Host ""
 Write-Host "  Status:"
 Write-Host "    Get-ScheduledTask -TaskName $TaskName | Format-List"
-Write-Host "    Get-Content X:\PocketClawData\logs\service.stdout.log -Tail 50 -Wait"
+Write-Host "    Get-Content X:\ClawdData\logs\service.stdout.log -Tail 50 -Wait"

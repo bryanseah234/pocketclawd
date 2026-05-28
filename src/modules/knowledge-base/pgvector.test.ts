@@ -18,8 +18,8 @@ import { closePool } from './pg-client.js';
 
 const PG_HOST = process.env.PGHOST ?? '127.0.0.1';
 const PG_PORT = Number(process.env.PGPORT ?? 5432);
-const PG_DB = process.env.PGDATABASE ?? 'pocketclaw';
-const PG_USER = process.env.PGUSER ?? 'pocketclaw';
+const PG_DB = process.env.PGDATABASE ?? 'clawd';
+const PG_USER = process.env.PGUSER ?? 'clawd';
 
 /**
  * Probe Postgres at module load time. `it.skipIf` / `describe.skipIf` are

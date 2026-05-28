@@ -1,5 +1,5 @@
 /**
- * PocketClaw — Chat archival sink.
+ * Clawd — Chat archival sink.
  *
  * Hooks into the Telegram + WhatsApp channel adapters to capture EVERY
  * inbound message into mnemon, regardless of whether the host routes it to
@@ -12,7 +12,7 @@
  *
  * Behaviour:
  *   - Every inbound chat message becomes one mnemon insight tagged
- *     `pocketclaw, src:telegram-chat` (or `whatsapp-chat`)
+ *     `clawd, src:telegram-chat` (or `whatsapp-chat`)
  *   - Author name + chat name + body get embedded in the content string
  *   - Attachments are noted but NOT downloaded or transcribed (just a
  *     marker like `[image]` or `[audio]` so recall works)
@@ -99,7 +99,7 @@ function isOnlySticker(att: NonNullable<ChatMessageRecord['attachments']>): bool
 async function writeMnemon(record: ChatMessageRecord): Promise<void> {
   const content = formatContent(record);
   const tags = [
-    'pocketclaw',
+    'clawd',
     `src:${record.platform}-chat`,
     `chat:${truncateForTag(record.chatId)}`,
     record.isGroup ? 'kind:group' : 'kind:dm',

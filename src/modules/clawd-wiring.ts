@@ -1,5 +1,5 @@
 /**
- * PocketClaw — host-side wiring for cron handlers.
+ * Clawd — host-side wiring for cron handlers.
  *
  * Imported for side effects from `src/modules/index.ts`.
  *
@@ -37,5 +37,5 @@ async function audit(line: string): Promise<void> {
 }
 
 onDeliveryAdapterReady(() => {
-  void audit('POCKETCLAW_WIRING | delivery adapter ready (no host-side handlers wired)');
+  void audit('CLAWD_WIRING | delivery adapter ready (no host-side handlers wired)');
 });

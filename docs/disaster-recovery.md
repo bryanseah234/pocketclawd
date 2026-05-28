@@ -114,5 +114,5 @@ aws secretsmanager update-secret --secret-id nanoclaw/app-config \
 ## Contacts
 - Admin dashboard: http://3.0.132.150:3000/admin
 - AWS Console: account 709609992277, region ap-southeast-1
-- GitHub Actions: https://github.com/tokenlab42/pocketclaw/actions
+- GitHub Actions: https://github.com/tokenlab42/clawd/actions
 - EC2 instance: i-0f9cd20350cfdc1a6 (r6i.4xlarge, ap-southeast-1)

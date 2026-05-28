@@ -1,8 +1,8 @@
 /**
- * PocketClaw — Microsoft 365 ingestion (Outlook Mail / Calendar / Contacts) — PRD §7.9.2
+ * Clawd — Microsoft 365 ingestion (Outlook Mail / Calendar / Contacts) — PRD §7.9.2
  *
  * Auth: MSAL device-code flow. Token cached at
- * `~/.pocketclaw/secrets/ms_token.json`.
+ * `~/.clawd/secrets/ms_token.json`.
  * Permissions required: Mail.Read, Calendars.Read, Contacts.Read.
  */
 
@@ -13,9 +13,9 @@ import { stripHtml } from './types.js';
 import { envPath, expandHome } from '../paths.js';
 
 const SECRETS_DIR =
-  process.env.POCKETCLAW_SECRETS_DIR
-    ? expandHome(process.env.POCKETCLAW_SECRETS_DIR)
-    : envPath('POCKETCLAW_SECRETS_DIR', 'secrets');
+  process.env.CLAWD_SECRETS_DIR
+    ? expandHome(process.env.CLAWD_SECRETS_DIR)
+    : envPath('CLAWD_SECRETS_DIR', 'secrets');
 const MS_TOKEN_PATH = path.join(SECRETS_DIR, 'ms_token.json');
 const MS_SCOPES = ['Mail.Read', 'Calendars.Read', 'Contacts.Read'];
 const MS_GRAPH = 'https://graph.microsoft.com/v1.0';
