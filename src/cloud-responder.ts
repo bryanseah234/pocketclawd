@@ -197,14 +197,19 @@ async function callBedrock(history: Turn[]): Promise<{ text: string; ms: number;
 // ──────────────────────────────────────────────────────────────────────
 
 export async function respondToDM(
-  inbound: InboundMessage,
   adapter: ChannelAdapter,
+  platformId: string,
+  message: InboundMessage,
 ): Promise<void> {
-  const { platformId, content, sender } = inbound;
-  const userText = content?.text?.trim();
+  const content = (message.content as Record<string, unknown> | undefined) ?? {};
+  const userText = (
+    (typeof content.text === 'string' && content.text) ||
+    (typeof content.caption === 'string' && content.caption) ||
+    ''
+  ).trim();
   if (!userText) return;
 
-  const userId = sender?.platformId || platformId;
+  const userId = (typeof content.sender === 'string' && content.sender) || platformId;
 
   // append user turn
   const history = histories.get(platformId) ?? [];

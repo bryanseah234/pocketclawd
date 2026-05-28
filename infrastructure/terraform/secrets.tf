@@ -78,5 +78,4 @@ resource "aws_secretsmanager_secret_version" "app_config" {
   }
 }
 
-# Caller identity is needed for ecr_registry_url above.
-data "aws_caller_identity" "current" {}
+# (caller identity declared in versions.tf)
