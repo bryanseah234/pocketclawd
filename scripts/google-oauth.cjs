@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-const SECRETS_DIR = path.join(process.env.USERPROFILE, '.pocketclaw', 'secrets');
+const SECRETS_DIR = path.join(process.env.USERPROFILE, '.clawd', 'secrets');
 const CREDS_PATH = path.join(SECRETS_DIR, 'google_credentials.json');
 const TOKEN_PATH = path.join(SECRETS_DIR, 'google_token.json');
 

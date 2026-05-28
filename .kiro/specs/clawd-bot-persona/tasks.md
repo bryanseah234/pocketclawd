@@ -76,7 +76,7 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
 - [~] 3. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement Preference Probe module in Sub-Agent
+- [x] 4. Implement Preference Probe module in Sub-Agent
   - [x] 4.1 Create the Preference Probe module
     - Create `src/persona/preference_probe.py` in the sub-agent codebase
     - Implement `UserPersonaContext` dataclass with `is_new_user`, `technical_depth`, and `primary_domain` fields
@@ -85,13 +85,13 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Implement fail-open behavior: return `is_new_user: True` on Redis timeout or DataGateway error
     - _Requirements: 1.1, 2.1, 9.2, 9.3, 9.4_
 
-  - [-] 4.2 Write property test for user routing correctness
+  - [x] 4.2 Write property test for user routing correctness
     - **Property 1: User routing correctness based on preference state**
     - For any user ID, if no stored preferences exist (or `discoveryCompleted` is false/absent), routing decision is discovery phase; if preferences exist with `discoveryCompleted` = true, routing decision is context-aware greeting
     - Use `hypothesis` to generate arbitrary preference states
     - **Validates: Requirements 1.1, 2.1, 9.3, 9.4**
 
-  - [-] 4.3 Write unit tests for Preference Probe
+  - [x] 4.3 Write unit tests for Preference Probe
     - Test returns `is_new_user: True` when DataGateway returns null
     - Test returns `is_new_user: False` with populated fields when preferences exist
     - Test fail-open returns `is_new_user: True` on Redis timeout
@@ -115,7 +115,7 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Test original question is answered after preferences are stored
     - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 6. Implement Escalation Logger
+- [x] 6. Implement Escalation Logger
   - [x] 6.1 Create the Escalation Logger module
     - Create `src/persona/escalation.py` in the sub-agent codebase
     - Implement `EscalationEvent` dataclass with `user_id`, `trigger`, `context`, `session_id`, `timestamp`, and `message_ids` fields
@@ -126,13 +126,13 @@ Implement Clawd's persona framework for the NanoClaw WhatsApp AI assistant. The 
     - Best-effort logging: if DynamoDB write fails, log directly to CloudWatch; never block user-facing response
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [-] 6.2 Write property test for escalation trigger logic
+  - [x] 6.2 Write property test for escalation trigger logic
     - **Property 4: Escalation triggers on consecutive failures**
     - For any sequence of resolution outcomes, escalation is triggered if and only if three consecutive outcomes are failures; the event contains trigger "consecutive_failures" and references the three failed message IDs
     - Use `hypothesis` to generate arbitrary sequences of pass/fail outcomes
     - **Validates: Requirements 8.1**
 
-  - [-] 6.3 Write unit tests for Escalation Logger
+  - [x] 6.3 Write unit tests for Escalation Logger
     - Test consecutive failure counter increments correctly
     - Test counter resets on successful resolution
     - Test escalation triggers at exactly 3 consecutive failures

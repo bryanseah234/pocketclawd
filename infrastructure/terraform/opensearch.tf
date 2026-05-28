@@ -2,6 +2,27 @@
 # NanoClaw AWS Infrastructure — OpenSearch Serverless (Vector Search)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ⚠️ AOSS dual-IAM gotcha — DO NOT REMOVE THIS COMMENT
+# AOSS requires BOTH (a) the data-access policy above AND (b) the IAM action
+# ``aoss:APIAccessAll`` granted to the principal role. Missing (b) yields an
+# opaque 403 with no AOSS-specific error message — costs hours to diagnose.
+#
+# The ``nanoclaw-ec2-role`` (referenced in ec2.tf as a data source) currently
+# has an inline policy ``aoss-api-access`` granting ``aoss:APIAccessAll`` on
+# the collection ARN. Because the role is pre-created manually with
+# AdministratorAccess, this Terraform does NOT manage that inline policy.
+#
+# If you ever recreate the role from scratch (or migrate to TF-managed IAM),
+# remember to attach an inline policy equivalent to:
+#
+#   {
+#     "Version": "2012-10-17",
+#     "Statement": [{
+#       "Effect": "Allow",
+#       "Action": "aoss:APIAccessAll",
+#       "Resource": "arn:aws:aoss:${var.aws_region}:${data.aws_caller_identity.current.account_id}:collection/*"
+#     }]
+#   }
 # Encryption policy (required before collection creation)
 resource "aws_opensearchserverless_security_policy" "encryption" {
   name = "${var.project_name}-encryption"
