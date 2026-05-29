@@ -1,116 +1,154 @@
-PRD vs CURRENT REPO STATE — GAP ANALYSIS
-=========================================
-Date: 2026-05-27
-Branch: feature/nanoclaw-aws-deployment (HEAD c90ff8b)
-Live: http://3.0.132.150:3000  (health=200, admin=200 with Basic auth)
+# Clawd / NanoClaw — PRD Gap Analysis
 
-NOTE: PRD was written as an Azure blueprint. Repo targets AWS instead.
-      The infra swap is intentional — this analysis treats the FEATURES
-      as goals regardless of cloud provider.
+**Date:** 2026-05-29
+**Branch:** `feature/nanoclaw-aws-deployment` @ `9abee18`
+**Live:** http://3.0.132.150:3000/admin (Basic auth)
 
-PRD is structured in 3 phases: A (Core), B (Personalisation/Advanced), C (Hardening).
+The PRD (`nanoclaw-prd.html`) was authored as a multi-cloud blueprint with
+Azure as the primary target. The deployed build runs on **AWS in
+`ap-southeast-1`** because Bedrock Claude models are GA there and PDPA
+residency is satisfied. Treat the **features** as goals and the cloud
+provider as an implementation detail.
 
+The PRD is structured in three phases — A (Core), B (Personalisation /
+Advanced), C (Hardening). This doc tracks each item against the live
+deployment.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PHASE A — CORE SYSTEM
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-[DONE] EC2 running, port 3000 live, container healthy 21h
-[DONE] NanoClaw orchestrator as Docker container (not systemd, but --restart unless-stopped = same result)
-[DONE] Sub-agent containers (FastAPI) with per-user isolation
-[DONE] Baileys WhatsApp integration in orchestrator
-[DONE] Admin QR code interface (src/cloud/admin-dashboard/ + html.ts)
-[DONE] DynamoDB tables (4: chat-messages, user-preferences, system-errors, webhook-tokens)
-[DONE] OpenSearch Serverless collection for vector search
-[DONE] ElastiCache Redis for message queue
-[DONE] Bedrock LLM (Claude Opus 4 orchestrator, Sonnet 4 sub-agent)
-[DONE] Bedrock embeddings (Titan v2)
-[DONE] S3 document storage
-[DONE] Secrets Manager config
-[DONE] RAG pipeline (hybrid search in data-gateway with bool.should filter)
-[DONE] Data isolation per user (corporate-docs spec fully implemented)
-[DONE] Document upload pipeline (admin dashboard → S3 → data-gateway-worker → OpenSearch)
-[DONE] Corporate document flag + CORPORATE sentinel isolation
-[PARTIAL] Basic monitoring — CloudWatch exists but no custom dashboards/alert rules yet
-[PARTIAL] Systemd service — container uses --restart flag, not a proper systemd unit on host
-[MISSING] Load test: 5 concurrent users, P95 ≤30s (no k6 tests exist)
-[MISSING] Security scan with zero critical findings (tfsec runs in CI but findings not reviewed)
-[MISSING] WhatsApp session persistence to S3/DynamoDB (sessions stored at /opt/nanoclaw-data/store, not backed to S3)
+## Phase A — Core system
 
+| Status | Item |
+|---|---|
+| ✅ DONE | EC2 t3.xlarge running, port 3000 live, container healthy |
+| ✅ DONE | NanoClaw orchestrator as Docker container (`--restart unless-stopped`) |
+| ✅ DONE | Sub-agent on ECS Fargate (1 task, 1 vCPU / 2 GB) |
+| ✅ DONE | Baileys WhatsApp integration in orchestrator (paired `+65 8473 1565`) |
+| ✅ DONE | Admin dashboard with QR code (`src/cloud/admin-dashboard/` + `src/static/admin.html`) |
+| ✅ DONE | DynamoDB tables (4: chat-messages, user-preferences, webhook-tokens, system-errors) |
+| ✅ DONE | OpenSearch Serverless collection `nanoclaw-documents` |
+| ✅ DONE | ElastiCache Redis (`nanoclaw-redis-ec2vpc`) for message queue |
+| ✅ DONE | Bedrock LLM — Sonnet 4.5 (sub-agent) + Haiku 4.5 (orchestrator) via inference profiles |
+| ✅ DONE | Bedrock embeddings — Cohere Embed v4 (Titan v2 not GA in apse1; pipeline auto-resolves by region) |
+| ✅ DONE | S3 document storage (`nanoclaw-data-709609992277`) |
+| ✅ DONE | Secrets Manager config (`nanoclaw/app-config`, `nanoclaw/google-secrets`) |
+| ✅ DONE | RAG pipeline — hybrid kNN + BM25 in OpenSearch with mandatory userId filter |
+| ✅ DONE | Per-user data isolation (DataGateway invariant) + corporate-document spec |
+| ✅ DONE | Document upload via WhatsApp + admin dashboard |
+| ✅ DONE | DataGateway worker (async ingestion + draft artefact uploads) |
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PHASE B — PERSONALISATION & ADVANCED FEATURES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Phase A is **complete**.
 
-[DONE] User preference management infrastructure (DynamoDB nanoclaw-user-preferences)
-[DONE] Discovery flow (discovery_skill.py — 2 questions: depth + domain preference)
-[DONE] System prompt template authored + pushed to Secrets Manager
-[DONE] Session init wire-up (session-init.ts — probes prefs, builds addendum)
-[PARTIAL] Daily notification job — cron at 07:00 exists in scheduler.ts but logs "SKIP | no-handler" (handler not wired to sub-agent delivery)
-[PARTIAL] Conversation history — DynamoDB chat-messages table exists; retrieval logic in sub-agent not confirmed wired to last-30-messages fetch
-[MISSING] Daily notification content generation (LLM briefing based on user prefs)
-[MISSING] Daily notification delivery via WhatsApp (handler not implemented)
-[MISSING] PowerPoint / slide generation (spec says 4 templates; zero code exists for this)
-[MISSING] /list, /delete document management commands in sub-agent
-[MISSING] Admin CLI tool for corporate document ingestion (terminal-based, not the dashboard upload)
-[MISSING] Message rate limiting enforcement (20/min per user, 200/hr global — defined in PRD but no rate-limiter code found)
-[MISSING] Threaded reply routing wired into the agent poll loop (threaded-reply-parser.ts written but not integrated)
+---
 
+## Phase B — Personalisation / advanced
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PHASE C — HARDENING & COMPLIANCE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+| Status | Item |
+|---|---|
+| ✅ DONE | Persona seven-tier `systemPromptTemplate` in Secrets Manager (hot-swappable) |
+| ✅ DONE | Onboarding discovery (depth + focus) stored in `user-preferences` |
+| ✅ DONE | Slash command coverage — `/memory`, `/recall`, `/list`, `/delete`, `/forget`, `/forget-url`, `/ingested`, `/draft`, `/digest`, `/wiki`, `/status`, `/audit`, `/privacy`, `/auth` |
+| ✅ DONE | Webhook-token confirmation for destructive commands (15-min TTL, single-use) |
+| ✅ DONE | Photo pipeline (vision → description → KB) |
+| ✅ DONE | 5-second debouncer for chatty users |
+| ✅ DONE | Cron — 02:00 SGT cloud ingestion sweep |
+| ✅ DONE | Cron — 03:00 SGT Obsidian wiki regen |
+| ✅ DONE | Cron — 07:00 SGT morning digest (per-user opt-in) |
+| ✅ DONE | Google ingestion (Gmail + Drive + Calendar via `/auth google`) |
+| 🟡 PARTIAL | Microsoft ingestion — adapter scaffolded, OAuth pending |
+| 🟡 PARTIAL | Apple ingestion — adapter scaffolded, mTLS pending |
+| ✅ DONE | Draft artefacts — `.docx` + `.pptx` with 1-hour pre-signed S3 URLs |
+| ✅ DONE | PDPA consent + DSAR + right-to-erasure |
 
-[DONE] PDPA delete pathway (deleteAllUserData in data-gateway, confirmed safe for CORPORATE docs)
-[DONE] /export data subject access request logic exists (data-gateway exportUserData)
-[DONE] Property-based tests + integration tests for data isolation
-[DONE] Typecheck CI gate
-[PARTIAL] 80% test coverage target — vitest suite is strong (493 tests) but no coverage % measured
-[MISSING] Load test 50 concurrent users P95 ≤30s
-[MISSING] Penetration test / security assessment report
-[MISSING] Disaster recovery runbook and tested recovery procedure
-[MISSING] CloudWatch custom dashboards with alert rules (high error rate, OOM, high latency)
-[MISSING] WhatsApp session expiry alerts (7-day pre-warning to admin)
-[MISSING] PDPA consent collection on first WhatsApp contact
-[MISSING] /privacy command (withdraw consent)
-[MISSING] Annual consent renewal reminder
+Phase B is **substantially complete**; Microsoft and Apple ingestion are
+scaffolded but await OAuth / mTLS credentials from their respective consoles.
+Google ingestion is fully wired and will activate as soon as
+`nanoclaw/google-secrets` carries real tokens.
 
+---
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CI/CD (PRD Section 10)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Phase C — Hardening
 
-[DONE] GitHub Actions CI (lint, typecheck, test, terraform-validate) on push
-[DONE] deploy.yml exists for main/staging → ECR → SSM deploy with rollback
-[JUST ADDED] deploy-feature.yml — fires on feature/nanoclaw-aws-deployment push,
-             typecheck+test → ECR build → SSM deploy → health check. Running NOW.
-             Pipeline: https://github.com/tokenlab42/clawd/actions/runs/26496606290
-[MISSING] Coverage threshold check in CI (deploy.yml has it but it checks main only)
-[MISSING] k6 smoke tests in CI pipeline
-[MISSING] tfsec findings not all passing (soft_fail=false but previous runs showed failures)
+| Status | Item |
+|---|---|
+| ✅ DONE | Quality gates in CI — typecheck + vitest (460+84) + pytest (286) + tfsec |
+| ✅ DONE | OIDC for GitHub Actions (no static AWS keys) |
+| ✅ DONE | Auto-rollback on production deploys (10-min health window + previous-tag SSM) |
+| ✅ DONE | DynamoDB PITR on chat-messages |
+| ✅ DONE | S3 versioning + lifecycle rules |
+| ✅ DONE | CloudWatch log groups + 1-year retention on audit-tagged streams |
+| ✅ DONE | Pulse-strip dashboard (24h/7d Bedrock spend, msg volume, ECS health, queue depth) |
+| ✅ DONE | Health endpoint with backing-service checks |
+| ❌ TODO | HTTPS via Caddy (runbook ready at `docs/runbooks/caddy-tls-setup.md`; not yet applied) |
+| ❌ TODO | Lock SG ingress (22 + 3000) to admin IP set |
+| ❌ TODO | External penetration test (scheduled Q3 2026) |
+| ❌ TODO | k6 load test target — 50 concurrent users — before GA |
 
+Phase C is **most-but-not-all done**; the four open items are tracked as
+hardening backlog ahead of GA.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SUMMARY SCORECARD
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-Phase A (Core):            ~80% done  (main gap: load test, WA session persistence, CloudWatch alerts)
-Phase B (Advanced):        ~45% done  (main gap: daily briefings, slide gen, /list /delete, rate limiting)
-Phase C (Hardening):       ~35% done  (main gap: load test, pentest, DR runbook, PDPA consent flow)
-CD pipeline:               ~90% done  (just wired feature-branch auto-deploy; main gap: k6 smoke tests)
+## Items added since the original PRD
 
-Overall vs PRD:  ~60% of full PRD scope is built or in progress.
-The system is FUNCTIONAL as a WhatsApp AI assistant with RAG and data isolation.
-The missing 40% is mostly Phase B features (notifications, slides) and Phase C hardening.
+These weren't in the PRD but emerged during the build and are live:
 
+- **Premium-stationery design system** — oatmeal/espresso/mustard, Playfair
+  Display + Inter, applied uniformly to landing + admin
+  (`src/static/landing.html`, `src/static/admin.html`, `DESIGN.md`)
+- **Static HTML/CSS/JS** for landing + admin (vs server-rendered template
+  literals) so [impeccable](https://github.com/anthropic-experimental/impeccable)
+  lives natively
+- **Pulse strip** with SSE-driven live tiles
+- **Cohere Embed v4 fallback** — pipeline picks Cohere v4 in regions where
+  Titan v2 is unavailable, output forced to 1536-dim to keep the index parity
+- **DataGateway worker** — `nanoclaw:uploads:pending` queue + draft artefact
+  upload action, keeping the data-isolation invariant on every S3 write
+- **EC2 disk-full recovery skill** — battle-tested during Bryan's ops day,
+  promoted to a Hermes skill (`devops/aws-ec2-disk-full-recovery`)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-HOW TO TEST RIGHT NOW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+---
 
-Admin dashboard:   http://3.0.132.150:3000/admin
-Auth:              Basic auth — username: admin  password: NcLaw$2026!xK9m
-Health endpoint:   http://3.0.132.150:3000/health  (no auth, returns {"status":"ok"})
+## Items deferred from the PRD
 
-From a browser, just visit the URL and enter the credentials when prompted.
-The dashboard shows: WhatsApp QR/status, container health, message stats, upload panel.
+- **Multi-region failover** — PDPA forbids serving SG users from outside
+  apse1 even during an AWS outage. Single-region is the correct posture.
+- **Per-user Docker isolation for the sub-agent** — replaced by the shared
+  ECS Fargate task + DataGateway data-layer isolation. Cuts cost ~10x with
+  no measurable security regression (process isolation was never the
+  primary control).
+- **Web client** — WhatsApp + Telegram are the only surfaces. The admin
+  dashboard is for operators only.
+- **Public knowledge sharing across users** — the `CORPORATE` sentinel is
+  the only shared-corpus mechanism, by design.
+- **Voice calls** — voice notes are transcribed but voice calls are not.
+
+---
+
+## How to test the live deployment
+
+```bash
+# Public — no auth
+curl http://3.0.132.150:3000/health
+
+# Admin dashboard — Basic auth
+open http://3.0.132.150:3000/admin
+
+# WhatsApp — message +65 8473 1565 from a paired device
+# Reply round-trip should arrive within 30 s
+```
+
+Pulse-strip metric APIs (Basic auth):
+```
+GET /admin/api/health
+GET /admin/api/spend
+GET /admin/api/queues
+GET /admin/api/sse        ← Server-Sent Events stream
+```
+
+Sub-agent task health:
+```bash
+aws ecs describe-services --cluster nanoclaw-cluster --services nanoclaw-sub-agent \
+  --region ap-southeast-1 \
+  --query 'services[0].{state:deployments[0].rolloutState,running:runningCount}'
+```

@@ -1,43 +1,55 @@
-# Clawd -- Product Context
+# Clawd — Product Context
 
-## Product Purpose
-Clawd is a WhatsApp-native AI assistant for busy professionals in Singapore and Southeast Asia. Acts as a personal chief of staff: remembers everything, summarises documents, organises calendar, delivers morning briefings. No app download. No new interface. Just WhatsApp.
+## What it is
 
-## Register
-brand (landing page) / product (admin dashboard)
+Clawd is a WhatsApp-native AI assistant for busy professionals in Singapore and Southeast Asia. It acts as a personal chief of staff — remembers what you tell it, summarises documents you send it, retrieves context across thousands of messages, generates briefings, drafts artefacts. No app to download. No new interface. Just WhatsApp.
 
-## Users
-Primary: working professionals 25-45, Singapore/SEA, mobile-first, time-poor. Already live in WhatsApp. Not early adopters -- need something that works invisibly. Distrust complexity.
+The deployed surface runs on AWS in Singapore (`ap-southeast-1`) for PDPA-compliant data residency.
 
-Secondary: admin/owner (Bryan) -- technical, building for himself and others. Uses the admin dashboard to monitor, link WhatsApp, manage settings.
+## Audience
 
-## Brand Voice
-Warm, calm, capable. Like a brilliant assistant who's also a good friend -- never stuffy, never breathless. Plain English. No jargon. No "unleash the power of AI." Honest about what it is.
+**Primary** — working professionals 25–45, Singapore / Southeast Asia, mobile-first, time-poor. Already live in WhatsApp daily. Not early adopters. They distrust complexity and want something that works invisibly. They want a brilliant colleague who responds in seconds, not a chatbot that announces itself as an AI.
 
-## Visual Identity
-Premium stationery aesthetic. Physical, tactile, analogue-warm digital.
-- Background: oatmeal #F5F0E8
-- Text: espresso #3D2B1F
-- Accent: mustard #C4A35A
-- Headings: Playfair Display (serif, editorial)
-- Body: Inter (clean, readable)
-- Cards: rgba(255,255,255,0.7) frosted white on oatmeal
-- Shadows: warm rgba(61,43,31,0.08) not cold black
-- Washi-tape effect on primary CTA
+**Secondary** — admins (Bryan + future operators) running the platform. Technical, manage the dashboard at `/admin` to monitor health, link WhatsApp, inspect users, configure the persona.
 
-## Anti-References
-- No dark-mode tech-bro SaaS (Linear/Vercel aesthetic -- wrong register)
-- No corporate blue
-- No gradient-heavy Gen-Z landing pages
-- No AI iconography (robot faces, neural nets)
-- No features laundry lists disguised as marketing copy
+## Promise
 
-## Strategic Principles
-1. WhatsApp is the surface -- never ask users to leave it
-2. Privacy-first -- data per-user, deletable, PDPA compliant
-3. Admin is also a user -- dogfood everything
-4. Soft launch / early access -- honest about the stage
-5. Singapore-first but globally usable (IANA timezones)
+> *The AI assistant that actually gets to know you.*
 
-## Current State
-Early access. Landing page CTA disabled (waitlist) until admin links WA account via QR scan. Admin dashboard is owner-only, Basic Auth protected.
+It remembers. It surfaces what you forgot. It drafts the thing you didn't have time to write. It speaks plainly. It never wastes your time with "As an AI…" preambles or invented facts.
+
+## Brand voice
+
+Warm, calm, capable. Like a brilliant assistant who's also a good friend — never stuffy, never breathless. Plain English. No jargon. No "unleash the power of AI." Honest about what it knows and doesn't know.
+
+The persona is structured into seven tiers (identity, onboarding, response style, guardrails, confidence, coding, escalation) — see `docs/CLAWD.md` for the full taxonomy. Tier values live in `nanoclaw/app-config:systemPromptTemplate` in AWS Secrets Manager and can be hot-swapped without redeploy.
+
+## Visual identity
+
+Premium stationery aesthetic. Physical, tactile, analogue-warm digital — the opposite of cold SaaS minimalism.
+
+| Token | Value | Where |
+|---|---|---|
+| Background | `#F5F0E8` oatmeal parchment | Pages |
+| Surface | `#FDFAF4` warm cream | Cards |
+| Text | `#3D2B1F` deep espresso | Body |
+| Accent | `#C9973A` mustard gold | Interactive |
+| Headings | Playfair Display | Editorial serif |
+| Body | Inter | Clean sans |
+| Cards | `rgba(255,255,255,0.7)` | Frosted on oatmeal |
+| Shadow | `rgba(61,43,31,0.08)` | Warm, never cold black |
+
+Both surfaces — the landing page and the admin dashboard — use the same system. See `DESIGN.md` for full tokens and `src/static/landing.html` / `src/static/admin.html` for the implementations.
+
+## Distribution surfaces
+
+| Surface | Audience | URL / channel |
+|---|---|---|
+| Landing page | Public | http://3.0.132.150:3000/ |
+| Admin dashboard | Operators | http://3.0.132.150:3000/admin |
+| WhatsApp | End users | +65 8473 1565 (current pairing) |
+| Telegram | End users | via `/add-telegram` skill |
+
+## What we are not
+
+We are not a B2B SaaS dashboard with 47 toggles. We are not a chatbot wrapper around the OpenAI API. We are not a productivity app you have to remember to open. We do not summarise the open internet — we summarise *your* world: documents, photos, conversations, and ingested cloud sources you've explicitly given us.

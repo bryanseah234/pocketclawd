@@ -1,188 +1,253 @@
-# NanoClaw Technical Specification
+# Clawd / NanoClaw — Technical Specification
 
-## System Identity
+## System identity
 
-NanoClaw is a cloud-native multi-user WhatsApp AI assistant deployed on AWS.
-Users interact via WhatsApp; the system provides AI-powered responses with
-document processing, knowledge retrieval (RAG), and automated daily notifications.
+Clawd is a multi-user WhatsApp AI assistant deployed on AWS in `ap-southeast-1`.
+End users interact via WhatsApp; the system replies with AI-generated answers
+grounded in their own documents and conversation history.
 
-**Target:** 50+ concurrent users, P95 latency ≤ 30s, 99.5% uptime.
-
----
-
-## Technology Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| Orchestrator | Node.js 22 + TypeScript | Message routing, container lifecycle, admin UI |
-| Sub-Agent | Python 3.11 + FastAPI | Per-user AI processing, document ingestion |
-| WhatsApp | Baileys v7 (rc.9) | WhatsApp Web protocol (unofficial) |
-| LLM | AWS Bedrock (Claude 3.5 Sonnet) | AI responses |
-| Embeddings | AWS Bedrock (Titan Embed v2) | 1536-dim vectors for RAG |
-| Vector Search | OpenSearch Serverless | Hybrid search (knn + BM25) |
-| Database | DynamoDB | Chat history, preferences, tokens |
-| Storage | S3 | Documents, staging, exports |
-| Queue | ElastiCache Redis | Async orchestrator ↔ sub-agent messaging |
-| Secrets | Secrets Manager | Runtime config, credential rotation |
-| Monitoring | CloudWatch | Logs, metrics, alerts |
-| Container Registry | ECR | Docker images (orchestrator + agent) |
-| Infrastructure | Terraform | All AWS resources as code |
-| CI/CD | GitHub Actions | Automated build → test → deploy pipeline |
+**Targets:**
+- 50+ concurrent users on a single EC2 (room to scale vertically)
+- P95 message-to-reply latency ≤ 30 s for chat, ≤ 60 s for RAG queries
+- 99.5% monthly uptime
+- Zero cross-user data leakage (verified by the DataGateway invariant)
 
 ---
 
-## Message Queue Protocol
+## Technology stack
 
-Communication between orchestrator and sub-agents uses Redis Lists (LPUSH/BRPOP).
+| Layer | Technology | Why |
+|---|---|---|
+| Orchestrator | Node.js 22 + TypeScript | Type safety, mature WhatsApp libs (Baileys), shared NanoClaw harness |
+| Sub-agent | Python 3.11 + FastAPI | Best-in-class document parsing (PyPDF2, python-docx) and Bedrock SDK |
+| Channel — WhatsApp | Baileys v7 (rc.9) | Multi-device WhatsApp Web protocol; cheap; works without Meta Business API |
+| Channel — Telegram | NanoClaw Chat SDK adapter | Standard NanoClaw skill-installable channel |
+| LLM (sub-agent) | AWS Bedrock — `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Default reasoning model |
+| LLM (orchestrator fallback) | AWS Bedrock — `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Cheap, fast, used for delivery-side classification |
+| Embeddings | AWS Bedrock — `global.cohere.embed-v4:0` | Titan v2 not GA in ap-southeast-1; output dimension forced to 1536 to keep OpenSearch index compatible |
+| Vector search | OpenSearch Serverless `nanoclaw-documents` | Hybrid kNN + BM25 |
+| Database | DynamoDB (4 tables) | Per-user partition key, on-demand billing, point-in-time recovery |
+| Object storage | S3 `nanoclaw-data-709609992277` | Documents, drafts, WhatsApp session, exports |
+| Queue | ElastiCache Redis `nanoclaw-redis-ec2vpc` (7.1.0) | Async orchestrator ↔ sub-agent |
+| Secrets | AWS Secrets Manager — `nanoclaw/app-config`, `nanoclaw/google-secrets` | Runtime config + Google OAuth payload |
+| Container registry | ECR — `nanoclaw/orchestrator`, `nanoclaw/agent` | Per-SHA tags + `feature-latest` / `latest` |
+| Sub-agent runtime | ECS Fargate — `nanoclaw-cluster/nanoclaw-sub-agent` | 1 vCPU / 2 GB / 1 task; force-new-deployment on each rollout |
+| Monitoring | CloudWatch + Bedrock token logs | Centralised logs and metrics |
+| IaC | Terraform ≥ 1.5 | Plans gated by tfsec |
+| CI/CD | GitHub Actions | OIDC role, no static AWS keys |
 
-### Key Patterns
+Inference profile IDs (prefixed `global.` / `apac.`) are required for these
+Anthropic and Cohere models; calling `InvokeModel` against a bare model ID
+returns `ValidationException: ... isn't supported`.
+
+---
+
+## Message queue protocol
+
+Communication between orchestrator and sub-agent uses Redis Lists with
+LPUSH/BRPOP semantics.
+
+### Key patterns
 
 ```
-queue:agent:{userId}:inbound     — Orchestrator → Sub-Agent
-queue:orchestrator:responses      — Sub-Agent → Orchestrator
-queue:dlq:{userId}               — Dead letter queue per user
-nanoclaw:uploads:pending          — Upload worker pending list
-queue:orchestrator:data_gateway   — Sub-Agent → DataGateway requests
+queue:agent:shared:inbound          orchestrator → sub-agent
+queue:orchestrator:responses        sub-agent → orchestrator
+queue:dlq:{userId}                  per-user dead-letter queue
+nanoclaw:uploads:pending            data-gateway-worker upload queue
+queue:orchestrator:data_gateway     sub-agent → orchestrator data-gateway requests
 ```
 
-### Message Shape
+### Message envelope
 
 ```typescript
 interface QueueMessage {
-    id: string;
-    userId: string;
-    type: string;        // 'chat' | 'document_upload' | 'command'
-    payload: Record<string, unknown>;
-    timestamp: string;   // ISO 8601
-    retryCount?: number;
+  id: string;                         // ulid
+  userId: string;                     // partition key everywhere downstream
+  type: 'chat' | 'document_upload'    // discriminator
+       | 'command' | 'data_gateway_request' | 'data_gateway_response';
+  payload: Record<string, unknown>;   // shape per type — see below
+  metadata?: {                        // outbound responses MUST echo these
+    channelType: 'whatsapp' | 'telegram' | ...;
+    platformId: string;
+    threadId?: string;
+    kind: 'chat' | 'media' | 'command';
+  };
+  timestamp: string;                  // ISO 8601
+  retryCount?: number;                // 0..3 then DLQ
 }
 ```
 
-### Backpressure
+Sub-agent handlers MUST echo `channelType / platformId / threadId / kind` from
+inbound `metadata` into response `metadata`, and the orchestrator response poll
+MUST wrap `content` as `JSON.stringify({ text: rawContent })` before
+`deliveryAdapter.deliver`. Failure mode is a hard error
+`Cloud response missing routing fields` or `not valid JSON`.
 
-Queue depth > 100 messages per user triggers backpressure (new messages rejected
-with a "busy" response to the user). DLQ retries up to 3 times with the same
-message before permanent failure.
+### Sub-agent payload shapes (snake_case)
+
+| `type` | Fields |
+|---|---|
+| `chat` | `text`, optional `attachments[]` |
+| `document_upload` | `s3_key`, `mime_type`, `original_name`, optional `is_corporate` |
+| `command` | `command`, `args[]`, optional `flags{}` |
+| `data_gateway_request` | `action`, `params{}` (action-specific) |
+
+The Python worker reads snake_case. The TypeScript orchestrator was previously
+sending camelCase, which silently failed for `/list`, `/delete`, `/forget`,
+`/ingested`, `/forget-url`, and `/draft` — all six fixed in commit `9abee18`.
 
 ---
 
-## Document Processing Pipeline
+## DynamoDB schema
 
-### Supported Formats
+### `nanoclaw-chat-messages`
+Per-user conversation log. Partition key: `userId`. Sort key:
+`timestamp#messageId`. TTL on `expireAt` (90 days).
 
-| Format | Extractor | Notes |
-|--------|-----------|-------|
-| PDF | PyPDF2 + pytesseract OCR fallback | Scanned pages use OCR |
-| DOCX | python-docx | Paragraph extraction |
-| XLSX | openpyxl | Cell values + sheet names |
-| PPTX | python-pptx | Text from shapes + notes |
-| CSV | pandas | Header-aware formatting |
-| TXT/MD | Built-in | UTF-8 decode |
-| Images | pytesseract / GPT-4o Vision | OCR or vision description |
+### `nanoclaw-user-preferences`
+Persona discovery and per-user toggles. Partition key: `userId`. Holds
+preferences like `depth=detailed`, `domain=infrastructure`, opt-in for
+morning digest, language, etc.
 
-### Chunking
+### `nanoclaw-webhook-tokens`
+Short-lived confirmation tokens for destructive commands (`/delete`,
+`/forget`, etc.). Partition key: `tokenHash` (SHA-256 of the random 32-byte
+token). TTL on `ttl` (15 min). Single-use — deleted after first validation.
 
-- **Strategy:** Recursive character splitter
-- **Chunk size:** 512 tokens
-- **Overlap:** 50 tokens
-- **Tokenizer:** tiktoken cl100k_base
-- **Separators:** `\n\n` → `\n` → `.` → ` ` → ``
+### `nanoclaw-system-errors`
+Structured error sink. Partition key: `errorClass`. Sort key:
+`timestamp#errorId`.
 
-### Embedding
+---
 
-- **Model:** Amazon Titan Embed Text v2 (`amazon.titan-embed-text-v2:0`)
-- **Dimensions:** 1536
-- **Batch size:** 50 chunks per API call
-- **Retry:** Exponential backoff (1s, 2s, 4s, 8s, 16s), max 5 retries
+## OpenSearch index
 
-### Indexing (OpenSearch)
+Collection: `nanoclaw-documents` (Serverless, `VECTORSEARCH`).
+Index: `documents`.
 
 ```json
 {
-  "id": "keyword",
-  "userId": "keyword",
-  "docType": "keyword",
-  "content": "text (BM25)",
-  "contentVector": "knn_vector (1536, cosinesimil, nmslib/hnsw)",
-  "filename": "keyword",
-  "pageNumber": "integer",
-  "chunkIndex": "integer",
-  "uploadedAt": "date"
+  "mappings": {
+    "properties": {
+      "userId":     { "type": "keyword" },
+      "documentId": { "type": "keyword" },
+      "chunkId":    { "type": "keyword" },
+      "text":       { "type": "text" },
+      "embedding":  { "type": "knn_vector", "dimension": 1536,
+                      "method": { "engine": "nmslib",
+                                  "space_type": "cosinesimil",
+                                  "name": "hnsw" } },
+      "filename":   { "type": "keyword" },
+      "page":       { "type": "integer" },
+      "sourceUrl":  { "type": "keyword" },
+      "timestamp":  { "type": "date" }
+    }
+  }
 }
 ```
 
----
+Hybrid retrieval uses a `bool` query with a kNN clause and a `match` clause,
+weighted 70/30. `userId` filter is mandatory — see SECURITY.md.
 
-## Data Isolation Model
-
-Every public method on the DataGateway accepts `userId` as the first parameter.
-Cross-user access is impossible by construction:
-
-1. **DynamoDB:** userId is the partition key — queries physically cannot cross partitions
-2. **OpenSearch:** mandatory `{ term: { userId } }` filter injected programmatically
-3. **S3:** key prefix validation (`assertKeyBelongsToUser`) + path traversal rejection
-4. **Redis:** per-user queue keys prevent message cross-contamination
-5. **Containers:** each user runs in an isolated Docker container (separate PID/network/fs namespace)
+The IAM policy on the EC2 role and the ECS task role MUST grant **both**
+`aoss:APIAccessAll` AND a data-access policy entry. Missing the IAM action
+manifests as an opaque 403 — easy to misdiagnose.
 
 ---
 
-## Security
+## HTTP routes (orchestrator)
 
-### Container Hardening
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/` | none | Landing page |
+| GET | `/admin` | Basic | Admin dashboard |
+| GET | `/admin/api/health` | Basic | JSON: Redis, DynamoDB, OpenSearch, WhatsApp session |
+| GET | `/admin/api/spend` | Basic | 24h + 7d Bedrock spend, perDayUsd[] |
+| GET | `/admin/api/queues` | Basic | pendingUploads, dataGatewayQueue, subAgentQueues |
+| GET | `/admin/api/sse` | Basic | Server-Sent Events stream feeding pulse strip |
+| POST | `/admin/api/data/users/{uid}` | Basic | Inspect user data |
+| DELETE | `/admin/api/data/users/{uid}` | Basic | Delete user (PDPA) |
+| GET | `/admin/api/whatsapp/qr` | Basic | Live pairing QR code (PNG, 5-min TTL) |
+| GET | `/health` | none | `{ "status":"ok", "uptime", "services":{...} }` |
 
-- Non-root user (UID 1000)
-- Read-only root filesystem (tmpfs for writable areas)
-- All Linux capabilities dropped
-- Seccomp filtering
-- Memory limit: 512 MB
-- CPU: 50% of one core
-- PIDs limit: 100
-- Disk quota: 2 GB
-
-### Secrets
-
-All secrets in AWS Secrets Manager with 5-minute cache + auto-refresh.
-Sub-agents receive secrets via environment variables at container creation
-(never stored in Docker images).
-
-### WhatsApp
-
-- Baileys (unofficial protocol) — ToS risk acknowledged
-- Rate limiting: 20 msg/min per user, 200 msg/hour global
-- Dedicated WhatsApp number (not personal)
-- Session persisted to S3 for VM restart recovery
+The admin dashboard is HTTP — wrap in Caddy + Let's Encrypt for HTTPS
+(see `docs/runbooks/caddy-tls-setup.md`).
 
 ---
 
-## Scheduled Tasks
+## Persona system (`systemPromptTemplate`)
 
-| Task | Schedule | Description |
-|------|----------|-------------|
-| Daily Notification | 9:00 AM SGT | Personalized briefing per user |
-| Session Health Check | Hourly | Verify WhatsApp connection |
-| DLQ Retry | Every 6 hours | Retry failed document ingestion |
-| Secrets Refresh | Every 5 minutes | Reload from Secrets Manager |
+Stored in `nanoclaw/app-config:systemPromptTemplate` as a versioned JSON
+document. Sections:
 
----
+- `identity` — who Clawd is and how to introduce
+- `onboarding` — discovery question flow on first contact
+- `responseStyle` — concision rules, list usage, citation format
+- `guardrails` — banned phrases, anti-injection, tone limits
+- `confidence` — HIGH / PARTIAL / NONE tiers and the escalation trigger
+- `coding` — fenced blocks, version annotations, deprecation flags
+- `escalation` — three-strike NONE rule, compliance topics
 
-## Admin Dashboard
-
-HTTP Basic Auth protected web UI at `/admin` (port 3000):
-
-- Real-time WhatsApp QR code for pairing
-- System health monitoring (SSE updates every 5s)
-- Document upload (multipart → S3 → processing pipeline)
-- Container status
-- Rate limiting stats
-- Quick actions (restart, disconnect, clear limits)
+Hot-swappable: edit the secret, no deploy needed.
 
 ---
 
-## PDPA Compliance
+## Failure modes and known gotchas
 
-- `/export` command: full data export (chat, docs, prefs) within 24h
-- `/deleteaccount` command: complete data deletion within 30 days
-- Consent collection on first interaction
-- 90-day chat retention (DynamoDB TTL)
-- Audit logging (all data access logged to CloudWatch)
-- Data residency: all data in ap-southeast-1 (Singapore)
+- **Bedrock `ValidationException ... on-demand throughput isn't supported`** —
+  use the inference-profile id (e.g. `global.anthropic.claude-sonnet-4-5-...`),
+  never the bare model id.
+- **AOSS opaque 403** — IAM is missing `aoss:APIAccessAll`. The data-access
+  policy alone is insufficient.
+- **`Cloud response missing routing fields`** — sub-agent forgot to echo
+  `channelType / platformId / threadId / kind` into response metadata.
+- **`not valid JSON`** in the response poll — content was passed raw instead
+  of `JSON.stringify({text: rawContent})`.
+- **Cygwin/MSYS git-bash crashes (`0xC0000142`) on Windows hosts** — invoke
+  PowerShell directly. Affects local dev only, not production.
+- **`pip install awscurl` on the EC2** — breaks the apt-installed awscli.
+  Use the v2 binary or boto3 SigV4 from a workstation instead.
+- **Pre-push and commit-msg hooks are sh scripts** — pass `--no-verify` on
+  both `git push` and `git commit` from Windows or they'll die on cygwin
+  fork without surfacing a useful error.
+
+---
+
+## Rate limits
+
+| Scope | Limit | Where enforced |
+|---|---|---|
+| Per user | 20 messages / minute | Redis sliding window |
+| Global | 200 messages / hour | Redis sliding window |
+| Per user backpressure | 100 queued messages | Redis LLEN check before enqueue |
+| Document size — WhatsApp | 25 MB | Baileys + magic-byte validator |
+| Document size — admin | 50 MB | Multer + magic-byte validator |
+| RAG query top-K | 3 chunks | Hard-coded in pipeline |
+
+Exceeding rate limits queues the message rather than dropping it.
+
+---
+
+## Observability
+
+- All HTTP and queue activity logs to CloudWatch (`/ecs/nanoclaw-sub-agent`,
+  `/nanoclaw/orchestrator`).
+- Bedrock invocations log token counts to a custom CloudWatch metric used by
+  `/admin/api/spend`.
+- Health endpoint exits non-200 on any backing service failure; the GHA deploy
+  blocks promotion if `/health` fails 8 retries × 15 s.
+- Pulse strip on `/admin` shows live spend / msgs / tasks / queue tiles via SSE.
+
+---
+
+## Compliance notes
+
+- **PDPA (Singapore):** all user data resides in `ap-southeast-1`. Consent is
+  collected on first contact; `/privacy` exposes the user's data rights;
+  `/forget` triggers deletion within 24 hours. CORPORATE-tagged shared
+  documents are exempt from per-user delete-all by design.
+- **Encryption:** at-rest AES-256 (KMS-auto) on DynamoDB, S3, OpenSearch, and
+  EBS. In-transit TLS 1.2+ to all AWS endpoints. ElastiCache `redis_tls=false`
+  on the active cluster — kept private to the VPC.
+- **Audit log:** `nanoclaw-system-errors` retained 1 year. WhatsApp QR scans,
+  admin logins, and DSAR requests written to CloudWatch.

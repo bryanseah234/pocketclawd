@@ -12,17 +12,19 @@
 
 ---
 
-## Deployment status (added 2026-05-27)
+## Deployment status (refreshed 2026-05-29)
 
-This PRD documents the **Clawd single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for local development, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two are deliberately co-existing:
+This PRD documents the **Clawd single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for **local development**, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two surfaces deliberately co-exist:
 
 | Surface | Source of truth | Provider |
 |---|---|---|
+| AWS multi-user cloud (LIVE) | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `docs/architecture.md`, `src/cloud/` | AWS Bedrock — Sonnet 4.5 / Haiku 4.5 / Cohere Embed v4 |
 | Local single-user host (this PRD) | `PRD.md`, `docs/CLAWD.md` | Claude Code subscription |
-| AWS multi-user cloud | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `src/cloud/` | AWS Bedrock |
 | Azure variant (future option) | `nanoclaw-prd.html` | Azure OpenAI gpt-4o |
 
-When this PRD says *“no Bedrock, no AWS env vars,”* it is describing the host-mode invariant — not a global policy. The cloud surface is governed by the Kiro AWS spec and uses Bedrock by design.
+The cloud build runs on EC2 t3.xlarge + ECS Fargate, with Cohere Embed v4 as the embedding model (Titan v2 is not GA in `ap-southeast-1`). When this PRD says *"no Bedrock, no AWS env vars"*, it is describing the **host-mode invariant** — not a global policy. The cloud surface is governed by the Kiro AWS spec and uses Bedrock by design.
+
+**For the live deployment, start with [README.md](README.md) and [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md), not this PRD.**
 
 ---
 

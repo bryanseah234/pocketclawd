@@ -1,158 +1,178 @@
-# NanoClaw Security Model
+# Clawd / NanoClaw — Security Model
 
-## Overview
-
-NanoClaw enforces security through multiple layers: container isolation,
-data isolation via userId enforcement, secrets management, and network controls.
+Clawd enforces security through three layered controls: **data-isolation invariants** at the gateway, **least-privilege IAM** in AWS, and **PDPA-compliant lifecycle** for user data. Per-user process isolation is intentionally **not** the primary control — see "Sub-agent runtime" below for the rationale.
 
 ---
 
-## Data Isolation (Critical)
+## Data isolation (the primary control)
 
-Every persistence operation goes through the DataGateway, which enforces userId
-on ALL operations. Cross-user access is impossible by construction:
+Every persistence operation goes through the **DataGateway**, which enforces `userId` on every read and write. Cross-user access is impossible **by construction**, not by convention:
 
 | Layer | Enforcement |
-|-------|-------------|
-| DynamoDB | userId is the partition key — queries physically cannot cross partitions |
-| OpenSearch | Mandatory `{ term: { userId } }` filter on every search query |
-| S3 | Key prefix validation + path traversal rejection (`../` blocked) |
-| Redis | Per-user queue keys (`queue:agent:{userId}:inbound`) |
-| Containers | Each user runs in isolated Docker container (separate PID/network/fs) |
+|---|---|
+| DynamoDB | `userId` is the partition key on every table — queries physically cannot cross partitions |
+| OpenSearch | Mandatory `{ term: { userId } }` filter on every search; `bool.should` pattern adds the `CORPORATE` sentinel for opted-in shared corpus |
+| S3 | Every key prefixed with `users/{userId}/` or `staging/{userId}/`; path-traversal (`../`) rejected at write time |
+| Redis | Per-user rate-limit + presence keys (`rate:{userId}:1m`, `presence:{userId}`); shared work queue is read-only by user processes |
+
+The DataGateway's `assertUserId()` helper rejects `CORPORATE` in `deleteAllUserData()` and `exportUserData()` so a user cannot wipe shared documents through their own DSAR flow.
 
 ---
 
-## Container Security
+## Sub-agent runtime — what's the threat model
 
-### Hardening
+The Clawd-on-AWS sub-agent runs as a **shared ECS Fargate task** (1 task, 1 vCPU / 2 GB) that processes all users from a single Redis queue. This is intentional:
 
-- **Non-root user** (UID 1000)
-- **Read-only root filesystem** (tmpfs for writable areas)
-- **All Linux capabilities dropped**
-- **Seccomp filtering** (minimal syscall set)
-- **No new privileges** (prevents escalation)
-- **Resource limits**: 512 MB RAM, 50% CPU, 100 PIDs, 2 GB disk
+| Threat | Mitigation |
+|---|---|
+| Cross-user data access from inside the sub-agent | DataGateway invariants — every read carries the userId from the queue payload, never derived from process state |
+| Sub-agent crash impact | ECS service `desiredCount=1` auto-restarts; queued messages re-deliver on restart |
+| Code injection from malicious uploads | MIME-type magic-byte validation, fixed allow-list of extensions, no executable formats |
+| Prompt injection | Persona's `guardrails` tier explicitly tells the LLM to ignore role-override attempts; no user-supplied text reaches `system` role |
 
-### Network Isolation
-
-Each sub-agent container operates in its own network namespace:
-
-- Can only communicate with orchestrator via management network
-- Outbound access to AWS services only (Bedrock, S3, etc.)
-- No inter-container communication possible
+Per-user Docker isolation (the legacy NanoClaw v2 model) was traded for shared-task economics; data isolation moved from the **process** layer to the **data** layer. This is the same pattern OpenAI / Anthropic / Cohere use in their hosted endpoints.
 
 ---
 
-## Secrets Management
+## Secrets management
 
 ### AWS Secrets Manager
+- `nanoclaw/app-config` — runtime configuration: Redis endpoint, DynamoDB table names, OpenSearch URL, S3 bucket, Bedrock model IDs, ECR registry, persona template.
+- `nanoclaw/google-secrets` — Google OAuth client + access tokens for ingestion (placeholders today; populated by Bryan via console).
 
-All secrets stored in `nanoclaw/app-config` with:
+Both secrets are read at orchestrator boot and refreshed every 5 minutes
+(in-memory TTL cache). No long-lived AWS credentials live anywhere — IAM roles
+provide service-to-service auth via the EC2 instance profile and the ECS task
+execution role.
 
-- 5-minute cache + auto-refresh timer
-- Supports credential rotation without restart
-- IAM role-based access (no long-lived keys)
-
-### Secret Categories
+### Rotation
 
 | Secret | Rotation | Access |
-|--------|----------|--------|
-| Redis password | 90 days (automated) | Orchestrator only |
-| DynamoDB (via IAM) | N/A (Managed Identity) | Orchestrator + sub-agents |
-| OpenSearch (via IAM) | N/A (Managed Identity) | Orchestrator only |
-| S3 (via IAM) | N/A (Managed Identity) | Orchestrator + sub-agents |
-| Bedrock (via IAM) | N/A (Managed Identity) | Sub-agents only |
-| Admin dashboard password | 90 days | Admin users |
+|---|---|---|
+| Admin dashboard password | Manual (90-day target) | Bryan |
+| Redis auth (when enabled) | 90 days | Orchestrator + sub-agent |
+| Google OAuth client secret | On user re-grant | Orchestrator only |
+| DynamoDB / OpenSearch / S3 / Bedrock | IAM (no static keys) | per-component task / instance role |
 
-### Sub-Agent Secret Injection
-
-Secrets are passed to containers as environment variables at creation time.
-They are NEVER stored in Docker images or written to disk inside containers.
+The orchestrator does NOT pass secrets to the sub-agent as env vars or chat
+context. The sub-agent has its own Bedrock and Redis client identities through
+its ECS task role.
 
 ---
 
-## WhatsApp Security
+## Network controls
 
-### Session Management
-
-- Baileys session persisted to S3 (`sessions/` prefix)
-- Session restored on VM restart without QR re-scan
-- QR code displayed only in admin dashboard (Basic Auth protected)
-- QR codes expire after 5 minutes
-- Failed scan attempts logged for security monitoring
-
-### Rate Limiting
-
-- 20 messages/minute per user
-- 200 messages/hour global
-- Exceeding limits → messages queued (not dropped)
-- Rate limit state in Redis (auto-expires)
-
----
-
-## Document Security
-
-### Upload Validation
-
-1. MIME type validation via magic byte detection
-2. Extension must match detected MIME type
-3. Maximum file size: 25 MB (WhatsApp) / 50 MB (admin dashboard)
-4. Executable files and archives blocked
-
-### Save Confirmation (Webhook Tokens)
-
-- Cryptographically random tokens (32 bytes, `secrets.token_urlsafe`)
-- SHA-256 hashed before storage in DynamoDB
-- 15-minute TTL (auto-expired)
-- One-time use (deleted after validation)
-- Constant-time comparison (prevents timing attacks)
-
----
-
-## Network Security
-
-### EC2 Security Group
+### EC2 security group `sg-04077e2294b216bbc`
 
 | Direction | Port | Source | Purpose |
-|-----------|------|--------|---------|
-| Inbound | 443 | Admin IPs | Admin dashboard |
-| Inbound | 22 | Admin IPs | SSH access |
-| Outbound | 443 | AWS services | API calls |
-| Outbound | 5222 | WhatsApp servers | Baileys connection |
-| Deny | All other | * | Default deny |
+|---|---|---|---|
+| Inbound | 80, 443 | 0.0.0.0/0 | Caddy + Let's Encrypt (when TLS enabled) |
+| Inbound | 3000 | 0.0.0.0/0 | Orchestrator HTTP (admin + landing) |
+| Inbound | 22 | 0.0.0.0/0 | EC2 Instance Connect (recovery only — lock down after each incident) |
+| Outbound | 443 | * | AWS service endpoints, Baileys → WhatsApp |
+| Outbound | 5222, 5223 | * | WhatsApp websocket |
 
-### No Public API
+**Hardening backlog:** lock 22/3000 to admin IP set, front 3000 with HTTPS via Caddy, drop direct :3000 once Caddy is up.
 
-The system has no public-facing API. All user interaction is via WhatsApp
-(outbound connection from the EC2 instance). The admin dashboard is
-restricted to specific IP addresses.
+### VPC topology
+- VPC `vpc-0eaf5fb467fe952b8` in `ap-southeast-1`
+- EC2 in `ap-southeast-1a` private subnet w/ NAT gateway
+- ElastiCache + AOSS in private subnets only — no public reachability
+- ECS Fargate task in private subnet, egress through NAT for ECR pulls
 
 ---
 
-## Audit Logging
+## Container hardening
 
-All data access is logged to CloudWatch with:
+The orchestrator container runs `--user root` because it mounts the Docker
+socket (legacy lifecycle pattern; replaced by ECS for sub-agent management).
+The ECS sub-agent task runs as **uid 1001** with no host privileges, no
+capabilities, and no privileged-mode flag.
+
+### Document validation
+- MIME-type magic-byte detection on every upload
+- Extension MUST match detected MIME (PDF, DOCX, PPTX, TXT, MD, JPG, PNG)
+- Hard size limits: 25 MB (WhatsApp), 50 MB (admin)
+- Executable / archive / script formats rejected outright
+
+### Webhook tokens (destructive command confirmation)
+- 32-byte random tokens via `secrets.token_urlsafe`
+- SHA-256 hashed at rest in DynamoDB
+- 15-minute TTL, single-use (deleted on first validation)
+- Constant-time comparison to prevent timing attacks
+
+---
+
+## WhatsApp session
+
+- Baileys session blob stored in S3 under the `sessions/` prefix
+  (`nanoclaw/app-config:WHATSAPP_SESSION_S3_PREFIX`)
+- Survives EC2 restart — no QR re-pair on routine ops
+- QR code only displayed inside the admin dashboard (Basic-auth gated)
+- Failed scan attempts logged to CloudWatch
+- WhatsApp invalidates sessions roughly every 14 days of inactivity — the
+  admin sees a `Connection closed` log line and re-pairs through the dashboard
+
+---
+
+## Audit logging
+
+Every data-access operation logs:
 
 - userId
-- Operation type
-- Resource accessed
-- Timestamp (ISO 8601)
-- Success/failure
+- operation (read / write / delete / search)
+- resource (table / bucket / index)
+- timestamp (ISO 8601)
+- outcome (success / failure + error class)
 
-Audit logs retained for 1 year. Access restricted to authorized personnel.
+Logs go to CloudWatch (`/nanoclaw/orchestrator`, `/ecs/nanoclaw-sub-agent`)
+with one-year retention. Admin logins and DSAR requests are logged at INFO
+level so they're queryable through CloudWatch Insights.
 
 ---
 
-## Incident Response
+## PDPA compliance (Singapore)
 
-### Breach Notification (PDPA 72-Hour Rule)
+- **Region:** all data resides in `ap-southeast-1`
+- **Consent:** collected on first contact via WhatsApp confirmation
+- **Annual reminder:** at 11 months, prompt for re-consent
+- **Right to access:** `exportUserData()` produces a DSAR export
+- **Right to erasure:** `/forget` → `deleteAllUserData()` removes the user's
+  rows from all four DynamoDB tables, all `users/{userId}/...` S3 objects, and
+  all OpenSearch chunks tagged with that userId. Completes within 24 h.
+- **Notification:** in the event of a confirmed breach affecting personal
+  data, the DPO is notified within 24 h, severity assessed within 48 h,
+  affected users notified via WhatsApp within the PDPA's 72-hour window.
 
-1. Incident reported to DPO within 24 hours
-2. Severity assessment within 48 hours
-3. Affected users notified via WhatsApp within 72 hours
-4. PDPC notified if required
+---
 
-### Automatic Rollback
+## CI/CD security
 
-Production deployments include 10-minute health monitoring. If health checks
-fail, automatic rollback to previous image tag via SSM Parameter Store.
+- GitHub Actions uses **OIDC** (`sts:AssumeRoleWithWebIdentity`) — no static
+  AWS keys live in GitHub.
+- The deploy IAM role's trust policy binds `sub` to the specific repo and
+  branch refs.
+- `tfsec` runs in CI; tfsec findings gate the deploy.
+- Pre-push and commit-msg hooks lint commit messages locally
+  (`--no-verify` may be required on Windows hosts).
+
+---
+
+## Incident response
+
+### Auto-rollback
+The production rail (`deploy.yml`) monitors `/health` for 10 minutes after
+deploy. On failure, it reverts to the previous tag stored in SSM Parameter
+Store and pages the on-call channel.
+
+### Manual recovery paths
+- **Disk full on EC2** → see `~/.hermes/skills/devops/aws-ec2-disk-full-recovery/SKILL.md`
+- **TLS cert expired** → see `docs/runbooks/caddy-tls-setup.md`
+- **WhatsApp re-pair** → admin dashboard QR; if dashboard offline, SSH and
+  delete the session blob, restart, scan fresh QR from journal
+
+---
+
+## Findings register
+See `docs/security-assessment.md` for the live findings register, including
+accepted risks (Basic auth over HTTP, 22/3000 open to 0/0).

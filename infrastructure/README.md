@@ -1,134 +1,155 @@
-# NanoClaw AWS Infrastructure
+# Clawd / NanoClaw — AWS Infrastructure (Terraform)
 
-Terraform configuration for deploying NanoClaw WhatsApp Assistant to AWS.
+Terraform for the Clawd / NanoClaw cloud deployment in `ap-southeast-1`.
+This is the **source of truth** for the AWS resources backing
+http://3.0.132.150:3000.
 
-## Architecture
+## Live state at a glance
 
-- **EC2** (t3.xlarge) — Orchestrator + rootless Docker containers
-- **DynamoDB** — Chat history, user preferences, webhook tokens, system errors
-- **OpenSearch Serverless** — Vector search for RAG pipeline
-- **S3** — Document storage, session persistence, generated files
-- **ElastiCache Redis** — Message queue between orchestrator and sub-agents
-- **Secrets Manager** — All credentials with rotation
-- **CloudWatch** — Logs, metrics, alerts
-- **ECR** — Container image registry
+- Account: `709609992277`
+- Region: `ap-southeast-1` (Singapore — PDPA residency)
+- Compute: EC2 **t3.xlarge** + ECS Fargate (1 task, 1 vCPU / 2 GB)
+- LLM: AWS Bedrock — Claude Sonnet 4.5 / Haiku 4.5 / Cohere Embed v4
+- State stores: DynamoDB (4 tables) + S3 + OpenSearch Serverless + Redis
+
+## Files
+
+| File | Resources |
+|---|---|
+| `vpc.tf` | VPC, public + private subnets, NAT gateway, security groups |
+| `ec2.tf` | EC2 instance, IAM role, instance profile, user-data |
+| `ecs.tf` | `nanoclaw-cluster`, `nanoclaw-sub-agent` service + task def |
+| `ecr.tf` | `nanoclaw/orchestrator`, `nanoclaw/agent` repositories |
+| `dynamodb.tf` | 4 tables (chat-messages, user-preferences, webhook-tokens, system-errors) |
+| `opensearch.tf` | Serverless `nanoclaw-documents` collection (VECTORSEARCH) |
+| `redis.tf` | ElastiCache Redis cluster (`nanoclaw-redis-ec2vpc`) |
+| `s3.tf` | `nanoclaw-data-{account}` bucket with lifecycle rules |
+| `secrets.tf` | `nanoclaw/app-config`, `nanoclaw/google-secrets` placeholders |
+| `iam.tf` | EC2 + ECS task roles (incl. `aoss:APIAccessAll` — required) |
+| `cloudwatch.tf` | Log groups, alarms, SNS topic |
+| `outputs.tf` | All resource identifiers |
+| `user-data.sh.tpl` | EC2 bootstrap script |
+| `terraform.tfvars.example` | Variable template |
 
 ## Prerequisites
 
-1. **AWS CLI** configured with credentials:
+```bash
+aws configure                # region: ap-southeast-1
+terraform --version          # >= 1.5
+docker --version             # for image builds
+```
 
-   ```bash
-   aws configure
-   # Region: ap-southeast-1
-   ```
+Bedrock model access must be enabled in the AWS console for the three
+inference profiles before `apply`:
+- `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- `global.anthropic.claude-haiku-4-5-20251001-v1:0`
+- `global.cohere.embed-v4:0`
 
-2. **Terraform** >= 1.5.0:
+```bash
+aws bedrock list-inference-profiles --region ap-southeast-1
+```
 
-   ```bash
-   # Windows (winget)
-   winget install Hashicorp.Terraform
-
-   # macOS
-   brew install terraform
-
-   # Linux
-   sudo apt-get install terraform
-   ```
-
-3. **EC2 Key Pair** created in ap-southeast-1:
-
-   ```bash
-   aws ec2 create-key-pair --key-name nanoclaw-key --region ap-southeast-1 \
-     --query 'KeyMaterial' --output text > nanoclaw-key.pem
-   chmod 400 nanoclaw-key.pem
-   ```
-
-## Quick Start
+## Quick start (full stack)
 
 ```bash
 cd infrastructure/terraform
 
-# Copy and edit variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
+# edit terraform.tfvars (project name, region, instance type)
 
-# Initialize Terraform
 terraform init
-
-# Preview changes
 terraform plan
+terraform apply              # ~5–10 minutes for full provisioning
+```
 
-# Deploy (takes ~5-10 minutes)
-terraform apply
+After apply, see `docs/AWS-DEPLOYMENT.md` for image build, secrets
+population, EC2 setup, ECS rollout, WhatsApp pairing.
 
-# View outputs (endpoints, IPs, bucket names)
+## Outputs
+
+```bash
 terraform output
 ```
 
-## Estimated Monthly Cost (t3.xlarge starter)
+Key outputs (used by deployment scripts and CI):
 
-| Service | Estimated Cost |
-|---------|---------------|
-| EC2 t3.xlarge (on-demand) | ~$120 |
-| ElastiCache cache.t3.micro | ~$12 |
-| DynamoDB (on-demand, low traffic) | ~$5 |
-| OpenSearch Serverless (2 OCU min) | ~$350 |
-| S3 (< 10 GB) | ~$1 |
-| NAT Gateway | ~$32 |
-| Secrets Manager | ~$1 |
-| CloudWatch | ~$5 |
-| **Total** | **~$526/mo** |
+| Output | Example |
+|---|---|
+| `ec2_instance_id` | `i-0f9cd20350cfdc1a6` |
+| `ec2_public_ip` | `3.0.132.150` |
+| `ecr_registry_url` | `709609992277.dkr.ecr.ap-southeast-1.amazonaws.com` |
+| `redis_endpoint` | `nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
+| `opensearch_endpoint` | `https://66ik2p21jw225em9uj25.ap-southeast-1.aoss.amazonaws.com` |
+| `s3_data_bucket` | `nanoclaw-data-709609992277` |
 
-> **Note:** OpenSearch Serverless has a minimum of 2 OCUs ($0.24/hr each). For development, consider using a self-managed OpenSearch on the EC2 instance instead, or use pgvector on RDS to reduce costs to ~$176/mo.
-
-## Scaling Up
-
-Change one variable in `terraform.tfvars`:
-
-```hcl
-# Scale compute
-instance_type = "r6i.4xlarge"  # 16 vCPU, 128 GB RAM
-
-# Scale Redis
-redis_node_type = "cache.r6g.large"
-```
-
-Then: `terraform apply`
-
-## Connecting to the Instance
+## Updates
 
 ```bash
-# Via SSM (no SSH key needed, goes through private subnet)
-aws ssm start-session --target $(terraform output -raw ec2_instance_id)
-
-# Via SSH (requires bastion or VPN in private subnet)
-ssh -i nanoclaw-key.pem ubuntu@$(terraform output -raw ec2_private_ip)
+terraform plan
+terraform apply
 ```
 
-## Destroying Infrastructure
+Terraform state lives in S3 (configured in `versions.tf`); DO NOT keep it
+local. State locking via DynamoDB is enabled.
+
+## Targeted updates
+
+```bash
+# Roll only EC2
+terraform apply -target=aws_instance.nanoclaw
+
+# Roll only ECS service
+terraform apply -target=aws_ecs_service.nanoclaw_sub_agent
+
+# Bump instance type only (no IAM / SG churn)
+terraform apply -var="instance_type=r6i.xlarge" -target=aws_instance.nanoclaw
+```
+
+## Teardown
 
 ```bash
 terraform destroy
 ```
 
-> ⚠️ This deletes ALL resources including data. DynamoDB tables have point-in-time recovery enabled, but S3 objects and OpenSearch data will be permanently lost.
+Backup `nanoclaw-data-{account}` and any DynamoDB tables you want to keep
+**before** running this. See `docs/disaster-recovery.md` for backup
+procedures.
 
-## File Structure
+## Cost estimate (starter, low traffic)
 
-```
-infrastructure/terraform/
-├── versions.tf          # Provider config, backend
-├── variables.tf         # All input variables
-├── vpc.tf              # VPC, subnets, security groups, VPC endpoints
-├── ec2.tf              # EC2 instance, IAM role + policies
-├── dynamodb.tf         # 4 DynamoDB tables with TTL
-├── s3.tf               # S3 bucket with lifecycle rules
-├── redis.tf            # ElastiCache Redis cluster
-├── opensearch.tf       # OpenSearch Serverless collection
-├── ecr.tf              # ECR repositories + lifecycle policies
-├── secrets.tf          # Secrets Manager entries
-├── cloudwatch.tf       # Log groups, alarms, SNS topic
-├── outputs.tf          # All resource identifiers
-├── user-data.sh.tpl    # EC2 bootstrap script
-└── terraform.tfvars.example
-```
+| Service | ~Monthly |
+|---|---|
+| EC2 t3.xlarge | $120 |
+| ECS Fargate (1 task) | $30 |
+| ElastiCache cache.t3.micro | $12 |
+| DynamoDB on-demand | $5 |
+| OpenSearch Serverless (2 OCU min) | $350 |
+| S3 (< 10 GB) | $1 |
+| NAT Gateway | $32 |
+| Secrets Manager | $1 |
+| CloudWatch | $5 |
+| Bedrock (variable) | $50 |
+| **Total** | **≈ $610/mo** |
+
+OpenSearch Serverless is the dominant fixed cost. Self-managed OpenSearch on
+the EC2 cuts ~$350/mo at the cost of operational burden.
+
+## Common gotchas
+
+- **`aoss:APIAccessAll` is required** on both the EC2 instance role and the
+  ECS task role; missing it returns an opaque 403 from OpenSearch
+- Bedrock requires inference-profile IDs (`global.` / `apac.` prefix), not
+  bare model IDs
+- Cohere Embed v4 is the embedding default in apse1 because Titan v2 is
+  not GA there; the Python pipeline auto-selects by region
+- Sub-agent task gets `BEDROCK_LLM_MODEL_ID` injected from
+  `nanoclaw/app-config:llm_subagent_model_id` at task launch via
+  `src/cloud/container-manager/lifecycle.ts`
+
+## Related docs
+
+- `docs/AWS-DEPLOYMENT.md` — full deploy procedure
+- `docs/architecture.md` — system architecture and data flows
+- `docs/aws-resource-inventory.md` — live resource snapshot
+- `docs/SECURITY.md` — security controls
+- `docs/disaster-recovery.md` — RTO/RPO and recovery runbooks
