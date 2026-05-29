@@ -16,6 +16,7 @@ import {
     DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch';
 import { AwsSigv4Signer } from '@opensearch-project/opensearch/aws';
@@ -402,20 +403,27 @@ export class DataGateway implements IDataGateway {
 
         const indexName = this.config.openSearch.indexName;
 
+        const body: Record<string, unknown> = {
+            id: chunk.id,
+            userId,
+            docType: chunk.docType,
+            content: chunk.content,
+            contentVector: chunk.contentVector,
+            filename: chunk.filename,
+            pageNumber: chunk.pageNumber,
+            chunkIndex: chunk.chunkIndex,
+            uploadedAt: chunk.uploadedAt,
+        };
+        // R6: persist sourceUrl when present so /ingested + /forget-url can
+        // group by URL and delete by URL.
+        if (chunk.sourceUrl) {
+            body.sourceUrl = chunk.sourceUrl;
+        }
+
         await this.openSearchClient.index({
             index: indexName,
             id: chunk.id,
-            body: {
-                id: chunk.id,
-                userId,
-                docType: chunk.docType,
-                content: chunk.content,
-                contentVector: chunk.contentVector,
-                filename: chunk.filename,
-                pageNumber: chunk.pageNumber,
-                chunkIndex: chunk.chunkIndex,
-                uploadedAt: chunk.uploadedAt,
-            },
+            body,
             refresh: 'wait_for',
         });
     }
@@ -615,6 +623,103 @@ export class DataGateway implements IDataGateway {
             },
             refresh: true,
         });
+    }
+
+    /**
+     * R6: List ingested URLs for a user, ordered by most recent.
+     * Aggregates all chunks under the user where sourceUrl is set,
+     * returning unique URLs with chunk count + most recent uploadedAt.
+     */
+    async listIngestedUrls(userId: string, limit: number = 20): Promise<Array<{
+        url: string;
+        filename: string;
+        chunkCount: number;
+        uploadedAt: string;
+    }>> {
+        this.assertUserId(userId);
+        const indexName = this.config.openSearch.indexName;
+
+        const result = await this.openSearchClient.search({
+            index: indexName,
+            body: {
+                size: 0,
+                query: {
+                    bool: {
+                        filter: [
+                            { term: { userId } },
+                            { exists: { field: 'sourceUrl' } },
+                        ],
+                    },
+                },
+                aggs: {
+                    by_url: {
+                        terms: { field: 'sourceUrl', size: Math.max(1, Math.min(limit, 100)) },
+                        aggs: {
+                            latest: { max: { field: 'uploadedAt' } },
+                            sample: {
+                                top_hits: {
+                                    size: 1,
+                                    _source: ['filename', 'uploadedAt', 'sourceUrl'],
+                                    sort: [{ uploadedAt: { order: 'desc' } }],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        type Bucket = {
+            key: string;
+            doc_count: number;
+            latest?: { value_as_string?: string; value?: number };
+            sample?: { hits?: { hits?: Array<{ _source?: { filename?: string; uploadedAt?: string } }> } };
+        };
+        const r = result as { body?: { aggregations?: { by_url?: { buckets?: Bucket[] } } }; aggregations?: { by_url?: { buckets?: Bucket[] } } };
+        const body = r.body ?? r;
+        const buckets: Bucket[] = body.aggregations?.by_url?.buckets ?? [];
+        return buckets
+            .map((b) => {
+                const sample = b.sample?.hits?.hits?.[0]?._source ?? {};
+                const uploadedAt = b.latest?.value_as_string
+                    ?? sample.uploadedAt
+                    ?? new Date(b.latest?.value ?? Date.now()).toISOString();
+                return {
+                    url: b.key,
+                    filename: sample.filename ?? b.key,
+                    chunkCount: b.doc_count,
+                    uploadedAt,
+                };
+            })
+            .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    }
+
+    /**
+     * R6: Remove all chunks for a single ingested URL belonging to userId.
+     * Returns the count of chunks deleted.
+     */
+    async deleteIngestedUrl(userId: string, url: string): Promise<number> {
+        this.assertUserId(userId);
+        if (!url || typeof url !== 'string') {
+            throw new Error('DataGateway.deleteIngestedUrl: url is required');
+        }
+        const indexName = this.config.openSearch.indexName;
+        const result = await this.openSearchClient.deleteByQuery({
+            index: indexName,
+            body: {
+                query: {
+                    bool: {
+                        filter: [
+                            { term: { userId } },
+                            { term: { sourceUrl: url } },
+                        ],
+                    },
+                },
+            },
+            refresh: true,
+        });
+        const r = result as { body?: { deleted?: number }; deleted?: number };
+        return r.body?.deleted ?? r.deleted ?? 0;
     }
 
     // ── S3 operations ──
@@ -953,6 +1058,35 @@ export class DataGateway implements IDataGateway {
     }
 
     // ── Private helpers ──
+
+    /**
+     * R8: Upload a generated draft (.docx, .pptx, .txt, ...) and return a
+     * presigned GET URL valid for 1 hour. Stored under `{userId}/drafts/<filename>`.
+     */
+    async uploadDraft(userId: string, filename: string, content: Buffer | Uint8Array, contentType: string): Promise<{ key: string; url: string; bucket: string; expiresInSec: number }> {
+        this.assertUserId(userId);
+        if (!filename || /[\\/]/.test(filename) || filename.includes('..')) {
+            throw new Error('DataGateway.uploadDraft: invalid filename');
+        }
+        const key = `${userId}/drafts/${filename}`;
+        this.assertKeyBelongsToUser(userId, key, 'write');
+        const targetBucket = this.config.s3.dataBucket;
+        await this.s3Client.send(new PutObjectCommand({
+            Bucket: targetBucket,
+            Key: key,
+            Body: content,
+            ContentType: contentType,
+            ServerSideEncryption: 'AES256',
+        }));
+        const expiresInSec = 3600;
+        // Cast: presigner uses a slightly newer @smithy/types so the structural
+        // S3Client check fails despite identical runtime shape.
+        const url = await getSignedUrl(this.s3Client as unknown as Parameters<typeof getSignedUrl>[0], new GetObjectCommand({
+            Bucket: targetBucket,
+            Key: key,
+        }) as unknown as Parameters<typeof getSignedUrl>[1], { expiresIn: expiresInSec });
+        return { key, url, bucket: targetBucket, expiresInSec };
+    }
 
     /**
      * Validates that a userId is provided and non-empty.

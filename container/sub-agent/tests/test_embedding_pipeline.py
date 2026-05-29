@@ -146,10 +146,10 @@ class TestRecursiveCharacterSplitter:
 
 
 def _make_mock_bedrock_response(dimension: int = VECTOR_DIMENSION) -> dict:
-    """Create a mock Bedrock Titan Embeddings response."""
+    """Create a mock Bedrock Cohere Embed response (default in apse1)."""
     return {
-        "embedding": [0.1] * dimension,
-        "inputTextTokenCount": 10,
+        "embeddings": [[0.1] * dimension],
+        "id": "test",
     }
 
 
@@ -189,9 +189,35 @@ class TestEmbeddingPipeline:
 
         self.mock_client.invoke_model.assert_called_once()
         call_kwargs = self.mock_client.invoke_model.call_args[1]
-        assert call_kwargs["modelId"] == "amazon.titan-embed-text-v2:0"
+        # Default in ap-southeast-1 is Cohere Embed v4.
+        assert call_kwargs["modelId"] == "cohere.embed-v4:0"
         assert call_kwargs["contentType"] == "application/json"
 
+        body = json.loads(call_kwargs["body"])
+        assert body["texts"] == ["Test input"]
+        assert body["input_type"] == "search_document"
+        assert body["truncate"] == "END"
+
+    @pytest.mark.asyncio
+    async def test_embed_text_titan_in_other_region(self):
+        """Explicit Titan model id should send Titan-shaped body."""
+        # Override mock to return Titan-shaped response.
+        titan_client = MagicMock()
+
+        def invoke_titan(**kwargs):
+            body = json.dumps({"embedding": [0.2] * VECTOR_DIMENSION, "inputTextTokenCount": 5}).encode()
+            return {"body": io.BytesIO(body)}
+
+        titan_client.invoke_model = MagicMock(side_effect=invoke_titan)
+        pipeline = EmbeddingPipeline(
+            region="us-east-1",
+            model_id="amazon.titan-embed-text-v2:0",
+            boto_client=titan_client,
+        )
+        result = await pipeline.embed_text("Test input")
+        assert len(result) == VECTOR_DIMENSION
+        call_kwargs = titan_client.invoke_model.call_args[1]
+        assert call_kwargs["modelId"] == "amazon.titan-embed-text-v2:0"
         body = json.loads(call_kwargs["body"])
         assert body["inputText"] == "Test input"
         assert body["dimensions"] == VECTOR_DIMENSION

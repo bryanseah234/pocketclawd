@@ -17,8 +17,9 @@ RESPONSE_TIMEOUT = 10
 async def _dg_request(redis: Redis, user_id: str, payload: dict) -> dict | None:
     """Send a request to the data-gateway worker and await the response."""
     request_id = str(uuid_mod.uuid4())
-    payload["userId"] = user_id
-    payload["requestId"] = request_id
+    # The TS data-gateway worker reads snake_case fields (user_id, request_id).
+    payload["user_id"] = user_id
+    payload["request_id"] = request_id
     response_key = f"queue:agent:{user_id}:dg_response:{request_id}"
     await redis.lpush(DATA_GATEWAY_QUEUE, json.dumps(payload))
     result = await redis.blpop(response_key, timeout=RESPONSE_TIMEOUT)
@@ -321,10 +322,43 @@ async def handle_draft(redis: Redis, user_id: str, arg: str) -> str:  # noqa: AR
         )
         if not resp or not getattr(resp, "content", "").strip():
             return "⚠️ The model returned an empty draft — try rephrasing the topic."
-        return f"📝 *{doc_type.capitalize()} draft*\n\n{resp.content.strip()}"
+        body_md = resp.content.strip()
     except Exception as exc:  # noqa: BLE001
         logger.error("Draft failed for user_id=%s type=%s: %s", user_id, doc_type, exc)
         return f"⚠️ Could not generate the draft right now ({type(exc).__name__}). Try again later."
+
+    # Wave 11 (R8): also build a downloadable artifact and upload to S3.
+    inline = f"📝 *{doc_type.capitalize()} draft*\n\n{body_md}"
+    try:
+        import base64 as _b64
+        from src.draft_artifacts import render_artifact, make_filename
+        artifact_bytes, content_type = render_artifact(doc_type, topic, body_md)
+        filename = make_filename(doc_type, topic)
+        upload_resp = await _dg_request(
+            redis,
+            user_id,
+            {
+                "action": "upload_draft",
+                "filename": filename,
+                "content_b64": _b64.b64encode(artifact_bytes).decode("ascii"),
+                "content_type": content_type,
+            },
+        )
+        if upload_resp and upload_resp.get("success") and upload_resp.get("url"):
+            url = upload_resp["url"]
+            ext = "pptx" if doc_type == "slides" else "docx"
+            inline += (
+                f"\n\n📎 Download .{ext}: {url}\n"
+                "(link expires in 1 hour)"
+            )
+        else:
+            err = (upload_resp or {}).get("error", "no response")
+            logger.warning("Draft artifact upload failed user_id=%s: %s", user_id, err)
+            inline += "\n\n_(downloadable file unavailable right now — text version only)_"
+    except Exception as exc:  # noqa: BLE001 — never break the draft response
+        logger.error("Draft artifact rendering failed for user_id=%s: %s", user_id, exc)
+        inline += "\n\n_(downloadable file unavailable — text version only)_"
+    return inline
 
 
 async def handle_command(redis: Redis, user_id: str, content: str) -> str | None:

@@ -1,9 +1,9 @@
 """
-Embedding pipeline — Bedrock Titan Embeddings client and document chunking.
+Embedding pipeline — Bedrock embeddings client (Titan v2 / Cohere v4) and document chunking.
 
 Provides:
 - RecursiveCharacterSplitter: splits text into token-bounded chunks with overlap
-- EmbeddingPipeline: embeds text via Amazon Bedrock Titan Embeddings v2
+- EmbeddingPipeline: embeds text via Amazon Bedrock (Titan v2 in us-east-1, Cohere v4 in ap-southeast-1)
 
 Requirements: REQ-3.2
 """
@@ -11,6 +11,7 @@ Requirements: REQ-3.2
 import asyncio
 import json
 import logging
+import os
 from typing import Any
 
 import boto3
@@ -23,7 +24,25 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL_ID = "amazon.titan-embed-text-v2:0"
+# Default model resolution: env override > region default.
+# - ap-southeast-1: only Cohere Embed v4 is available.
+# - us-east-1 / others: keep Titan v2 (1024-d default but configurable to 1536).
+COHERE_MODEL_ID = "cohere.embed-v4:0"
+TITAN_MODEL_ID = "amazon.titan-embed-text-v2:0"
+
+
+def _resolve_default_model_id() -> str:
+    """Pick the right embedding model based on env / region."""
+    override = os.environ.get("BEDROCK_EMBEDDING_MODEL_ID")
+    if override:
+        return override
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or ""
+    if region == "ap-southeast-1":
+        return COHERE_MODEL_ID
+    return TITAN_MODEL_ID
+
+
+DEFAULT_MODEL_ID = _resolve_default_model_id()
 VECTOR_DIMENSION = 1536
 DEFAULT_BATCH_SIZE = 50
 
@@ -239,13 +258,23 @@ class EmbeddingPipeline:
     def __init__(
         self,
         region: str = "ap-southeast-1",
-        model_id: str = DEFAULT_MODEL_ID,
+        model_id: str | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
         boto_client: Any = None,
         splitter: RecursiveCharacterSplitter | None = None,
     ) -> None:
         self.region = region
-        self.model_id = model_id
+        # Resolve model_id: explicit arg > env override > region default.
+        if model_id is not None:
+            self.model_id = model_id
+        else:
+            override = os.environ.get("BEDROCK_EMBEDDING_MODEL_ID")
+            if override:
+                self.model_id = override
+            elif region == "ap-southeast-1":
+                self.model_id = COHERE_MODEL_ID
+            else:
+                self.model_id = TITAN_MODEL_ID
         self.batch_size = batch_size
 
         # Allow injecting a boto3 client for testing
@@ -312,25 +341,57 @@ class EmbeddingPipeline:
         )
         raise last_error  # type: ignore[misc]
 
-    async def embed_text(self, text: str) -> list[float]:
-        """
-        Embed a single text string into a 1536-dimension vector.
-
-        Args:
-            text: Input text to embed.
-
-        Returns:
-            List of 1536 floats representing the embedding vector.
-        """
-        body = {
+    def _build_request_body(self, text: str) -> dict[str, Any]:
+        """Build the model-specific InvokeModel body."""
+        mid = self.model_id.lower()
+        if "cohere" in mid:
+            # Cohere Embed v3/v4 schema. Truncate=END handles oversize.
+            return {
+                "texts": [text],
+                "input_type": "search_document",
+                "truncate": "END",
+            }
+        # Default to Titan Embeddings v2 schema.
+        return {
             "inputText": text,
             "dimensions": VECTOR_DIMENSION,
             "normalize": True,
         }
 
+    def _parse_response(self, response: dict[str, Any]) -> list[float]:
+        """Extract a single embedding vector from the model-specific response."""
+        # Cohere: { "embeddings": [[...]] } or { "embeddings": {"float": [[...]]} }
+        if "embeddings" in response:
+            embs = response["embeddings"]
+            if isinstance(embs, dict):
+                # v4 shape with explicit dtype keys
+                for key in ("float", "float32", "int8", "uint8", "binary", "ubinary"):
+                    if key in embs and embs[key]:
+                        return list(embs[key][0])
+            if isinstance(embs, list) and embs:
+                return list(embs[0])
+        # Titan: { "embedding": [...] }
+        if "embedding" in response:
+            return list(response["embedding"])
+        raise ValueError(f"Unrecognised embedding response shape: keys={list(response.keys())}")
+
+    async def embed_text(self, text: str) -> list[float]:
+        """
+        Embed a single text string into an embedding vector.
+
+        Vector dimension depends on the active model:
+        - Titan v2: 1536 (configurable)
+        - Cohere Embed v4: 1536 (default for embed-v4:0)
+
+        Args:
+            text: Input text to embed.
+
+        Returns:
+            List of floats representing the embedding vector.
+        """
+        body = self._build_request_body(text)
         response = await self._invoke_with_retry(body)
-        embedding: list[float] = response["embedding"]
-        return embedding
+        return self._parse_response(response)
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """

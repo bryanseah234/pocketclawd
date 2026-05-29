@@ -123,6 +123,18 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
                 await handleDeleteUserDocuments(services, userId, request);
                 break;
 
+            case 'list_ingested_urls':
+                await handleListIngestedUrls(services, userId, requestId, request);
+                break;
+
+            case 'delete_ingested_url':
+                await handleDeleteIngestedUrl(services, userId, requestId, request);
+                break;
+
+            case 'upload_draft':
+                await handleUploadDraft(services, userId, requestId, request);
+                break;
+
             case 'get_file':
                 await handleGetFile(services, userId, requestId, request);
                 break;
@@ -444,4 +456,93 @@ async function handlePutChatMessage(
         content: message.content,
         timestamp: message.timestamp,
     });
+}
+
+async function handleListIngestedUrls(
+    services: CloudServices,
+    userId: string,
+    requestId: string | undefined,
+    request: Record<string, unknown>,
+): Promise<void> {
+    const limit = (request.limit as number) || 20;
+    let urls: Array<{ url: string; filename: string; chunkCount: number; uploadedAt: string }> = [];
+    try {
+        urls = await services.dataGateway.listIngestedUrls(userId, limit);
+    } catch (err) {
+        log.error('list_ingested_urls failed', { userId, err });
+        if (requestId) {
+            const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+            await services.redis.lpush(responseKey, JSON.stringify({ success: false, error: (err as Error).message }));
+            await services.redis.expire(responseKey, 60);
+        }
+        return;
+    }
+    if (requestId) {
+        const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+        await services.redis.lpush(responseKey, JSON.stringify({ success: true, urls }));
+        await services.redis.expire(responseKey, 60);
+    }
+}
+
+async function handleDeleteIngestedUrl(
+    services: CloudServices,
+    userId: string,
+    requestId: string | undefined,
+    request: Record<string, unknown>,
+): Promise<void> {
+    const url = request.url as string;
+    let deleted = 0;
+    try {
+        deleted = await services.dataGateway.deleteIngestedUrl(userId, url);
+        log.info('Deleted ingested URL', { userId, url, deleted });
+    } catch (err) {
+        log.error('delete_ingested_url failed', { userId, url, err });
+        if (requestId) {
+            const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+            await services.redis.lpush(responseKey, JSON.stringify({ success: false, error: (err as Error).message }));
+            await services.redis.expire(responseKey, 60);
+        }
+        return;
+    }
+    if (requestId) {
+        const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+        await services.redis.lpush(responseKey, JSON.stringify({ success: true, deleted }));
+        await services.redis.expire(responseKey, 60);
+    }
+}
+
+async function handleUploadDraft(
+    services: CloudServices,
+    userId: string,
+    requestId: string | undefined,
+    request: Record<string, unknown>,
+): Promise<void> {
+    const filename = request.filename as string;
+    const contentB64 = request.content_b64 as string;
+    const contentType = (request.content_type as string) || 'application/octet-stream';
+    if (!filename || !contentB64) {
+        if (requestId) {
+            const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+            await services.redis.lpush(responseKey, JSON.stringify({ success: false, error: 'filename and content_b64 are required' }));
+            await services.redis.expire(responseKey, 60);
+        }
+        return;
+    }
+    try {
+        const buf = Buffer.from(contentB64, 'base64');
+        const result = await services.dataGateway.uploadDraft(userId, filename, buf, contentType);
+        log.info('Uploaded draft', { userId, key: result.key, size: buf.length });
+        if (requestId) {
+            const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+            await services.redis.lpush(responseKey, JSON.stringify({ success: true, ...result }));
+            await services.redis.expire(responseKey, 60);
+        }
+    } catch (err) {
+        log.error('upload_draft failed', { userId, filename, err });
+        if (requestId) {
+            const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+            await services.redis.lpush(responseKey, JSON.stringify({ success: false, error: (err as Error).message }));
+            await services.redis.expire(responseKey, 60);
+        }
+    }
 }

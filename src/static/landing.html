@@ -520,9 +520,26 @@
         }
     
         /* ─── Section heading centering ─────────────────────── */
+        /* H2 takes only the width of its text (max-content) so the
+           .highlight-swipe::after pseudo (absolute, left:-4px right:-4px)
+           hugs the text correctly, and the H2 box itself is centered
+           via auto margins. */
         .section-heading {
-            text-align: center;
+            display: block;
+            width: -moz-max-content;
+            width: max-content;
+            max-width: 100%;
+            margin-left: auto;
+            margin-right: auto;
             margin-bottom: 2rem;
+            text-align: center;
+        }
+        /* .highlight-swipe sets display:inline globally; reassert block
+           specifically when paired with .section-heading so auto margins
+           apply for centering. */
+        h2.section-heading.highlight-swipe,
+        .section-heading.highlight-swipe {
+            display: block;
         }
 
         .section-heading::after {

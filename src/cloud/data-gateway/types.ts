@@ -51,11 +51,13 @@ export interface DocumentChunk {
     id: string;
     docType: string;
     content: string;
-    contentVector: number[]; // 1536 dimensions
+    contentVector: number[]; // 1024 (Cohere) or 1536 (Titan) dimensions
     filename: string;
     pageNumber: number;
     chunkIndex: number;
     uploadedAt: string; // ISO 8601
+    /** Source URL when chunk came from URL ingestion (R6: /ingested, /forget-url). */
+    sourceUrl?: string;
 }
 
 export interface SearchResult {
