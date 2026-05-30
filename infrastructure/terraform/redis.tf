@@ -28,9 +28,6 @@ resource "aws_elasticache_subnet_group" "redis" {
     Name = "${var.project_name}-redis-subnet"
   }
 
-  lifecycle {
-    ignore_changes = [subnet_ids]
-  }
 }
 
 # -- Legacy standalone cluster (kept until cutover) --------------------------

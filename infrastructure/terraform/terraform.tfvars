@@ -4,7 +4,7 @@
 
 # ─── Compute ─────────────────────────────────────────────────────────────────
 key_pair_name = "nanoclaw-key"
-instance_type = "t3.xlarge" # mirrors LIVE (r6i.4xlarge upsize deferred to a deliberate apply)
+instance_type = "r6i.4xlarge" # PRODUCTION TARGET (upsize now)
 
 # ─── Access Control ──────────────────────────────────────────────────────────
 admin_ssh_cidrs   = ["0.0.0.0/0"] # mirrors LIVE (open SSH); SHOULD be restricted — see Q-stack
@@ -17,7 +17,7 @@ public_subnet_cidr  = "10.0.1.0/24"
 private_subnet_cidr = "10.0.2.0/24"
 
 # ─── ElastiCache Redis ───────────────────────────────────────────────────────
-redis_node_type       = "cache.t3.micro" # mirrors LIVE (r6g.large upsize deferred to a deliberate apply)
+redis_node_type       = "cache.r6g.large" # PRODUCTION TARGET (upsize now)
 redis_num_cache_nodes = 1
 
 # ─── DynamoDB ────────────────────────────────────────────────────────────────
