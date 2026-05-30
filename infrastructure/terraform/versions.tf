@@ -19,7 +19,7 @@ terraform {
     bucket         = "nanoclaw-tfstate-709609992277"
     key            = "infrastructure/terraform.tfstate"
     region         = "ap-southeast-1"
-    dynamodb_table = "nanoclaw-terraform-locks"
+    use_lockfile   = true # S3-native conditional-write locking (replaces deprecated dynamodb_table)
     encrypt        = true
   }
 }
