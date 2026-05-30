@@ -230,6 +230,7 @@ async function main(): Promise<void> {
           status: 'ok',
           timestamp: new Date().toISOString(),
           version: process.env.npm_package_version ?? 'unknown',
+          deployedAt: process.env.DEPLOY_TIMESTAMP ?? 'unknown',
           mode: isCloudMode() ? 'cloud' : 'local',
         };
         if (services?.healthCheck) {
@@ -620,4 +621,5 @@ main().catch((err) => {
   log.fatal('Startup failed', { err });
   process.exit(1);
 });
+
 

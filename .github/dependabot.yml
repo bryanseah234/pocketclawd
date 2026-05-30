@@ -29,3 +29,13 @@ updates:
       terraform-providers:
         patterns:
           - "*"
+
+  - package-ecosystem: "pip"
+    directory: "/container/sub-agent"
+    schedule:
+      interval: "weekly"
+    target-branch: "main"
+    groups:
+      pip-dependencies:
+        patterns:
+          - "*"

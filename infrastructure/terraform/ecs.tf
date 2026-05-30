@@ -204,6 +204,15 @@ resource "aws_ecs_task_definition" "sub_agent" {
   execution_role_arn       = aws_iam_role.sub_agent_execution.arn
   task_role_arn            = aws_iam_role.sub_agent_task.arn
 
+  # Ephemeral writable volumes required because readonlyRootFilesystem=true.
+  # Fargate provides these from the task's ephemeral storage (no EFS needed).
+  volume {
+    name = "app-data"
+  }
+  volume {
+    name = "tmp"
+  }
+
   container_definitions = jsonencode([{
     name      = "sub-agent"
     image     = "${aws_ecr_repository.agent.repository_url}:feature-latest"
@@ -237,6 +246,16 @@ resource "aws_ecs_task_definition" "sub_agent" {
       startPeriod = 60
     }
 
+    # Harden: immutable root filesystem. Writable paths are explicit Fargate
+    # ephemeral volumes (circuit-breaker state under /app/data, Python/OCR
+    # scratch under /tmp). Fargate supports readonlyRootFilesystem.
+    readonlyRootFilesystem = true
+
+    mountPoints = [
+      { sourceVolume = "app-data", containerPath = "/app/data", readOnly = false },
+      { sourceVolume = "tmp",      containerPath = "/tmp",      readOnly = false },
+    ]
+
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -246,8 +265,7 @@ resource "aws_ecs_task_definition" "sub_agent" {
       }
     }
 
-    readonlyRootFilesystem = false
-    user                   = "1000:1000"
+    user                   = "1001:1001"
   }])
 
   tags = {
@@ -374,4 +392,6 @@ resource "aws_appautoscaling_policy" "sub_agent_cpu" {
     }
   }
 }
+
+
 

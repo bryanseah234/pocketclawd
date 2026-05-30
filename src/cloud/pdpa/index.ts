@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 /**
 
  * PDPA Compliance Commands Module.
@@ -486,5 +484,6 @@ export function clearPendingState(): void {
     pendingConsent.clear();
 
 }
+
 
 
