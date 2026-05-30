@@ -99,16 +99,50 @@ async function runWikiRegen(): Promise<void> {
 async function runMnemonGc(): Promise<void> {
   await audit('CRON | mnemon-gc START');
   try {
-    // Suggest-mode: surface low-importance candidates so we have visibility
-    // into store growth without auto-deleting. If/when we want enforcement,
-    // we can iterate this list and call `kb.forget(id)` for items past a
-    // retention threshold (by age, access_count, or both). For now: log
-    // the candidate count to audit so we can size the problem before
-    // designing a policy.
     const kb = await getKnowledgeBase();
-    const candidates = await kb.lowImportance(0.5, 50);
+
+    // Tunables (env-overridable). Defaults are conservative.
+    const threshold = Number(process.env.MNEMON_GC_THRESHOLD ?? '0.5');
+    const scanLimit = Number(process.env.MNEMON_GC_SCAN_LIMIT ?? '50');
+    // Cap deletions per run so a misconfigured threshold can't wipe the store
+    // in a single pass — bounded blast radius.
+    const maxEvict = Number(process.env.MNEMON_GC_MAX_EVICT ?? '25');
+    const autoEvict = (process.env.MNEMON_GC_AUTO_EVICT ?? 'false') === 'true';
+
+    const candidates = await kb.lowImportance(threshold, scanLimit);
+
+    if (!autoEvict) {
+      // Suggest-mode (default): surface candidates without deleting, so we
+      // have visibility into store growth before enabling enforcement.
+      await audit(
+        `CRON | mnemon-gc END | mode=suggest candidates=${candidates.length} threshold=${threshold}`,
+      );
+      return;
+    }
+
+    // Enforcement mode: evict the lowest-importance candidates, bounded by
+    // maxEvict. Failures on individual items are logged but don't abort the
+    // run (best-effort GC).
+    const toEvict = candidates.slice(0, maxEvict);
+    let evicted = 0;
+    const failures: string[] = [];
+    for (const item of toEvict) {
+      if (typeof item.id !== 'number') {
+        // No stable id — cannot forget; skip (suggest-only for this item).
+        continue;
+      }
+      try {
+        await kb.forget(item.id);
+        evicted++;
+      } catch (e) {
+        failures.push(`${item.id}:${(e as Error).message}`);
+      }
+    }
     await audit(
-      `CRON | mnemon-gc END | candidates=${candidates.length}`,
+      `CRON | mnemon-gc END | mode=evict candidates=${candidates.length} ` +
+      `evicted=${evicted} failed=${failures.length} ` +
+      `threshold=${threshold} maxEvict=${maxEvict}` +
+      (failures.length ? ` | failures=${failures.slice(0, 5).join(',')}` : ''),
     );
   } catch (e) {
     await audit(`CRON | mnemon-gc FAIL | ${(e as Error).message}`);
