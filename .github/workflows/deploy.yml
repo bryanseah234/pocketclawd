@@ -342,3 +342,27 @@ jobs:
             --type String --overwrite
 
           exit 1
+
+  # ─── t6-45: k6 Post-Deploy Smoke Test (Production, main only) ───────────
+  k6-smoke:
+    name: k6 Smoke Test (Production)
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 smoke test against production
+        env:
+          TARGET_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
+        run: |
+          if [ -z "${TARGET_URL}" ]; then
+            echo "::error::PRODUCTION_HEALTH_URL secret is not set"
+            exit 1
+          fi
+          # k6 exits non-zero if any threshold (p95<5s, error rate<1%) fails,
+          # which fails the job and surfaces a post-deploy regression.
+          k6 run tests/load/k6-smoke.js
