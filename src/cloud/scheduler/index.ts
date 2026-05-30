@@ -59,6 +59,11 @@ export class SchedulerService implements ISchedulerService {
     /**
      * Tracks which users have already been notified today to prevent
      * duplicate notifications within the same day.
+     *
+     * WARNING: In-process state — lost on orchestrator restart. If the orchestrator
+     * restarts during the 09:00 window, users may receive duplicate notifications.
+     * TODO: Persist to Redis (SET nanoclaw:notified:{userId}:{date} EX 86400) for
+     * idempotent cross-restart deduplication.
      */
     private notifiedToday: Map<string, UserNotificationState> = new Map();
 
@@ -265,3 +270,4 @@ export class SchedulerService implements ISchedulerService {
         return formatter.format(date);
     }
 }
+

@@ -60,3 +60,6 @@ infrastructure/
 .omo/
 .markdownlint.jsonc
 commitlint.config.cjs
+
+# WhatsApp session state (managed via S3, never in image)
+store/

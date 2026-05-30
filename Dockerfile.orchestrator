@@ -5,7 +5,7 @@
 # ==============================================================================
 # Stage 1: Install dependencies
 # ==============================================================================
-FROM public.ecr.aws/docker/library/node:20-alpine AS deps
+FROM public.ecr.aws/docker/library/node:22-alpine AS deps
 
 # Build tools needed for native modules (better-sqlite3, etc.)
 RUN apk add --no-cache python3 make g++
@@ -23,7 +23,7 @@ RUN pnpm install --frozen-lockfile
 # ==============================================================================
 # Stage 2: Build TypeScript
 # ==============================================================================
-FROM public.ecr.aws/docker/library/node:20-alpine AS build
+FROM public.ecr.aws/docker/library/node:22-alpine AS build
 
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
@@ -91,3 +91,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # tini as PID 1 for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/index.js"]
+

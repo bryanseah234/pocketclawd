@@ -218,6 +218,9 @@ resource "aws_ecs_task_definition" "sub_agent" {
       { name = "OPENSEARCH_COLLECTION", value = aws_opensearchserverless_collection.documents.name },
       { name = "ASSISTANT_NAME", value = "Clawd" },
       { name = "PYTHONUNBUFFERED", value = "1" },
+      # Model IDs for sub-agent Bedrock calls (Sonnet 4.5 for both LLM and embeddings)
+      { name = "BEDROCK_LLM_MODEL_ID", value = "global.anthropic.claude-sonnet-4-5-20250929-v1:0" },
+      { name = "BEDROCK_EMBEDDING_MODEL_ID", value = "cohere.embed-v4:0" },
     ]
 
     portMappings = [{
@@ -258,7 +261,7 @@ resource "aws_ecs_service" "sub_agent" {
   name            = "${var.project_name}-sub-agent"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.sub_agent.arn
-  desired_count   = 1
+  desired_count   = 2 # Minimum 2 for high availability
   launch_type     = "FARGATE"
 
   deployment_minimum_healthy_percent = 100
@@ -338,3 +341,37 @@ output "ecs_sub_agent_log_group" {
   value       = aws_cloudwatch_log_group.sub_agent.name
   description = "CloudWatch log group for sub-agent task logs"
 }
+
+
+
+# ── ECS Auto-scaling ─────────────────────────────────────────────────────────
+# Scale the sub-agent between 2 and 10 tasks based on CPU utilization.
+# This handles burst load (viral WhatsApp group messages) without requiring
+# manual intervention.
+
+resource "aws_appautoscaling_target" "sub_agent" {
+  max_capacity       = 10
+  min_capacity       = 2
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.sub_agent.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "sub_agent_cpu" {
+  name               = "${var.project_name}-sub-agent-cpu-scaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.sub_agent.resource_id
+  scalable_dimension = aws_appautoscaling_target.sub_agent.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.sub_agent.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = 70.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
+}
+

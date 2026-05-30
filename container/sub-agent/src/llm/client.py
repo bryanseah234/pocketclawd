@@ -19,19 +19,81 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 # Defaults per PRD §8.1.1
-DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-DEFAULT_MAX_TOKENS = 4096
+DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_MAX_TOKENS = 800  # WA messages should be concise; reduces latency
 DEFAULT_TEMPERATURE = 0.5
 
-SYSTEM_PROMPT = (
-    "You are Clawd, an AI assistant helping users through WhatsApp. "
-    "Keep responses concise and under 500 words unless detailed explanations are requested. "
-    "Always cite sources when using information from retrieved documents using the format "
-    "Source: filename.pdf, page X. "
-    "If the retrieved information does not contain the answer, clearly state that you could not find the information. "
-    "Never make up facts or cite documents that were not actually retrieved. "
-    "Use bullet points for lists and numbered lists for sequences."
-)
+_PERSONA_CANDIDATES = [
+    "/app/persona/system_prompt_template.json",
+    os.path.join(os.path.dirname(__file__), "../../../persona/system_prompt_template.json"),
+]
+
+_SECTION_ORDER = [
+    "identity", "voice", "formatting", "memory", "capabilities",
+    "knowledgeBase", "photos", "guardrails", "confidence",
+    "interactionStyle", "namingDiscipline",
+]
+
+_HONESTY_ADDENDUM = """
+
+## Live Web Access
+You have a `web_search` tool. USE IT proactively:
+- Any question about events, news, prices, or facts that may be after early 2025 → call web_search FIRST, then answer
+- "trump 2026", "latest...", "today's...", "current...", "happened recently" → ALWAYS web_search
+- Weather for a city → call get_weather
+- Currency conversion → call convert_currency
+- Stock/crypto price → call get_stock_price or get_crypto_price
+- Singapore PSI/weather → call get_sg_weather or get_sg_psi
+- Someone pastes a URL → call fetch_url to read it
+Do NOT say "I can't browse the web" — you CAN. Just call the tool.
+
+## What You Genuinely Cannot Do Yet
+- Calendar / email: not connected. Say "coming soon".
+- If a tool call fails, say so plainly and offer to try differently.
+"""
+
+
+def _load_system_prompt() -> str:
+    """Load persona JSON and assemble system prompt. Falls back to minimal prompt."""
+    import re as _re
+    for path in _PERSONA_CANDIDATES:
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.loads(f.read())
+            sections = data.get("sections", {})
+            parts = []
+            for key in _SECTION_ORDER:
+                v = sections.get(key, "")
+                if isinstance(v, str) and v.strip():
+                    heading = _re.sub(r"([A-Z])", r" \1", key).strip().title()
+                    parts.append(f"## {heading}\n{v.strip()}")
+            examples = sections.get("examples", [])
+            if examples:
+                ex_lines = ["## Examples"]
+                for e in examples:
+                    if e.get("input") and e.get("good"):
+                        line = f"User: {e['input']}\nGood: {e['good']}"
+                        if e.get("bad"):
+                            line += f"\nBad (avoid): {e['bad']}"
+                        ex_lines.append(line)
+                parts.append("\n\n".join(ex_lines))
+            prompt = "\n\n".join(parts) + _HONESTY_ADDENDUM
+            logger.info("Persona loaded from %s (%d chars)", path, len(prompt))
+            return prompt
+        except Exception as exc:
+            logger.warning("Failed to load persona from %s: %s", path, exc)
+
+    logger.warning("No persona JSON found — using minimal fallback prompt")
+    return (
+        "You are Clawd, a warm personal AI assistant on WhatsApp. Be concise, match the user's energy. "
+        "Singapore-friendly — match light Singlish when the user uses it. Never say 'As an AI...'. "
+        "You cannot browse live web or check current news — say so plainly." + _HONESTY_ADDENDUM
+    )
+
+
+SYSTEM_PROMPT = _load_system_prompt()
 
 
 class BedrockClaude:
@@ -66,20 +128,18 @@ class BedrockClaude:
         rag_context: str | None = None,
         system_prompt: str | None = None,
         temperature: float | None = None,
+        user_profile: dict | None = None,
     ) -> str:
         """
-        Generate a response using Bedrock Claude.
+        Generate a response using Bedrock Claude with tool-use support.
 
-        Args:
-            user_message: The current user message.
-            history: Previous conversation messages [{"role": "user"|"assistant", "content": "..."}]
-            rag_context: Retrieved document context to inject before the user message.
-            system_prompt: Override the default system prompt.
-            temperature: Override the default temperature.
-
-        Returns:
-            The assistant's response text.
+        Runs a multi-turn tool-use loop: if the model requests a tool call,
+        we execute the tool and feed the result back, up to MAX_TOOL_TURNS.
         """
+        from src.tools import TOOL_DEFINITIONS, dispatch_tool
+
+        MAX_TOOL_TURNS = 6  # safety cap on tool call chain depth
+
         messages: list[dict[str, Any]] = []
 
         # Add conversation history (last 30 messages max)
@@ -91,7 +151,9 @@ class BedrockClaude:
                 })
 
         # Build the current user message with optional RAG context
-        user_content = ""
+        from datetime import datetime, timezone as _tz
+        _now = datetime.now(_tz.utc).strftime("%Y-%m-%d %H:%M UTC")
+        user_content = f"[Current date/time: {_now}]\n\n"
         if rag_context:
             user_content += f"<context>\n{rag_context}\n</context>\n\n"
         user_content += user_message
@@ -101,34 +163,114 @@ class BedrockClaude:
             "content": [{"text": user_content}],
         })
 
-        # Build the request
-        request_body: dict[str, Any] = {
-            "modelId": self.model_id,
-            "messages": messages,
-            "inferenceConfig": {
-                "maxTokens": self.max_tokens,
-                "temperature": temperature or self.temperature,
-            },
+        prompt = system_prompt or SYSTEM_PROMPT
+
+        # Inject user profile so the model addresses them correctly
+        if user_profile:
+            name = user_profile.get("display_name") or user_profile.get("name", "")
+            use_case = user_profile.get("use_case", "")
+            style = user_profile.get("reply_style") or user_profile.get("replyStyle", "")
+            tech_depth = user_profile.get("technical_depth", "")
+            profile_lines = []
+            if name:
+                profile_lines.append(f"The user's name is {name}. Address them by name occasionally.")
+            if use_case:
+                profile_lines.append(f"Their primary use case: {use_case}.")
+            if style == "short":
+                profile_lines.append("They prefer SHORT replies — be punchy, 1-3 sentences unless detail is needed.")
+            elif style == "detailed":
+                profile_lines.append("They prefer DETAILED replies — give full context and steps.")
+            if tech_depth == "high-level":
+                profile_lines.append("Keep explanations high-level, no jargon.")
+            elif tech_depth == "detailed":
+                profile_lines.append("They're technical — go deep on implementation details.")
+            if profile_lines:
+                prompt += "\n\n## User Profile\n" + "\n".join(profile_lines)
+
+        # Reinforce tool use + formatting + follow-up rules
+        prompt += (
+            "\n\n## Tool Use Rules (MANDATORY)\n"
+            "You MUST call tools for LIVE/REAL-TIME data. Do NOT call tools for stable facts.\n"
+            "CALL a tool for: current weather, live prices, recent news/events (post early 2025), currency rates, user-pasted URLs.\n"
+            "DO NOT call web_search for: who someone is, historical facts, general knowledge, definitions, well-known laws/science.\n"
+            "- Weather/forecast → get_weather or get_sg_weather\n"
+            "- Currency conversion → convert_currency\n"
+            "- Crypto/stock CURRENT price → get_crypto_price or get_stock_price\n"
+            "- News or events after early 2025 → web_search\n"
+            "- Singapore PSI/haze → get_sg_psi\n"
+            "- User sends a URL → fetch_url\n"
+            "Rule: if you ALREADY KNOW the answer with high confidence (stable facts like PM names, capitals, laws, math) → answer directly WITHOUT any tool call."
+            "\n\n## Response Format Rules\n"
+            "1. Answer first — direct, clear, no preamble.\n"
+            "2. If the answer came from a document (context blocks provided), end with:\n"
+            "   _Sources: [filename, page X]_ on its own line.\n"
+            "3. If the answer came from a web_search tool call, end with:\n"
+            "   _Via web search_\n"
+            "4. End EVERY response with exactly one brief follow-up question OR a yes/no prompt\n"
+            "   that moves the conversation forward. Keep it to one short sentence.\n"
+            "   Examples: 'Want more detail?' / 'Anything else?' / 'Want me to set a reminder?'\n"
+            "5. WhatsApp formatting: *bold* for key terms, _italics_ for sources/asides.\n"
+            "   No markdown headers (##). No bullet walls — max 4 bullets.\n"
+            "6. Never say 'As an AI', 'I cannot', 'I'm unable'. Just do it or offer an alternative."
+        )
+        inference_cfg: dict[str, Any] = {
+            "maxTokens": self.max_tokens,
+            "temperature": temperature or self.temperature,
         }
 
-        # Add system prompt
-        prompt = system_prompt or SYSTEM_PROMPT
-        request_body["system"] = [{"text": prompt}]
+        for _turn in range(MAX_TOOL_TURNS):
+            request_body: dict[str, Any] = {
+                "modelId": self.model_id,
+                "messages": messages,
+                "inferenceConfig": inference_cfg,
+                "system": [{"text": prompt}],
+                "toolConfig": {"tools": TOOL_DEFINITIONS},
+            }
 
-        # Invoke with retry
-        response = await self._invoke_with_retry(request_body)
+            response = await self._invoke_with_retry(request_body)
+            stop_reason = response.get("stopReason", "")
+            output_msg = response.get("output", {}).get("message", {})
+            content_blocks = output_msg.get("content", [])
 
-        # Extract response text
-        output = response.get("output", {})
-        message = output.get("message", {})
-        content_blocks = message.get("content", [])
+            if stop_reason == "tool_use":
+                # Append assistant's tool-use request to messages
+                messages.append({"role": "assistant", "content": content_blocks})
 
+                # Execute all requested tools and collect results
+                tool_results = []
+                for block in content_blocks:
+                    if "toolUse" not in block:
+                        continue
+                    tool_id = block["toolUse"]["toolUseId"]
+                    tool_name = block["toolUse"]["name"]
+                    tool_input = block["toolUse"]["input"]
+                    logger.info("Tool call: %s %s", tool_name, tool_input)
+                    result_text = await dispatch_tool(tool_name, tool_input)
+                    tool_results.append({
+                        "toolResult": {
+                            "toolUseId": tool_id,
+                            "content": [{"text": result_text}],
+                            "status": "success",
+                        }
+                    })
+
+                # Feed tool results back
+                messages.append({"role": "user", "content": tool_results})
+                continue  # next turn — model will now answer with tool results
+
+            # end_turn or max_tokens — extract final text
+            response_text = ""
+            for block in content_blocks:
+                if "text" in block:
+                    response_text += block["text"]
+            return response_text.strip()
+
+        # Exceeded MAX_TOOL_TURNS — extract whatever text we have
         response_text = ""
         for block in content_blocks:
             if "text" in block:
                 response_text += block["text"]
-
-        return response_text.strip()
+        return response_text.strip() or "Sorry, I ran into an issue processing that. Try again."
 
     async def _invoke_with_retry(self, request_body: dict[str, Any]) -> dict[str, Any]:
         """Invoke Bedrock Converse API with exponential backoff retry."""
@@ -163,3 +305,4 @@ class BedrockClaude:
                 await asyncio.sleep(backoff)
 
         raise last_error  # type: ignore[misc]
+

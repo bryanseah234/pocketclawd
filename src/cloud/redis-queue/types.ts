@@ -14,6 +14,10 @@ export interface QueueMessage {
     payload: Record<string, unknown>;
     timestamp: string; // ISO 8601
     retryCount?: number;
+    /** Trace ID propagated across orchestrator → Redis → sub-agent → response
+     *  for cross-service log correlation. Set at enqueue time from the inbound
+     *  message ID; emitted at every log call in both orchestrator and sub-agent. */
+    traceId?: string;
 }
 
 export interface AgentResponse {
@@ -22,6 +26,8 @@ export interface AgentResponse {
     type: string;
     payload: Record<string, unknown>;
     timestamp: string; // ISO 8601
+    /** Echoed from the originating QueueMessage.traceId for log correlation. */
+    traceId?: string;
 }
 
 export interface DLQEntry {
@@ -64,3 +70,4 @@ export interface IMessageQueue {
     getQueueDepth(userId: string): Promise<number>;
     isBackpressured(userId: string): Promise<boolean>;
 }
+

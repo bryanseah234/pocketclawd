@@ -40,6 +40,15 @@ const SCHEDULES = [
 
 const driverInterval = 60 * 1000; // poll every minute
 let driverTimer: NodeJS.Timeout | null = null;
+/**
+ * TODO (improvement #19): Persist lastRun to DynamoDB or Redis so cron jobs
+ * are idempotent across orchestrator restarts. Use a distributed lock pattern
+ * (Redis SETNX with 30-min TTL) to prevent double-execution if the orchestrator
+ * restarts within the same cron window.
+ *
+ * Current risk: if the orchestrator restarts at 02:59, cloud-ingest runs again
+ * at 03:00 (lastRun Map is empty for the new process), potentially double-ingesting.
+ */
 const lastRun = new Map<string, number>();
 
 async function audit(line: string): Promise<void> {
@@ -283,3 +292,4 @@ export function stopClawdCron(): void {
 
 // Self-register on import — same pattern as other modules in this folder.
 startClawdCron();
+

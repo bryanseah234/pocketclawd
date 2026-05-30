@@ -1,6 +1,14 @@
 /**
  * Cloud-mode WhatsApp responder.
  *
+ * @deprecated DIRECT BYPASS PATH — use only as a fallback when the ECS sub-agent
+ * service is unavailable. The canonical path is orchestrator → Redis queue →
+ * ECS sub-agent → Redis response queue → orchestrator delivery.
+ *
+ * When the ECS sub-agent service is confirmed healthy and handling all messages,
+ * this module should be disabled by setting CLOUD_RESPONDER_ENABLED=false and
+ * eventually removed. Keeping it active alongside the sub-agent risks double-replies.
+ *
  * Direct-path responder used until the sub-agent ECS service is live.
  * Loads persona from `container/sub-agent/src/persona/system_prompt_template.json`
  * (mounted into the orchestrator image at `/app/persona/system_prompt_template.json`).
@@ -22,7 +30,7 @@ import { log as baseLog } from './log.js';
 const log = baseLog;
 
 const REGION = process.env.AWS_REGION ?? 'ap-southeast-1';
-const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0';
+const MODEL_ID = process.env.BEDROCK_MODEL_ID ?? 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
 const MESSAGES_TABLE = process.env.MESSAGES_TABLE ?? 'nanoclaw-chat-messages';
 const HISTORY_LIMIT = 20;
 const ASSISTANT_NAME = process.env.ASSISTANT_NAME || 'Clawd';
@@ -250,3 +258,5 @@ export async function respondToDM(
     }
   }
 }
+
+

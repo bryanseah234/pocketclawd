@@ -1,6 +1,13 @@
 """
 Redis-based sliding window rate limiter for the NanoClaw sub-agent.
 Per-user: 20 messages/min. Global: 200 messages/hr.
+
+NOTE: This is a SECONDARY (advisory) rate limiter inside the sub-agent.
+PRIMARY rate limiting is enforced by the TypeScript orchestrator
+(src/cloud/rate-limiter/index.ts) BEFORE messages are enqueued to Redis.
+Duplicate implementation kept intentionally as a defense-in-depth layer,
+but these two limiters use DIFFERENT Redis key namespaces and are not
+coordinated. Do not rely on this as the sole rate limit enforcement.
 """
 import logging
 import time
@@ -70,3 +77,4 @@ class RateLimiter:
             "messages_last_minute": results[0],
             "messages_last_hour": results[1],
         }
+

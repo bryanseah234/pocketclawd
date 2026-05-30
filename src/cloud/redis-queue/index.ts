@@ -28,6 +28,20 @@ const MAX_DLQ_RETRIES = 3;
 /** Backpressure threshold: reject new messages when queue depth exceeds this. */
 const BACKPRESSURE_THRESHOLD = 100;
 
+/**
+ * TODO (improvement #14): Replace Redis Lists (LPUSH/BRPOP) with Redis Streams
+ * (XADD/XREADGROUP/XACK) for at-least-once delivery semantics.
+ *
+ * Current risk: if a sub-agent task is killed between BRPOP (message removed from
+ * queue) and LPUSH to response queue (message not yet processed), the message is
+ * permanently lost — it is not in the queue and not in the DLQ.
+ *
+ * Redis Streams give consumer group semantics: unacknowledged messages remain in
+ * the Pending Entries List (PEL) and can be re-delivered on XAUTOCLAIM after a
+ * visibility timeout (e.g. 5 minutes). The consumer calls XACK only after
+ * successfully pushing the response.
+ */
+
 export class MessageQueue implements IMessageQueue {
     private redis: Redis | null = null;
     private blockingRedis: Redis | null = null;
@@ -261,3 +275,4 @@ export class MessageQueue implements IMessageQueue {
         }
     }
 }
+

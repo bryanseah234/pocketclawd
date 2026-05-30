@@ -15,6 +15,7 @@ import { backfillContainerConfigs } from './backfill-container-configs.js';
 import { DATA_DIR } from './config.js';
 import { enforceStartupBackoff, resetCircuitBreaker } from './circuit-breaker.js';
 import { migrateGroupsToClaudeLocal } from './claude-md-compose.js';
+import { ensureContainer } from './cloud/container-manager/lifecycle.js';
 import {
   isCloudMode,
   bootstrapCloudServices,
@@ -224,9 +225,33 @@ async function main(): Promise<void> {
       }
 
       if (req.url === '/health' && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+        const services = isCloudMode() ? getCloudServices() : null;
+        let healthBody: Record<string, unknown> = {
+          status: 'ok',
+          timestamp: new Date().toISOString(),
+          version: process.env.npm_package_version ?? 'unknown',
+          mode: isCloudMode() ? 'cloud' : 'local',
+        };
+        if (services?.healthCheck) {
+          try {
+            const h = await services.healthCheck.getHealth();
+            healthBody = { ...healthBody, ...h };
+            const httpStatus = h.status === 'healthy' ? 200 : h.status === 'degraded' ? 200 : 503;
+            res.writeHead(httpStatus, { 'Content-Type': 'application/json' });
+          } catch {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+          }
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify(healthBody));
         return;
+      }
+      // OAuth routes: /oauth/:service and /oauth/:service/callback
+      if (req.url && req.url.startsWith('/oauth/')) {
+        const { handleOAuthRequest } = await import('./cloud/admin-dashboard/oauth.js');
+        const oauthHandled = await handleOAuthRequest(req, res);
+        if (oauthHandled) return;
       }
       const handled = await handleAdminRequest(req, res);
       if (handled) return;
@@ -286,9 +311,12 @@ async function main(): Promise<void> {
         if (services?.messageQueue) {
           try {
             const text = typeof parsedContent.text === 'string' ? parsedContent.text : '';
-            await services.messageQueue.enqueueForAgent('shared', {
+            const _dispatchUserId = (event.platformId || '').split('@')[0] || 'anon';
+            const _queueId = process.env.NANOCLAW_ENV === 'cloud' ? 'dispatch' : _dispatchUserId;
+            if (process.env.NANOCLAW_ENV !== 'cloud') { try { await ensureContainer(_dispatchUserId); } catch(_e) {} }
+            await services.messageQueue.enqueueForAgent(_queueId, {
               id: event.message.id,
-              userId: 'shared',
+              userId: _dispatchUserId,  // real userId, not queue key
               type: 'chat',
               timestamp: event.message.timestamp,
               payload: {
@@ -416,10 +444,26 @@ async function main(): Promise<void> {
         const threadId = (payload.threadId as string | null) ?? null;
         const kind = (payload.kind as string) ?? 'chat';
         const rawContent = (payload.content as string) ?? '';
-        // Sub-agent emits plain-text content; deliveryAdapter.deliver expects
-        // a JSON-encoded OutboundMessage payload (e.g. {"text": "..."}). Wrap
-        // accordingly so JSON.parse on the other side produces {text}.
-        const content = JSON.stringify({ text: rawContent });
+
+        // Detect special media markers from image_gen / tts tools.
+        // IMAGE_URL:<url>:IMAGE_URL → deliver as image kind
+        // AUDIO_URL:<url>:AUDIO_URL → deliver as audio kind
+        let content: string;
+        let resolvedKind = kind;
+        const imgMatch = rawContent.match(/^IMAGE_URL:(.+):IMAGE_URL$/);
+        const audioMatch = rawContent.match(/^AUDIO_URL:(.+):AUDIO_URL$/);
+        if (imgMatch) {
+          resolvedKind = 'image';
+          content = JSON.stringify({ url: imgMatch[1], caption: '' });
+        } else if (audioMatch) {
+          resolvedKind = 'audio';
+          content = JSON.stringify({ url: audioMatch[1] });
+        } else {
+          // Sub-agent emits plain-text content; deliveryAdapter.deliver expects
+          // a JSON-encoded OutboundMessage payload (e.g. {"text": "..."}). Wrap
+          // accordingly so JSON.parse on the other side produces {text}.
+          content = JSON.stringify({ text: rawContent });
+        }
 
         // Per Q5 (silent admin uploads / discovery quietude): if the sub-agent
         // explicitly marked the response as silent or content is empty, skip
@@ -438,8 +482,35 @@ async function main(): Promise<void> {
           return;
         }
 
+        log.info('Cloud response received', { responseId: response.id, channelType, platformId, contentLen: rawContent.length });
+        // Admin-test bridge: response goes to admin dashboard, NOT WhatsApp.
+        if (channelType === 'admin-test') {
+          log.info('Cloud response: admin-test branch entered', { responseId: response.id });
+          const adminTestMessageId =
+            (payload.adminTestMessageId as string | undefined) ??
+            ((payload.metadata as { adminTestMessageId?: string } | undefined)?.adminTestMessageId) ??
+            // Fallback: handlers don't echo adminTestMessageId in metadata, but the
+            // response.id IS the admin-test message id we created (sub-agent preserves
+            // message_id round-trip). Use it directly when prefix matches.
+            (typeof response.id === 'string' && response.id.startsWith('admin-test-') ? response.id : undefined);
+          if (adminTestMessageId) {
+            log.info('Cloud response: about to lpush admin-test', { responseId: response.id, adminTestMessageId });
+            try {
+              const adminKey = 'admin:test:response:' + adminTestMessageId;
+              await services.redis.lpush(adminKey, rawContent);
+              await services.redis.expire(adminKey, 300);
+              log.info('Admin-test response captured', { responseId: response.id, adminTestMessageId });
+            } catch (err) {
+              log.warn('Failed to push admin-test response', {
+                err: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+          return;
+        }
+
         if (deliveryAdapter) {
-          await deliveryAdapter.deliver(channelType, platformId, threadId, kind, content);
+          await deliveryAdapter.deliver(channelType, platformId, threadId, resolvedKind, content);
           log.info('Cloud response delivered', {
             responseId: response.id,
             userId: response.userId,
@@ -482,7 +553,28 @@ async function main(): Promise<void> {
   // TODO: wire when DataGateway.invokeLlm() is available.
   // For now matches the pre-existing behaviour: SKIP | no-handler logged at cron time.
   if (isCloudMode()) {
-    log.info('Daily briefing scheduler: SKIP | no-handler (DataGateway.invokeLlm not yet wired)');
+    // Morning briefing: 07:00 SGT = 23:00 UTC previous day
+    void (async () => {
+      try {
+        const { scheduleMorningBriefing } = await import('./cloud/morning-briefing.js');
+        scheduleMorningBriefing();
+        log.info('Morning briefing scheduler started');
+      } catch (err) {
+        log.warn('Morning briefing scheduler failed to start', { err });
+      }
+    })();
+
+    // S3 auto-reindex: scan for unindexed files at startup + every 15 min
+    void (async () => {
+      try {
+        const { scheduleS3ReindexJob } = await import('./cloud/s3-reindex.js');
+        const cloudSvcs = getCloudServices()!;
+        scheduleS3ReindexJob(cloudSvcs);
+        log.info('S3 auto-reindex job scheduled (startup + every 15 min)');
+      } catch (err) {
+        log.warn('S3 reindex scheduler failed to start', { err });
+      }
+    })();
   }
 
   log.info('NanoClaw running');
@@ -491,6 +583,8 @@ async function main(): Promise<void> {
 /** Graceful shutdown. */
 async function shutdown(signal: string): Promise<void> {
   log.info('Shutdown signal received', { signal });
+  // Write clean-shutdown marker immediately (before any async) so circuit breaker is not triggered
+  try { const { resetCircuitBreaker: _rcb } = await import('./circuit-breaker.js'); _rcb(); } catch {}
   for (const cb of getShutdownCallbacks()) {
     try {
       await cb();
@@ -526,3 +620,4 @@ main().catch((err) => {
   log.fatal('Startup failed', { err });
   process.exit(1);
 });
+

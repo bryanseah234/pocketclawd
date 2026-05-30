@@ -105,7 +105,6 @@ jobs:
   terraform-validate:
     name: Terraform Validate
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: infrastructure/terraform
@@ -154,3 +153,17 @@ jobs:
         with:
           working_directory: infrastructure/terraform
           soft_fail: false
+
+  secrets-scan:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
