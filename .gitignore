@@ -228,3 +228,14 @@ _q*.cjs
 
 # Hermes local agent context (never commit)
 .hermes/
+
+# impeccable live runtime state (machine-local)
+.impeccable/live/annotations/
+.impeccable/live/sessions/
+.impeccable/live/server.json
+
+# build/deploy artifacts
+*.tar.gz
+dist-*
+orch-*
+NUL
