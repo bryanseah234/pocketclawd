@@ -155,6 +155,23 @@ resource "aws_iam_role_policy_attachment" "sub_agent_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Allow ECS to inject REDIS_PASSWORD (and any other app-config secret keys) into
+# the sub-agent task at launch via the task-def `secrets` block. Scoped to the
+# single app-config secret ARN (with version wildcard).
+resource "aws_iam_role_policy" "sub_agent_execution_secrets" {
+  name = "secrets-access"
+  role = aws_iam_role.sub_agent_execution.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "ReadAppConfigSecret"
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = "arn:aws:secretsmanager:ap-southeast-1:709609992277:secret:nanoclaw/app-config-lra7uR*"
+    }]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "sub_agent" {
   name              = "/ecs/${var.project_name}-sub-agent"
   retention_in_days = 30
