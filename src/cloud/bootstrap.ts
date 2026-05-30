@@ -30,6 +30,7 @@ import { MessageQueue } from './redis-queue/index.js';
 import { SchedulerService } from './scheduler/index.js';
 import { SecretsLoader } from './secrets/index.js';
 import { RedisPdpaFlowStore } from './pdpa/index.js';
+import { RedisDistributedLock } from './redis-lock.js';
 
 import type { PdpaFlowStore } from './pdpa/index.js';
 
@@ -144,6 +145,9 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
     await redis.connect();
     log.info('Cloud bootstrap: Redis connected');
 
+    // Distributed lock / idempotency helper shared by scheduler + crons.
+    const lock = new RedisDistributedLock(redis);
+
     // 4. Message queue
     log.info('Cloud bootstrap: initializing message queue');
     const messageQueue = new MessageQueue({
@@ -215,6 +219,7 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         scheduler = new SchedulerService({
             dataGateway,
             messageQueue,
+            lock,
             getActiveUserIds: async () => {
                 // In production, this would query DynamoDB for active users.
                 // For now, return empty — the scheduler will be wired to the
@@ -229,6 +234,7 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         scheduler = new SchedulerService({
             dataGateway,
             messageQueue,
+            lock,
             getActiveUserIds: async () => [],
         });
     }

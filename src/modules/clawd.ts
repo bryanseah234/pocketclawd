@@ -24,6 +24,8 @@ import {
   processFile,
 } from './ingestion/file-watcher.js';
 import { startTelegramMtprotoIngester } from './ingestion/telegram-mtproto.js';
+import { getCloudServices } from '../cloud/bootstrap.js';
+import { cronLockKey } from '../cloud/redis-lock.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
@@ -41,13 +43,11 @@ const SCHEDULES = [
 const driverInterval = 60 * 1000; // poll every minute
 let driverTimer: NodeJS.Timeout | null = null;
 /**
- * TODO (improvement #19): Persist lastRun to DynamoDB or Redis so cron jobs
- * are idempotent across orchestrator restarts. Use a distributed lock pattern
- * (Redis SETNX with 30-min TTL) to prevent double-execution if the orchestrator
- * restarts within the same cron window.
- *
- * Current risk: if the orchestrator restarts at 02:59, cloud-ingest runs again
- * at 03:00 (lastRun Map is empty for the new process), potentially double-ingesting.
+ * In-process dedup map (local-mode fallback). In cloud mode, tick() instead
+ * acquires a Redis distributed lock (cronLockKey + SET NX EX) per scheduled
+ * window so a restart mid-window — or a second replica — cannot double-run a
+ * job. See t2-10. The Map is retained for local/degraded operation where no
+ * cloud Redis is wired.
  */
 const lastRun = new Map<string, number>();
 
@@ -179,9 +179,43 @@ async function tick(): Promise<void> {
       sched.setDate(sched.getDate() - 1); // most recent past occurrence
     }
     if (sched.getTime() > now - 60 * 1000 && now - last > 5 * 60 * 1000) {
+      // Distributed-lock guard (t2-10): when cloud services are wired, claim
+      // the (job, scheduled-window) slot in Redis so a restart within the same
+      // cron window — or a second orchestrator replica — cannot double-run the
+      // job. The in-process lastRun Map remains as the local-mode fallback.
+      const cloud = getCloudServices();
+      if (cloud?.redis) {
+        // windowIso = the scheduled occurrence, minute-resolution, so each
+        // daily run has a unique, deterministic lock key. TTL 23h: long enough
+        // to block a same-day re-run, short enough to auto-clear before the
+        // next day's occurrence.
+        const windowIso = sched.toISOString().slice(0, 16);
+        const key = cronLockKey(job.name, windowIso);
+        // Fire the async claim; only dispatch if we win it. We must not block
+        // the synchronous tick loop, so handle the claim inside the promise.
+        void (async () => {
+          try {
+            const claimed = await cloud.redis.set(key, '1', 'EX', 23 * 3600, 'NX');
+            if (claimed !== 'OK') {
+              return; // another process already ran this window
+            }
+          } catch {
+            // Redis unavailable — fall through to local dedup (lastRun) below.
+          }
+          if (inflight.has(job.name)) return;
+          lastRun.set(job.name, Date.now());
+          const p = job.handler().finally(() => {
+            inflight.delete(job.name);
+            lastRun.set(job.name, Date.now());
+          });
+          inflight.set(job.name, p);
+          void p;
+        })();
+        continue;
+      }
+
+      // Local-mode fallback: in-process dedup only.
       // Record dispatch time so a retry within 5 minutes is skipped.
-      // lastRun is updated again on completion (not strictly necessary but
-      // keeps the timestamp accurate for catch-up logic).
       lastRun.set(job.name, now);
       const p = job.handler().finally(() => {
         inflight.delete(job.name);

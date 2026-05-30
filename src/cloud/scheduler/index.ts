@@ -16,6 +16,8 @@
 
 import { randomUUID } from 'node:crypto';
 
+import { notifiedKey } from '../redis-lock.js';
+
 import type { QueueMessage } from '../redis-queue/types.js';
 import type {
     ISchedulerService,
@@ -148,6 +150,21 @@ export class SchedulerService implements ISchedulerService {
 
                 // Check if current time matches the user's preferred time
                 if (currentHHMM === notificationTime) {
+                    // Restart-safe / multi-replica dedup: if a distributed lock
+                    // is wired, atomically claim the (user, date) slot in Redis.
+                    // markOnce returns false if another process already claimed
+                    // it (e.g. a replica, or this process before a restart).
+                    if (this.deps.lock) {
+                        const claimed = await this.deps.lock.markOnce(
+                            notifiedKey(userId, currentDate),
+                            // 26h TTL — survives the full day plus DST slack,
+                            // then auto-expires so the next day is clean.
+                            26 * 3600,
+                        );
+                        if (!claimed) {
+                            continue;
+                        }
+                    }
                     await this.sendNotification(userId);
                     this.markAsNotified(userId, currentDate);
                     result.notificationsSent++;
