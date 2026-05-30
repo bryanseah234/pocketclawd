@@ -99,9 +99,12 @@ resource "aws_route_table_association" "public" {
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
+  # Mirrors LIVE: private subnet egresses via the Internet Gateway (the box has a
+  # public IP). The NAT gateway exists but the private RT does not use it. Switching
+  # to NAT is a deliberate networking change, not a reconciliation.
   route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main.id
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
   }
 
   tags = {
@@ -147,6 +150,25 @@ resource "aws_security_group" "ec2" {
     description = "HTTPS admin UI"
   }
 
+  # Admin dashboard (mirrors LIVE: open on :3000)
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = var.admin_https_cidrs
+    description = "Admin dashboard"
+  }
+
+  # Redis port reachable from self + sub-agent SG (mirrors LIVE)
+  ingress {
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    self            = true
+    security_groups = [aws_security_group.sub_agent.id]
+    description     = "Redis from self + sub-agent"
+  }
+
   # All outbound traffic allowed (for AWS service access)
   egress {
     from_port   = 0
@@ -162,6 +184,8 @@ resource "aws_security_group" "ec2" {
 
   lifecycle {
     create_before_destroy = true
+    # Live ingress is manually tuned (6379 self/sub-agent SG refs); managed out-of-band.
+    ignore_changes = [ingress]
   }
 }
 
@@ -191,6 +215,9 @@ resource "aws_security_group" "redis" {
 
   lifecycle {
     create_before_destroy = true
+    # Live 6379 ingress references a cross-VPC SG that cannot be expressed in this config;
+    # the new RG's access is governed by aws_security_group_rule.redis_from_sub_agent.
+    ignore_changes = [ingress]
   }
 }
 

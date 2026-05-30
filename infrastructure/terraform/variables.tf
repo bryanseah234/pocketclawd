@@ -149,6 +149,7 @@ variable "tags" {
     Project     = "nanoclaw"
     ManagedBy   = "terraform"
     Application = "whatsapp-assistant"
+    Email       = "sowjanya.k@synapxe.sg" # pre-existing live tag, mirrored to keep plan clean
   }
 }
 

@@ -44,7 +44,7 @@ resource "aws_iam_role" "sub_agent_task" {
 }
 
 resource "aws_iam_role_policy" "sub_agent_task" {
-  name = "${var.project_name}-sub-agent-task-policy"
+  name = "task-perms" # matches live (imported); was nanoclaw-sub-agent-task-policy
   role = aws_iam_role.sub_agent_task.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -273,6 +273,12 @@ resource "aws_ecs_task_definition" "sub_agent" {
     Environment = var.environment
     Project     = var.project_name
   }
+
+  # CI/CD pipeline registers new revisions (image :feature-latest, env, user);
+  # Terraform owns the cluster/service/scaling, not the container spec.
+  lifecycle {
+    ignore_changes = [container_definitions, volume]
+  }
 }
 
 resource "aws_ecs_service" "sub_agent" {
@@ -291,15 +297,16 @@ resource "aws_ecs_service" "sub_agent" {
   }
 
   network_configuration {
-    subnets = [
-      aws_subnet.private.id,
-      aws_subnet.private_b.id,
-    ]
+    # Mirrors live: service runs in the single private subnet with public IP.
+    # private_b exists for the Multi-AZ Redis RG; migrating the service to it
+    # is a separate deliberate change.
+    subnets          = [aws_subnet.private.id]
     security_groups  = [aws_security_group.sub_agent.id]
-    assign_public_ip = false
+    assign_public_ip = true
   }
 
-  enable_execute_command = true
+  availability_zone_rebalancing = "ENABLED" # matches live
+  enable_execute_command        = true
 
   lifecycle {
     ignore_changes = [task_definition, desired_count]
@@ -313,7 +320,7 @@ resource "aws_ecs_service" "sub_agent" {
 }
 
 resource "aws_opensearchserverless_access_policy" "sub_agent" {
-  name = "${var.project_name}-sub-agent-aoss"
+  name = "${var.project_name}-sub-agent" # matches live (imported); was -aoss
   type = "data"
 
   policy = jsonencode([{

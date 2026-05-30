@@ -41,7 +41,7 @@ resource "aws_instance" "main" {
   iam_instance_profile   = data.aws_iam_instance_profile.ec2.name
 
   root_block_device {
-    volume_size           = 64
+    volume_size           = 128
     volume_type           = "gp3"
     encrypted             = true
     delete_on_termination = true
@@ -59,7 +59,7 @@ resource "aws_instance" "main" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required" # IMDSv2 only
-    http_put_response_hop_limit = 1
+    http_put_response_hop_limit = 2
   }
 
   user_data = base64encode(templatefile("${path.module}/user-data.sh.tpl", {
@@ -78,6 +78,6 @@ resource "aws_instance" "main" {
   }
 
   lifecycle {
-    ignore_changes = [ami] # Don't recreate on AMI updates
+    ignore_changes = [ami, user_data] # Don't recreate on AMI updates; user_data managed out-of-band
   }
 }

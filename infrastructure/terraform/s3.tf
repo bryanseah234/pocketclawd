@@ -41,9 +41,9 @@ resource "aws_s3_bucket_public_access_block" "data" {
 resource "aws_s3_bucket_lifecycle_configuration" "data" {
   bucket = aws_s3_bucket.data.id
 
-  # Clean up staging files after 24 hours (malware scan should complete well before)
+  # Mirrors LIVE bucket lifecycle (reconciled from get-bucket-lifecycle-configuration).
   rule {
-    id     = "cleanup-staging"
+    id     = "cleanup-staging-legacy"
     status = "Enabled"
 
     filter {
@@ -55,7 +55,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
     }
   }
 
-  # Move old exports to Glacier after 30 days, delete after 90
+  rule {
+    id     = "cleanup-user-staging-tagged"
+    status = "Enabled"
+
+    filter {
+      tag {
+        key   = "lifecycle"
+        value = "staging-24h"
+      }
+    }
+
+    expiration {
+      days = 1
+    }
+  }
+
   rule {
     id     = "archive-exports"
     status = "Enabled"
@@ -74,12 +89,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "data" {
     }
   }
 
-  # Delete old non-current versions after 30 days
   rule {
     id     = "cleanup-versions"
     status = "Enabled"
 
-    filter {}
+    filter {
+      prefix = ""
+    }
 
     noncurrent_version_expiration {
       noncurrent_days = 30

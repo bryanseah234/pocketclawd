@@ -31,6 +31,7 @@ provider "aws" {
   default_tags {
     tags = merge(var.tags, {
       Environment = var.environment
+      Region      = var.aws_region
     })
   }
 }
