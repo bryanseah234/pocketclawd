@@ -73,3 +73,8 @@ output "sns_alerts_topic" {
   description = "SNS topic ARN for alerts"
   value       = aws_sns_topic.alerts.arn
 }
+
+output "alb_dns_name" {
+  description = "ALB DNS name (when enable_alb = true). Point your domain/webhook here."
+  value       = var.enable_alb ? aws_lb.main[0].dns_name : ""
+}

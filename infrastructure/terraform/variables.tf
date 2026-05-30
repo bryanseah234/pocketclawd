@@ -164,3 +164,46 @@ variable "alerts_sms_phone" {
   type        = string
   default     = "+6584731565"
 }
+
+# t6-40: Application Load Balancer (zero-downtime HTTP cutover)
+variable "enable_alb" {
+  description = "Provision an ALB fronting the orchestrator HTTP surface. See BLUE-GREEN-RUNBOOK.md. Apply is user-gated."
+  type        = bool
+  default     = false
+}
+
+variable "public_subnet_b_cidr" {
+  description = "CIDR for the second public subnet (AZ-b), required by the ALB."
+  type        = string
+  default     = "10.0.3.0/24"
+}
+
+variable "orchestrator_port" {
+  description = "TCP port the orchestrator HTTP server listens on."
+  type        = number
+  default     = 3000
+}
+
+variable "alb_ingress_cidrs" {
+  description = "CIDRs allowed to reach the ALB on 80/443."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+variable "alb_certificate_arn" {
+  description = "ACM certificate ARN for HTTPS. Empty = HTTP-only (dev); HTTP forwards directly to the target group."
+  type        = string
+  default     = ""
+}
+
+variable "alb_deregistration_delay" {
+  description = "Seconds the ALB waits for in-flight requests to drain before deregistering a target (connection draining)."
+  type        = number
+  default     = 30
+}
+
+variable "alb_deletion_protection" {
+  description = "Enable ALB deletion protection."
+  type        = bool
+  default     = false
+}
