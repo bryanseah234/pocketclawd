@@ -7,7 +7,7 @@ key_pair_name = "nanoclaw-key"
 instance_type = "r6i.4xlarge" # PRODUCTION TARGET (upsize now)
 
 # ─── Access Control ──────────────────────────────────────────────────────────
-admin_ssh_cidrs   = ["0.0.0.0/0"] # mirrors LIVE (open SSH); SHOULD be restricted — see Q-stack
+admin_ssh_cidrs   = [] # SSH CLOSED — access via SSM Session Manager only (port 22 revoked live)
 admin_https_cidrs = ["0.0.0.0/0"]
 
 # ─── Networking ──────────────────────────────────────────────────────────────
