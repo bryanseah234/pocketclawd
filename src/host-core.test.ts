@@ -8,6 +8,29 @@ import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+// Some filesystems (Windows without privilege, exFAT) cannot create symlinks.
+// The path-traversal security tests below build symlink fixtures to verify the
+// code REJECTS them; on a no-symlink FS the fixture itself throws EISDIR/EPERM,
+// which is an environment limitation, not a code failure. Probe once and skip
+// those specific tests where symlinks are unsupported (they still run on Linux/CI).
+const canSymlink = (() => {
+  const os = require('os');
+  const fsMod = require('fs');
+  const pathMod = require('path');
+  const tmp = pathMod.join(os.tmpdir(), `nanoclaw-symlink-probe-${process.pid}`);
+  const target = `${tmp}-target`;
+  try {
+    fsMod.writeFileSync(target, 'x');
+    fsMod.symlinkSync(target, tmp);
+    fsMod.rmSync(tmp, { force: true });
+    fsMod.rmSync(target, { force: true });
+    return true;
+  } catch {
+    try { fsMod.rmSync(target, { force: true }); } catch { /* ignore */ }
+    return false;
+  }
+})();
+
 import {
   initTestDb,
   closeDb,
@@ -124,7 +147,7 @@ describe('session manager', () => {
     expect(readOutboxFiles('ag-1', 'sess-test', 'msg-1', ['../../../../../outside.txt'])).toBeUndefined();
   });
 
-  it('should reject outbound attachment symlinks that escape the message outbox', () => {
+  it.skipIf(!canSymlink)('should reject outbound attachment symlinks that escape the message outbox', () => {
     initSessionFolder('ag-1', 'sess-test');
     const dir = sessionDir('ag-1', 'sess-test');
     const msgOutbox = path.join(dir, 'outbox', 'msg-1');
@@ -164,7 +187,7 @@ describe('session manager', () => {
     expect(fs.existsSync(msgOutbox)).toBe(false);
   });
 
-  it('should reject inbound attachment writes through a pre-placed symlinked inbox dir', () => {
+  it.skipIf(!canSymlink)('should reject inbound attachment writes through a pre-placed symlinked inbox dir', () => {
     initSessionFolder('ag-1', 'sess-test');
     const { session } = resolveSession('ag-1', 'mg-1', null, 'shared');
 
@@ -189,7 +212,7 @@ describe('session manager', () => {
     expect(fs.existsSync(path.join(evilTarget, 'photo.png'))).toBe(false);
   });
 
-  it('should refuse to follow a pre-existing symlink at the inbound attachment path', () => {
+  it.skipIf(!canSymlink)('should refuse to follow a pre-existing symlink at the inbound attachment path', () => {
     initSessionFolder('ag-1', 'sess-test');
     const { session } = resolveSession('ag-1', 'mg-1', null, 'shared');
 

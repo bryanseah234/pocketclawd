@@ -107,8 +107,11 @@ export function getNodePath(): string {
 }
 
 export function commandExists(name: string): boolean {
+  // `command -v` is a POSIX shell builtin and fails under cmd.exe on Windows;
+  // use `where` there so the host installer's tooling checks work cross-platform.
+  const probe = process.platform === 'win32' ? `where ${name}` : `command -v ${name}`;
   try {
-    execSync(`command -v ${name}`, { stdio: 'ignore' });
+    execSync(probe, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
