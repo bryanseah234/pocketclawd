@@ -29,6 +29,13 @@
             --font-body:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             --shadow-sm:      0 1px 3px rgba(61,43,31,0.08);
             --shadow-md:      0 4px 12px rgba(61,43,31,0.10);
+            /* Compatibility aliases for legacy var names used across components */
+            --bg:             var(--bg-oatmeal);
+            --bg-primary:     var(--bg-oatmeal);
+            --bg-elev:        var(--bg-card);
+            --surface:        var(--bg-card);
+            --text:           var(--text-primary);
+            --font-display:   var(--font-heading);
         }
 
         h1, h2, h3, .brand-font { font-family: var(--font-heading); }
@@ -121,8 +128,17 @@
 
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
             gap: 20px;
+        }
+        .grid.grid-overview-3 {
+            grid-template-columns: repeat(3, minmax(0,1fr));
+        }
+        @media (max-width: 1100px) {
+            .grid.grid-overview-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 720px) {
+            .grid.grid-overview-3 { grid-template-columns: 1fr; }
         }
 
         .card {
@@ -519,8 +535,8 @@
     
         /* ─── Settings tab layout ─────────────────────────────── */
         .settings-tab-inner {
-            max-width: 800px;
-            margin: 0 auto;
+            max-width: 100%;
+            margin: 0;
         }
 
         
@@ -710,7 +726,298 @@
             animation: pulse-flash 0.6s ease-out;
         }
 
-</style>
+
+        /* W2/W3/W4/W5/W6 additions */
+        .header-right { display:flex; align-items:center; gap:14px; }
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+        .btn-logout:hover { background: var(--bg-elev); border-color: var(--accent); color: var(--accent); }
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-secondary:hover { background: var(--bg-elev); border-color: var(--accent); }
+        .btn-danger {
+            background: #8b2e2e;
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-danger:hover { background: #a13434; }
+        /* 3-card row: enforce 3 columns on overview & help */
+        .grid-cards-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0,1fr));
+            gap: 16px;
+        }
+        @media (max-width: 1100px) {
+            .grid-cards-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 720px) {
+            .grid-cards-3 { grid-template-columns: 1fr; }
+        }
+        /* Architecture canvas */
+        .arch-toolbar { display:flex; gap:14px; align-items:center; }
+        .arch-canvas-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 540px;
+        }
+        .arch-canvas-wrap svg { width: 100%; height: auto; }
+        /* Architecture tab --------------------------------------------------------- */
+        .arch-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+        .arch-hero {
+            background: linear-gradient(135deg, oklch(0.14 0.012 250) 0%, oklch(0.12 0.018 270) 100%);
+            border: 1px solid oklch(0.28 0.02 250);
+            border-radius: 16px;
+            padding: 28px 32px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .arch-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 60% 50% at 80% 20%, oklch(0.35 0.08 250 / 0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .arch-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            position: relative;
+            z-index: 1;
+        }
+        .arch-title {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: oklch(0.97 0.005 250);
+            margin: 0 0 4px;
+            letter-spacing: -0.02em;
+        }
+        .arch-subtitle {
+            font-size: 0.82rem;
+            color: oklch(0.65 0.015 250);
+            margin: 0;
+        }
+        .arch-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .arch-controls label {
+            font-size: 0.78rem;
+            color: oklch(0.65 0.015 250);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .arch-timestamp {
+            font-size: 0.75rem;
+            color: oklch(0.55 0.01 250);
+        }
+        /* SVG diagram */
+        .arch-svg-container {
+            width: 100%;
+            overflow-x: auto;
+            position: relative;
+            z-index: 1;
+        }
+        #arch-svg {
+            display: block;
+            width: 100%;
+            min-height: 380px;
+            font-family: var(--font-body);
+        }
+        /* Node groups by color ------------------------------------------------ */
+        .an-edge    { fill: oklch(0.22 0.04 200); stroke: oklch(0.40 0.10 200); }
+        .an-core    { fill: oklch(0.20 0.04 270); stroke: oklch(0.38 0.12 270); }
+        .an-ai      { fill: oklch(0.22 0.04 300); stroke: oklch(0.42 0.14 300); }
+        .an-data    { fill: oklch(0.20 0.04 180); stroke: oklch(0.38 0.10 180); }
+        .an-healthy  { stroke: oklch(0.62 0.18 145) !important; stroke-width: 2px !important; }
+        .an-pending  { stroke: oklch(0.72 0.16 70)  !important; stroke-width: 2px !important; }
+        .an-down     { stroke: oklch(0.55 0.20 25)  !important; stroke-width: 2px !important; }
+        /* Pulse glow on healthy */
+        @keyframes arch-pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+        .an-healthy .arch-glow { animation: arch-pulse 2.4s ease-in-out infinite; }
+        /* Edge paths */
+        .arch-edge {
+            fill: none;
+            stroke: oklch(0.35 0.04 250);
+            stroke-width: 1.5;
+            stroke-dasharray: 6 4;
+            animation: dash-march 18s linear infinite;
+        }
+        .arch-edge.active {
+            stroke: oklch(0.70 0.15 200);
+            stroke-dasharray: none;
+            stroke-width: 2;
+        }
+        @keyframes dash-march { to { stroke-dashoffset: -100; } }
+        /* Legend */
+        .arch-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding-top: 16px;
+            border-top: 1px solid oklch(0.28 0.02 250);
+            position: relative;
+            z-index: 1;
+        }
+        .arch-legend-item {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            font-size: 0.76rem;
+            color: oklch(0.62 0.01 250);
+        }
+        .arch-legend-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .arch-legend-dot.healthy { background: oklch(0.62 0.18 145); box-shadow: 0 0 6px oklch(0.62 0.18 145 / 0.6); }
+        .arch-legend-dot.pending { background: oklch(0.72 0.16 70); }
+        .arch-legend-dot.down    { background: oklch(0.55 0.20 25); }
+        /* Group badges */
+        .arch-group-badge {
+            font-size: 8.5px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            fill: oklch(0.55 0.06 250);
+        }
+        /* Flow table */
+        .arch-flow-section {
+            background: oklch(0.12 0.008 250);
+            border: 1px solid oklch(0.22 0.015 250);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .arch-flow-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid oklch(0.22 0.015 250);
+        }
+        .arch-flow-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: oklch(0.88 0.005 250);
+            letter-spacing: -0.01em;
+        }
+        .arch-flow-live {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            color: oklch(0.62 0.15 145);
+        }
+        .arch-live-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: oklch(0.62 0.18 145);
+            box-shadow: 0 0 5px oklch(0.62 0.18 145 / 0.7);
+            animation: arch-pulse 1.8s ease-in-out infinite;
+        }
+        #arch-flow-body tr {
+            border-bottom: 1px solid oklch(0.18 0.01 250);
+            transition: background 0.15s;
+        }
+        #arch-flow-body tr:last-child { border-bottom: none; }
+        #arch-flow-body tr:hover { background: oklch(0.16 0.012 250); }
+        #arch-flow-body td {
+            padding: 9px 16px;
+            font-size: 0.8rem;
+            color: oklch(0.80 0.005 250);
+            vertical-align: middle;
+        }
+        #arch-flow-body td:first-child { color: oklch(0.55 0.01 250); font-variant-numeric: tabular-nums; }
+        .arch-role-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .arch-role-pill.user { background: oklch(0.25 0.06 250); color: oklch(0.80 0.08 250); }
+        .arch-role-pill.assistant { background: oklch(0.22 0.06 270); color: oklch(0.78 0.10 270); }
+        .arch-role-pill.system { background: oklch(0.22 0.04 180); color: oklch(0.72 0.08 180); }
+/* Test chat */
+        .testchat-log {
+            min-height: 260px;
+            max-height: 480px;
+            overflow-y: auto;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .testchat-msg {
+            max-width: 76%;
+            padding: 9px 14px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .testchat-msg.user { align-self: flex-end; background: var(--accent); color: var(--bg); }
+        .testchat-msg.bot { align-self: flex-start; background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); }
+        .testchat-msg.error { align-self: stretch; background: rgba(161,52,52,0.12); color: #d77; border: 1px solid #8b2e2e; }
+        .table.small td, .table.small th { padding: 8px 12px; font-size: 0.82rem; }
+        .table.small code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 0.78rem; color: var(--accent); }
+        /* Standardize all cards: same padding, same border, same radius */
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+        /* Settings tabs - coherent padding */
+        .settings-tab-inner { padding: 20px 24px; }
+
+
+    </style>
 </head>
 <body>
     <div class="container">
@@ -719,9 +1026,12 @@
                 <span class="logo">C</span>
                 Clawd Admin
             </h1>
-            <div class="connection-badge" id="sse-badge">
-                <span class="status-dot connecting" id="sse-dot"></span>
-                <span id="sse-label">Connecting...</span>
+            <div class="header-right">
+                <div class="connection-badge" id="sse-badge">
+                    <span class="status-dot connecting" id="sse-dot"></span>
+                    <span id="sse-label">Connecting...</span>
+                </div>
+                <button id="btn-logout" class="btn-logout" type="button" title="Sign out">Logout</button>
             </div>
         </header>
 
@@ -732,6 +1042,9 @@
             <button class="tab-btn" data-tab="users" role="tab" id="tab-btn-users" aria-selected="false" aria-controls="tab-users" onclick="switchTab('users')">Users</button>
             <button class="tab-btn" data-tab="system" role="tab" id="tab-btn-system" aria-selected="false" aria-controls="tab-system" onclick="switchTab('system')">System</button>
             <button class="tab-btn" data-tab="consent" role="tab" id="tab-btn-consent" aria-selected="false" aria-controls="tab-consent" onclick="switchTab('consent')">Consent</button>
+            <button class="tab-btn" data-tab="architecture" role="tab" id="tab-btn-architecture" aria-selected="false" aria-controls="tab-architecture" onclick="switchTab('architecture')">Architecture</button>
+            <button class="tab-btn" data-tab="testchat" role="tab" id="tab-btn-testchat" aria-selected="false" aria-controls="tab-testchat" onclick="switchTab('testchat')">Test Chat</button>
+            <button class="tab-btn" data-tab="help" role="tab" id="tab-btn-help" aria-selected="false" aria-controls="tab-help" onclick="switchTab('help')">Help</button>
             <button class="tab-btn" data-tab="settings" role="tab" id="tab-btn-settings" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings')">Settings</button>
         </nav>
 
@@ -745,12 +1058,7 @@
                 <div class="pulse-sub" id="pulse-spend-sub">7-day trend</div>
                 <svg class="pulse-spark" id="pulse-spend-spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
             </div>
-            <div class="pulse-tile" id="pulse-msgs">
-                <div class="pulse-label">Messages / hour</div>
-                <div class="pulse-value" id="pulse-msgs-value">—</div>
-                <div class="pulse-sub" id="pulse-msgs-sub">vs last hour</div>
-                <svg class="pulse-spark" id="pulse-msgs-spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
-            </div>
+            
             <div class="pulse-tile" id="pulse-tasks">
                 <div class="pulse-label">Live ECS tasks</div>
                 <div class="pulse-value" id="pulse-tasks-value">—</div>
@@ -787,10 +1095,6 @@
                 </div>
                 <div class="stats-grid" id="stats-grid">
                     <div class="stat-item">
-                        <div class="stat-value" id="stat-rpm">—</div>
-                        <div class="stat-label">msgs/min</div>
-                    </div>
-                    <div class="stat-item">
                         <div class="stat-value" id="stat-rph">—</div>
                         <div class="stat-label">msgs/hour</div>
                     </div>
@@ -806,7 +1110,7 @@
             </div>
 
             <!-- Active Containers -->
-            <div class="card card-full">
+            <div class="card">
                 <div class="card-header">
                     <span class="card-title">Active Containers</span>
                     <span id="container-count" style="color: var(--text-muted); font-size: 0.8rem;">0 running</span>
@@ -984,9 +1288,15 @@
                 </div>
                 <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:rgba(61,43,31,0.05);border-radius:6px;">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
-                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true" data-testid="corporate-toggle">
-                        <span>Mark as corporate document (visible to all users)</span>
+                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true" data-testid="corporate-toggle" onchange="toggleTargetUser()">
+                        <span>Corporate doc (visible to all users)</span>
                     </label>
+                    <div id="target-user-row" style="margin-top:10px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
+                        <label for="target-user-id" style="white-space:nowrap;">Index for user:</label>
+                        <select id="target-user-id" style="flex:1;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;">
+                            <option value="">All users (corporate)</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="upload-list" style="margin-top:12px;"></div>
             </div>
@@ -996,6 +1306,11 @@
                 <div class="card-header">
                     <span class="card-title">Documents</span>
                     <div style="display:flex;gap:8px;align-items:center;">
+                        <label id="select-all-label" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;font-weight:500;">
+                            <input type="checkbox" id="doc-select-all" onchange="toggleSelectAll(this)" style="cursor:pointer;">
+                            <span id="select-count" style="color:var(--primary);">0 selected</span>
+                        </label>
+                        <button id="btn-delete-selected" class="btn-danger" onclick="deleteSelected()" style="display:none;padding:5px 12px;font-size:0.8rem;">&#x1f5d1; Delete selected</button>
                         <select id="doc-filter" onchange="loadDocuments()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;">
                             <option value="all">All sources</option>
                             <option value="admin">Admin uploads</option>
@@ -1018,7 +1333,10 @@
             <div class="card card-full">
                 <div class="card-header">
                     <span class="card-title">Users</span>
-                    <button class="btn btn-outline" onclick="loadUsers()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-outline" onclick="loadUsers()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                        <button class="btn-danger" onclick="resetAllUsers()" style="padding:6px 14px;font-size:0.8rem;" title="Wipe ALL user data (messages, prefs, docs, OS index). Preserves WA sessions and corporate docs.">⚠ Reset ALL</button>
+                    </div>
                 </div>
                 <div id="users-list" style="margin-top:1rem;">Loading…</div>
                 <div id="user-detail" style="margin-top:1.5rem;"></div>
@@ -1050,6 +1368,147 @@
     <div id="consent-list" style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;">Click Refresh to load.</div>
 </div>
 
+<!-- Architecture Tab -->
+<div class="tab-panel" id="tab-architecture" role="tabpanel" aria-labelledby="tab-btn-architecture">
+<div class="arch-wrap">
+
+    <!-- Hero card with SVG diagram -->
+    <div class="arch-hero">
+        <div class="arch-header-row">
+            <div>
+                <h2 class="arch-title">System Architecture</h2>
+                <p class="arch-subtitle">Live infrastructure topology &amp; message flow &mdash; refreshes every 5 seconds</p>
+            </div>
+            <div class="arch-controls">
+                <span class="arch-timestamp">Updated: <span id="arch-generated-at">&mdash;</span></span>
+                <label>
+                    <input type="checkbox" id="arch-autorefresh" checked>
+                    Auto
+                </label>
+                <button id="arch-refresh" class="btn-secondary" type="button" style="padding:6px 14px;font-size:0.78rem;">Refresh</button>
+            </div>
+        </div>
+
+        <div class="arch-svg-container">
+            <svg id="arch-svg" viewBox="0 0 1080 420" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;min-height:360px;"></svg>
+        </div>
+
+        <div class="arch-legend">
+            <span class="arch-legend-item"><span class="arch-legend-dot healthy"></span>Healthy</span>
+            <span class="arch-legend-item"><span class="arch-legend-dot pending"></span>Degraded</span>
+            <span class="arch-legend-item"><span class="arch-legend-dot down"></span>Down</span>
+            <span class="arch-legend-item" style="margin-left:auto;">
+                <span style="color:oklch(0.45 0.01 250);">&#9670;</span>&nbsp;Edge
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.48 0.08 270);">&#9670;</span>&nbsp;Core
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.48 0.10 300);">&#9670;</span>&nbsp;AI
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.45 0.08 180);">&#9670;</span>&nbsp;Data
+            </span>
+        </div>
+    </div>
+
+    <!-- Message flow feed -->
+    <div class="arch-flow-section">
+        <div class="arch-flow-header">
+            <span class="arch-flow-title">Message Flow</span>
+            <span class="arch-flow-live">
+                <span class="arch-live-dot"></span>Live
+            </span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead>
+                <tr style="border-bottom:1px solid oklch(0.22 0.015 250);">
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;">Time</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">User</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">Role</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">Preview</th>
+                </tr>
+            </thead>
+            <tbody id="arch-flow-body">
+                <tr><td colspan="4" style="padding:24px 16px;color:oklch(0.45 0.01 250);font-size:0.82rem;text-align:center;">No traffic yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+</div>
+
+<!-- Test Chat Tab -->
+<div class="tab-panel" id="tab-testchat" role="tabpanel" aria-labelledby="tab-btn-testchat">
+    <div style="margin-bottom:20px;">
+        <h2 style="font-family:var(--font-display);font-weight:600;font-size:1.6rem;margin:0;">Real-World Test Chat</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">Send a message into the live sub-agent stack as if you were a WhatsApp user. Bypasses WhatsApp delivery — replies surface here.</p>
+    </div>
+    <div class="card" style="padding:20px;">
+        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:6px;">User ID (phone number, no @s.whatsapp.net needed)</label>
+        <input id="testchat-userid" type="text" placeholder="e.g. 6592348112" value="6592348112" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);margin-bottom:16px;">
+        <div id="testchat-log" class="testchat-log"></div>
+        <div style="display:flex;gap:8px;margin-top:14px;">
+            <input id="testchat-input" type="text" placeholder="Type a message…" style="flex:1;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);">
+            <button id="testchat-send" class="btn-primary" type="button">Send</button>
+        </div>
+    </div>
+</div>
+
+<!-- Help Tab -->
+<div class="tab-panel" id="tab-help" role="tabpanel" aria-labelledby="tab-btn-help">
+    <div style="margin-bottom:20px;">
+        <h2 style="font-family:var(--font-display);font-weight:600;font-size:1.6rem;margin:0;">Help &amp; Reference</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">URL paths exposed by the orchestrator and slash commands available to WhatsApp users.</p>
+    </div>
+    <div class="grid-cards-3">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">Public URLs</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>/</code></td><td>Landing page</td></tr>
+                    <tr><td><code>/admin</code></td><td>Admin dashboard (this UI)</td></tr>
+                    <tr><td><code>/healthz</code></td><td>Health probe (200 = orchestrator alive)</td></tr>
+                    <tr><td><code>/whatsapp/qr</code></td><td>WhatsApp pairing QR (when needed)</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">Admin API</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>GET /admin/api/stats</code></td><td>Live KPI block</td></tr>
+                    <tr><td><code>GET /admin/api/data/users</code></td><td>List users</td></tr>
+                    <tr><td><code>GET /admin/api/data/users/:id</code></td><td>User detail</td></tr>
+                    <tr><td><code>POST /admin/api/data/users/reset-all</code></td><td>Wipe all user data</td></tr>
+                    <tr><td><code>GET /admin/api/architecture/state</code></td><td>System topology</td></tr>
+                    <tr><td><code>POST /admin/api/test/send</code></td><td>Test chat send</td></tr>
+                    <tr><td><code>POST /admin/api/logout</code></td><td>Sign out</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">WhatsApp slash commands</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>/help</code></td><td>List commands</td></tr>
+                    <tr><td><code>/about</code></td><td>What Clawd is &amp; what it can do</td></tr>
+                    <tr><td><code>/privacy</code></td><td>Privacy policy &amp; data rights</td></tr>
+                    <tr><td><code>/profile</code></td><td>Show or edit preferences</td></tr>
+                    <tr><td><code>/list</code></td><td>List uploaded documents</td></tr>
+                    <tr><td><code>/delete &lt;file&gt;</code></td><td>Delete a document</td></tr>
+                    <tr><td><code>/ingested</code></td><td>Last 20 ingested URLs</td></tr>
+                    <tr><td><code>/forget-url &lt;url&gt;</code></td><td>Remove one URL from KB</td></tr>
+                    <tr><td><code>/draft &lt;type&gt; &lt;topic&gt;</code></td><td>Draft minutes/research/slides/email</td></tr>
+                    <tr><td><code>/forget</code></td><td>Erase ALL your data (PDPA)</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:10px;">Slash commands are detected in container/sub-agent. Commands not implemented are echoed back.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Tab (existing) -->
 <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
             <div class="settings-tab-inner"><div id="settings-panel-content"><p style="padding:24px;color:var(--text-muted)">Loading settings...</p></div></div>
         </div>
@@ -1134,6 +1593,26 @@
             if (tabId === 'settings') {
                 loadSettingsIfNeeded();
             }
+            if (tabId === 'architecture') {
+                renderArchSkeleton();
+                refreshArch();
+                if (archInterval) clearInterval(archInterval);
+                const cb = document.getElementById('arch-autorefresh');
+                if (cb && cb.checked) archInterval = setInterval(refreshArch, 5000);
+                if (cb && !cb.dataset.bound) {
+                    cb.dataset.bound = '1';
+                    cb.addEventListener('change', () => {
+                        if (archInterval) clearInterval(archInterval);
+                        if (cb.checked) archInterval = setInterval(refreshArch, 5000);
+                    });
+                }
+                const refreshBtn = document.getElementById('arch-refresh');
+                if (refreshBtn && !refreshBtn.dataset.bound) {
+                    refreshBtn.dataset.bound = '1';
+                    refreshBtn.addEventListener('click', refreshArch);
+                }
+            }
+            if (tabId === 'testchat') initTestChat();
         
             if (tabId === 'users') loadUsers();
             if (tabId === 'system') loadSystemErrors();
@@ -1208,27 +1687,74 @@
 
         async function loadUserDetail(uid) {
             const detail = document.getElementById('user-detail');
-            detail.innerHTML = '<p>Loading detail for ' + uid + '…</p>';
+            detail.innerHTML = '<div class="card" style="padding:16px;color:var(--text-muted);">Loading detail for ' + uid + '…</div>';
             try {
                 const r = await fetch('/admin/api/data/users/' + encodeURIComponent(uid));
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 const d = await r.json();
-                let html = '<h3 style="margin-top:0">' + d.userId + '</h3>';
-                html += '<h4>Preferences</h4><pre style="background:#222;padding:8px;border-radius:4px;font-size:0.8rem">' + JSON.stringify(d.preferences, null, 2) + '</pre>';
-                html += '<h4>Documents (' + d.documents.length + ')</h4>';
-                if (d.documents.length === 0) {
-                    html += '<p style="color:#888">No documents.</p>';
-                } else {
-                    html += '<ul style="font-size:0.85rem;font-family:monospace">';
-                    for (const doc of d.documents) {
-                        html += '<li>' + doc.key + ' — ' + (doc.size/1024).toFixed(1) + ' KB — ' + doc.uploadedAt + '</li>';
-                    }
-                    html += '</ul>';
-                }
-                html += '<h4>Recent messages (' + d.recentMessages.length + ')</h4><pre style="background:#222;padding:8px;border-radius:4px;font-size:0.75rem;max-height:300px;overflow:auto">' + JSON.stringify(d.recentMessages, null, 2) + '</pre>';
+                const escape = (s) => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const fmtBytes = (b) => b == null ? '—' : b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(2) + ' MB';
+                const fmtTime = (t) => { try { return new Date(t).toLocaleString(); } catch { return t || '—'; } };
+                const prefs = d.preferences || {};
+                const prefRows = Object.keys(prefs).filter(k => prefs[k] != null && k !== 'updatedAt').map(k => `<tr><td style="padding:6px 12px;color:var(--text-muted);">${escape(k)}</td><td style="padding:6px 12px;">${escape(typeof prefs[k] === 'object' ? JSON.stringify(prefs[k]) : prefs[k])}</td></tr>`).join('');
+
+                let html = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:8px;">
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">User</span></div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:0.95rem;margin-top:8px;word-break:break-all;">${escape(d.userId)}</div>
+                        <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;">
+                            <button class="btn btn-outline" onclick="loadUsers()">↻ Back to list</button>
+                            <button class="btn btn-danger" onclick="forgetUser('${uid.replace(/'/g, "\\'")}')">Forget (PDPA)</button>
+                        </div>
+                    </div>
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">Counts</span></div>
+                        <div class="stats-grid" style="margin-top:8px;">
+                            <div class="stat-item"><div class="stat-value">${d.recentMessages?.length ?? 0}</div><div class="stat-label">recent msgs</div></div>
+                            <div class="stat-item"><div class="stat-value">${d.documents?.length ?? 0}</div><div class="stat-label">documents</div></div>
+                            <div class="stat-item"><div class="stat-value">${Object.keys(prefs).length}</div><div class="stat-label">prefs</div></div>
+                        </div>
+                    </div>
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">Preferences</span></div>
+                        ${prefRows ? `<table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px;">${prefRows}</table>` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No preferences set.</div>'}
+                    </div>
+                </div>
+
+                <div class="card card-full" style="margin-top:16px;padding:18px;">
+                    <div class="card-header"><span class="card-title">Documents (${d.documents?.length ?? 0})</span></div>
+                    ${(d.documents && d.documents.length) ? `
+                        <div class="table-wrapper" style="margin-top:8px;">
+                            <table>
+                                <thead><tr><th>Filename</th><th style="text-align:right;">Size</th><th>Uploaded</th></tr></thead>
+                                <tbody>
+                                    ${d.documents.map(doc => `<tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;">${escape(doc.key)}</td><td style="text-align:right;">${fmtBytes(doc.size)}</td><td>${fmtTime(doc.uploadedAt)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No documents uploaded.</div>'}
+                </div>
+
+                <div class="card card-full" style="margin-top:16px;padding:18px;">
+                    <div class="card-header"><span class="card-title">Recent Messages (${d.recentMessages?.length ?? 0})</span></div>
+                    ${(d.recentMessages && d.recentMessages.length) ? `
+                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;">
+                            ${d.recentMessages.map(m => `
+                                <div style="border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--bg-elev);">
+                                    <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">
+                                        <span style="font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">${escape(m.role || 'msg')}</span>
+                                        <span>${fmtTime(m.timestamp)}</span>
+                                    </div>
+                                    <div style="white-space:pre-wrap;font-size:0.9rem;line-height:1.45;">${escape(m.content)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No recent messages.</div>'}
+                </div>`;
                 detail.innerHTML = html;
             } catch (e) {
-                detail.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+                detail.innerHTML = '<div class="card" style="padding:16px;color:#f55;">Error: ' + e.message + '</div>';
             }
         }
 
@@ -1451,7 +1977,6 @@
         }
 
         function updateStats(data) {
-            document.getElementById('stat-rpm').textContent = data.globalMessagesPerMinute || 0;
             document.getElementById('stat-rph').textContent = data.globalMessagesPerHour || 0;
             document.getElementById('stat-users').textContent = data.activeUsers || 0;
             document.getElementById('stat-hits').textContent = data.rateLimitHits24h || 0;
@@ -1538,8 +2063,6 @@
         function updatePulseFromStats(data) {
             if (!data) return;
             const rph = data.globalMessagesPerHour || 0;
-            const valueEl = document.getElementById('pulse-msgs-value');
-            if (valueEl) valueEl.textContent = rph;
 
             pulseHistory.msgs.push(rph);
             if (pulseHistory.msgs.length > 30) pulseHistory.msgs.shift();
@@ -1687,6 +2210,8 @@
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/admin/api/upload');
                 xhr.withCredentials = true;
+                const _csrfTok = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                if (_csrfTok) xhr.setRequestHeader('X-CSRF-Token', _csrfTok);
 
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
@@ -1957,6 +2482,16 @@
         }
 
         async function loadDocuments() {
+            // Clear selections on reload
+            if (typeof _selectedDocs !== 'undefined') {
+                _selectedDocs.clear();
+                const lbl = document.getElementById('select-all-label');
+                const btn = document.getElementById('btn-delete-selected');
+                if (lbl) lbl.style.display = 'none';
+                if (btn) btn.style.display = 'none';
+                const master = document.getElementById('doc-select-all');
+                if (master) { master.checked = false; master.indeterminate = false; }
+            }
             const filterSel = document.getElementById('doc-filter');
             const filter = filterSel ? filterSel.value : 'all';
             const tbl = document.getElementById('documents-table');
@@ -1965,17 +2500,24 @@
                 const r = await fetch('/admin/api/data/documents?filter=' + encodeURIComponent(filter), { credentials: 'include' });
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 const data = await r.json();
+                // W2 defense-in-depth: filter out WhatsApp session JSONs even if backend lets some through.
+                const isWaSession = (d) => {
+                    const k = (d.s3Key || d.key || d.filename || '').toLowerCase();
+                    return k.startsWith('sessions/') || k.includes('/whatsapp-session') || /(^|\/)session-\d+_\d+\.\d+\.json$/.test(k) || k.endsWith('.creds.json');
+                };
+                data.documents = (data.documents || []).filter(d => !isWaSession(d));
                 if (!data.documents || data.documents.length === 0) {
                     tbl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">No documents.</div>';
                     return;
                 }
-                let html = '<table class="doc-table"><thead><tr><th>Name</th><th>Source</th><th>Uploaded</th><th>Size</th><th></th></tr></thead><tbody>';
+                let html = '<table class="doc-table"><thead><tr><th style="width:32px;text-align:center;"></th><th>Name</th><th>Source</th><th>Uploaded</th><th>Size</th><th></th></tr></thead><tbody>';
                 for (const d of data.documents) {
                     const badge = d.uploaderType === 'admin'
                         ? '<span class="doc-badge doc-badge-admin">Admin</span>'
                         : '<span class="doc-badge doc-badge-user">' + d.uploaderId.replace(/^wa-/, '') + '</span>';
                     const safeId = encodeURIComponent(d.id);
-                    html += '<tr>' +
+                    html += '<tr data-doc-id="\'' + safeId + '\'">' +
+                        '<td style="width:32px;text-align:center;padding:6px 4px;"><input type="checkbox" class="doc-checkbox" data-id="\'' + safeId + '\'" data-name="\'' + escapeHtml(d.filename).replace(/\'/g,"\\\'") + '\'" onchange="onDocCheckbox(this)"></td>' +
                         '<td style="font-weight:500;">' + escapeHtml(d.filename) + '</td>' +
                         '<td>' + badge + '</td>' +
                         '<td title="' + escapeHtml(d.uploadedAt) + '">' + fmtRelTime(d.uploadedAt) + '</td>' +
@@ -1985,6 +2527,7 @@
                 }
                 html += '</tbody></table>';
                 tbl.innerHTML = html;
+                if (typeof _updateSelectUI !== 'undefined') _updateSelectUI();
             } catch (e) {
                 console.error('loadDocuments failed', e);
                 tbl.innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load: ' + (e.message || e) + '</div>';
@@ -1993,6 +2536,66 @@
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+        }
+
+        // Multi-select delete
+        const _selectedDocs = new Set();
+
+        function onDocCheckbox(cb) {
+            const id = cb.dataset.id;
+            if (cb.checked) _selectedDocs.add(id); else _selectedDocs.delete(id);
+            _updateSelectUI();
+        }
+
+        function toggleSelectAll(masterCb) {
+            document.querySelectorAll('.doc-checkbox').forEach(cb => {
+                cb.checked = masterCb.checked;
+                if (masterCb.checked) _selectedDocs.add(cb.dataset.id);
+                else _selectedDocs.delete(cb.dataset.id);
+            });
+            _updateSelectUI();
+        }
+
+        function _updateSelectUI() {
+            const n = _selectedDocs.size;
+            const label = document.getElementById('select-all-label');
+            const btn = document.getElementById('btn-delete-selected');
+            const countEl = document.getElementById('select-count');
+            const total = document.querySelectorAll('.doc-checkbox').length;
+            if (total > 0 && label) label.style.display = 'flex';
+            if (btn) btn.style.display = n > 0 ? 'inline-block' : 'none';
+            if (countEl) countEl.textContent = n + ' selected';
+            const master = document.getElementById('doc-select-all');
+            if (master) { master.checked = n > 0 && n === total; master.indeterminate = n > 0 && n < total; }
+        }
+
+        async function deleteSelected() {
+            const ids = [..._selectedDocs];
+            if (!ids.length) return;
+            const n = ids.length;
+            if (!confirm('Delete ' + n + ' document' + (n > 1 ? 's' : '') + '? This cannot be undone.')) return;
+            const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+            const btn = document.getElementById('btn-delete-selected');
+            if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+            let ok = 0, fail = 0;
+            for (const id of ids) {
+                try {
+                    const r = await fetch('/admin/api/data/documents/' + encodeURIComponent(id), {
+                        method: 'DELETE', credentials: 'include',
+                        headers: { 'X-CSRF-Token': csrf }
+                    });
+                    if (r.ok) ok++; else fail++;
+                } catch { fail++; }
+            }
+            _selectedDocs.clear();
+            if (btn) { btn.disabled = false; btn.style.display = 'none'; btn.textContent = 'Delete selected'; }
+            const master = document.getElementById('doc-select-all');
+            if (master) { master.checked = false; master.indeterminate = false; }
+            const lbl = document.getElementById('select-all-label');
+            if (lbl) lbl.style.display = 'none';
+            if (fail > 0) alert('Deleted ' + ok + ', failed ' + fail + '. Refresh to see state.');
+            await loadDocuments();
+            await loadDataStats();
         }
 
         async function deleteDocument(documentId, filename) {
@@ -2047,9 +2650,351 @@
                 });
             }
         })();
+
+
+        // ---------------- Upload: target-user selector ----------------
+        function toggleTargetUser() {
+            const corp = document.getElementById('corporate-toggle');
+            const row = document.getElementById('target-user-row');
+            if (row) row.style.display = corp && corp.checked ? 'none' : 'flex';
+        }
+        async function populateTargetUsers() {
+            const sel = document.getElementById('target-user-id');
+            if (!sel) return;
+            try {
+                const r = await fetch('/admin/api/data/users', { credentials: 'include', headers: { 'X-CSRF-Token': csrf } });
+                if (!r.ok) return;
+                const data = await r.json();
+                const users = data.users || [];
+                sel.innerHTML = '<option value="">All users (corporate)</option>';
+                users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.userId;
+                    opt.textContent = u.userId;
+                    sel.appendChild(opt);
+                });
+            } catch(e) {}
+        }
+        // Populate on data tab open
+        document.querySelectorAll('.tab-btn[data-tab="data"]').forEach(btn => {
+            btn.addEventListener('click', populateTargetUsers);
+        });
+        toggleTargetUser(); // initial state
+
+        // ---------------- Logout ----------------
+
+        (function attachLogout() {
+            const btn = document.getElementById('btn-logout');
+            if (!btn) return;
+            btn.addEventListener('click', async () => {
+                if (!confirm('Sign out of admin dashboard?')) return;
+                try {
+                    const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                    await fetch('/admin/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+                } catch (e) {}
+                document.cookie = 'nanoclaw_admin_session=; Path=/admin; Max-Age=0';
+                document.cookie = 'nanoclaw_admin_csrf=; Path=/admin; Max-Age=0';
+                // Basic Auth: overwrite cached credentials with bogus ones so
+                // the browser forgets them, then navigate to /admin/logged-out
+                // which the server serves as 401 to force a fresh credential prompt.
+                try {
+                    await fetch('/admin', {
+                        headers: { 'Authorization': 'Basic ' + btoa('logged-out:logged-out') },
+                        cache: 'no-store'
+                    });
+                } catch (e) {}
+                window.location.replace('/admin/logged-out');
+            });
+        })();
+
+        // ---------------- Architecture tab ----------------
+        // ================== Architecture tab ==================
+        // Node layout: 3 rows, visually grouped by color
+        // Row 0 (y=40):  WhatsApp -> Orchestrator -> Redis
+        // Row 1 (y=200): Bedrock <- Sub-Agent ->  DynamoDB
+        // Row 2 (y=340): S3               OpenSearch
+        const NW = 158, NH = 74, RX = 10;
+        const ARCH_NODES = [
+            // Edge layer
+            { id: 'whatsapp',     label: 'WhatsApp',      sub: 'Baileys adapter',   x:  40, y:  40, group: 'edge' },
+            // Core layer
+            { id: 'orchestrator', label: 'Orchestrator',  sub: 'EC2 Node.js host',  x: 260, y:  40, group: 'core' },
+            { id: 'redis',        label: 'Redis',         sub: 'Queue & cache',     x: 480, y:  40, group: 'core' },
+            { id: 'subAgent',     label: 'Sub-Agent',     sub: 'ECS Fargate Python',x: 700, y:  40, group: 'core' },
+            // AI layer
+            { id: 'bedrock',      label: 'Bedrock',       sub: 'Claude Sonnet 4',   x: 700, y: 210, group: 'ai'   },
+            // Data layer
+            { id: 'opensearch',   label: 'OpenSearch',    sub: 'Vector RAG store',  x: 480, y: 210, group: 'data' },
+            { id: 'dynamodb',     label: 'DynamoDB',      sub: 'Chat + prefs',      x: 260, y: 210, group: 'data' },
+            { id: 's3',           label: 'S3',            sub: 'Files & uploads',   x:  40, y: 210, group: 'data' },
+        ];
+        const ARCH_EDGES = [
+            { from: 'whatsapp',     to: 'orchestrator', label: 'inbound',  style: 'primary' },
+            { from: 'orchestrator', to: 'redis',        label: 'enqueue',  style: 'primary' },
+            { from: 'redis',        to: 'subAgent',     label: 'dispatch', style: 'primary' },
+            { from: 'subAgent',     to: 'redis',        label: 'response', style: 'return'  },
+            { from: 'orchestrator', to: 'whatsapp',     label: 'deliver',  style: 'return'  },
+            { from: 'subAgent',     to: 'bedrock',      label: 'invoke',   style: 'ai'      },
+            { from: 'subAgent',     to: 'opensearch',   label: 'RAG',      style: 'data'    },
+            { from: 'subAgent',     to: 'dynamodb',     label: 'persist',  style: 'data'    },
+            { from: 'subAgent',     to: 's3',           label: 'docs',     style: 'data'    },
+        ];
+        // Group fill/stroke colors (dark-mode friendly, no CSS vars inside SVG)
+        const GROUP_COLORS = {
+            edge: { fill: '#1a2830', stroke: '#2d6070', text: '#9dd8e8', sub: '#5a9aaa' },
+            core: { fill: '#1e1a2e', stroke: '#4a3a7a', text: '#c8b8f0', sub: '#7a60b8' },
+            ai:   { fill: '#2a1a30', stroke: '#7a3a9a', text: '#e0b8f8', sub: '#9a60b8' },
+            data: { fill: '#182820', stroke: '#2a6a40', text: '#9ae8b8', sub: '#4a9a68' },
+        };
+        const EDGE_COLORS = {
+            primary: { stroke: '#4a7ab8', dash: 'none' },
+            return:  { stroke: '#6ab870', dash: '5,3' },
+            ai:      { stroke: '#b878d8', dash: '7,3' },
+            data:    { stroke: '#48a878', dash: '4,4' },
+        };
+        let archInterval = null;
+
+        function renderArchSkeleton() {
+            const svg = document.getElementById('arch-svg');
+            if (!svg) return;
+            let out = '';
+
+            // Defs: arrowheads per color + radial glow
+            out += `<defs>`;
+            out += `<filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>`;
+            for (const [style, cfg] of Object.entries(EDGE_COLORS)) {
+                out += `<marker id="arrow-${style}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                    <path d="M0,1 L9,5 L0,9 Z" fill="${cfg.stroke}" opacity="0.85"/>
+                </marker>`;
+            }
+            // Animated dash gradient for active edges
+            out += `<style>
+                @keyframes dashAnim { to { stroke-dashoffset: -22; } }
+                .ae-primary { animation: dashAnim 1.4s linear infinite; }
+                .ae-return  { animation: dashAnim 2.2s linear infinite; }
+                .ae-ai      { animation: dashAnim 1.8s linear infinite; }
+                .ae-data    { animation: dashAnim 2.8s linear infinite; }
+                .anode-rect { transition: filter 0.3s; }
+                .anode-rect:hover { filter: url(#glow); cursor:pointer; }
+                @keyframes glow-pulse { 0%,100%{opacity:0.4;r:5} 50%{opacity:1;r:7} }
+                .status-dot-healthy { animation: glow-pulse 2s ease-in-out infinite; }
+            </style>`;
+            out += `</defs>`;
+
+            // Background grid lines (subtle)
+            out += `<g opacity="0.06">`;
+            for (let x = 0; x <= 1080; x += 60) out += `<line x1="${x}" y1="0" x2="${x}" y2="420" stroke="#8899bb" stroke-width="0.5"/>`;
+            for (let y = 0; y <= 420; y += 60) out += `<line x1="0" y1="${y}" x2="1080" y2="${y}" stroke="#8899bb" stroke-width="0.5"/>`;
+            out += `</g>`;
+
+            // Draw edges first (below nodes)
+            for (const edge of ARCH_EDGES) {
+                const a = ARCH_NODES.find(n => n.id === edge.from);
+                const b = ARCH_NODES.find(n => n.id === edge.to);
+                if (!a || !b) continue;
+                const cfg = EDGE_COLORS[edge.style] || EDGE_COLORS.primary;
+
+                // Source and target attachment points (right/left or bottom/top)
+                const ax = a.x + NW/2, ay = a.y + NH/2;
+                const bx = b.x + NW/2, by = b.y + NH/2;
+
+                // Determine best connection sides
+                let x1, y1, x2, y2, cx1, cy1, cx2, cy2;
+                const dx = bx - ax, dy = by - ay;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal dominant
+                    x1 = dx > 0 ? a.x + NW : a.x;
+                    y1 = a.y + NH/2;
+                    x2 = dx > 0 ? b.x : b.x + NW;
+                    y2 = b.y + NH/2;
+                    cx1 = x1 + (dx > 0 ? 60 : -60); cy1 = y1;
+                    cx2 = x2 - (dx > 0 ? 60 : -60); cy2 = y2;
+                } else {
+                    // Vertical dominant
+                    x1 = a.x + NW/2; y1 = dy > 0 ? a.y + NH : a.y;
+                    x2 = b.x + NW/2; y2 = dy > 0 ? b.y      : b.y + NH;
+                    cx1 = x1; cy1 = y1 + (dy > 0 ? 50 : -50);
+                    cx2 = x2; cy2 = y2 - (dy > 0 ? 50 : -50);
+                }
+
+                const dash = cfg.dash === 'none' ? '' : `stroke-dasharray="${cfg.dash}"`;
+                out += `<path class="ae-${edge.style}" id="edge-${edge.from}-${edge.to}"
+                    d="M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}"
+                    stroke="${cfg.stroke}" stroke-width="1.8" fill="none" opacity="0.75"
+                    ${dash} marker-end="url(#arrow-${edge.style})"/>`;
+
+                // Edge label at midpoint
+                const mx = (x1+cx1+cx2+x2)/4, my = (y1+cy1+cy2+y2)/4 - 8;
+                out += `<text x="${mx}" y="${my}" text-anchor="middle"
+                    fill="${cfg.stroke}" font-size="9.5" font-family="ui-monospace,monospace"
+                    opacity="0.85" font-weight="500">${edge.label}</text>`;
+            }
+
+            // Draw nodes
+            for (const n of ARCH_NODES) {
+                const c = GROUP_COLORS[n.group] || GROUP_COLORS.core;
+                out += `<g class="arch-node-group" id="node-${n.id}" transform="translate(${n.x},${n.y})">`;
+                // Shadow
+                out += `<rect x="3" y="3" width="${NW}" height="${NH}" rx="${RX}" fill="#000" opacity="0.4"/>`;
+                // Body
+                out += `<rect class="anode-rect" width="${NW}" height="${NH}" rx="${RX}"
+                    fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5"/>`;
+                // Top accent bar
+                out += `<rect width="${NW}" height="3" rx="${RX}" ry="${RX/2}" fill="${c.stroke}" opacity="0.8"/>`;
+                // Status dot (top-right)
+                out += `<circle class="arch-status-dot" id="dot-${n.id}" cx="${NW-14}" cy="14" r="5" fill="#555" opacity="0.6"/>`;
+                // Label
+                out += `<text x="14" y="28" fill="${c.text}" font-size="12.5" font-weight="700"
+                    font-family="ui-sans-serif,system-ui,sans-serif">${n.label}</text>`;
+                // Sub-label
+                out += `<text x="14" y="44" fill="${c.sub}" font-size="9.5" font-family="ui-sans-serif,system-ui,sans-serif">${n.sub}</text>`;
+                // Detail line (updated by refreshArch)
+                out += `<text class="node-detail" id="detail-${n.id}" x="14" y="60" fill="${c.sub}"
+                    font-size="9" font-family="ui-monospace,monospace" opacity="0.8"></text>`;
+                out += `</g>`;
+            }
+
+            svg.innerHTML = out;
+        }
+
+        async function refreshArch() {
+            try {
+                const r = await fetch('/admin/api/architecture/state', { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                const comps = data.components || {};
+                const STATUS_COLORS = {
+                    healthy: '#3ddc84',
+                    pending: '#ffbb33',
+                    down:    '#ff4444',
+                };
+                for (const n of ARCH_NODES) {
+                    const c = comps[n.id] || { status: 'down' };
+                    const dot = document.getElementById('dot-' + n.id);
+                    if (dot) {
+                        const col = STATUS_COLORS[c.status] || STATUS_COLORS.down;
+                        dot.setAttribute('fill', col);
+                        dot.setAttribute('opacity', '1');
+                        dot.style.filter = c.status === 'healthy' ? `drop-shadow(0 0 4px ${col})` : '';
+                        dot.className.baseVal = 'arch-status-dot' + (c.status === 'healthy' ? ' status-dot-healthy' : '');
+                    }
+                    const grp = document.getElementById('node-' + n.id);
+                    if (grp) {
+                        // Highlight node border on healthy
+                        const rect = grp.querySelector('.anode-rect');
+                        const gc = GROUP_COLORS[n.group] || GROUP_COLORS.core;
+                        if (rect) {
+                            if (c.status === 'healthy') rect.setAttribute('stroke-width', '2');
+                            else if (c.status === 'down') { rect.setAttribute('stroke', '#a13434'); rect.setAttribute('stroke-width', '1.5'); }
+                            else rect.setAttribute('stroke-width', '1.5');
+                        }
+                    }
+                    const det = document.getElementById('detail-' + n.id);
+                    if (det && c.detail) det.textContent = c.detail.slice(0, 26);
+                }
+                const ts = document.getElementById('arch-generated-at');
+                if (ts) ts.textContent = new Date(data.generatedAt || Date.now()).toLocaleTimeString();
+
+                // Recent flow table
+                const tbody = document.getElementById('arch-flow-body');
+                if (tbody) {
+                    if (!data.recentFlow || !data.recentFlow.length) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="padding:24px 16px;color:oklch(0.45 0.01 250);font-size:0.82rem;text-align:center;">No traffic yet.</td></tr>';
+                    } else {
+                        const esc = s => (s||'').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]);
+                        tbody.innerHTML = data.recentFlow.slice(0, 30).map(f => {
+                            const t  = f.timestamp ? new Date(f.timestamp).toLocaleTimeString() : '&mdash;';
+                            const u  = esc((f.userId||'').slice(0,16));
+                            const ro = (f.role||'').toLowerCase();
+                            const pill = ro ? `<span class="arch-role-pill ${ro}">${esc(ro)}</span>` : '&mdash;';
+                            const prev = esc((f.preview||'').slice(0,60));
+                            return `<tr><td>${t}</td><td style="font-variant-numeric:tabular-nums;">${u}</td><td>${pill}</td><td style="color:oklch(0.60 0.01 250);">${prev}</td></tr>`;
+                        }).join('');
+                    }
+                }
+            } catch (e) { /* swallow */ }
+        }
+
+        // ---------------- Test Chat tab ----------------
+        function initTestChat() {
+            const send = document.getElementById('testchat-send');
+            const input = document.getElementById('testchat-input');
+            if (send && !send.dataset.bound) {
+                send.dataset.bound = '1';
+                send.addEventListener('click', sendTestChat);
+                input.addEventListener('keydown', e => { if (e.key === 'Enter') sendTestChat(); });
+            }
+        }
+        async function sendTestChat() {
+            const userId = (document.getElementById('testchat-userid').value || '').trim();
+            const text = (document.getElementById('testchat-input').value || '').trim();
+            if (!userId || !text) return;
+            const log = document.getElementById('testchat-log');
+            appendTestMsg('user', text);
+            document.getElementById('testchat-input').value = '';
+            const sendBtn = document.getElementById('testchat-send');
+            sendBtn.disabled = true; sendBtn.textContent = 'Waiting…';
+            try {
+                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                const r = await fetch('/admin/api/test/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ userId, text }),
+                });
+                const data = await r.json();
+                if (!r.ok) {
+                    appendTestMsg('error', `[${r.status}] ${data.error || data.note || 'unknown error'}`);
+                } else if (data.status === 'timeout') {
+                    appendTestMsg('error', 'Sub-agent did not respond within 45s. Check ECS logs.');
+                } else {
+                    let body = data.response;
+                    if (body && typeof body === 'object') {
+                        body = body.text || body.content || JSON.stringify(body);
+                    }
+                    appendTestMsg('bot', String(body || '(empty response)'));
+                }
+            } catch (e) {
+                appendTestMsg('error', 'Request failed: ' + (e.message || String(e)));
+            } finally {
+                sendBtn.disabled = false; sendBtn.textContent = 'Send';
+            }
+        }
+        function appendTestMsg(kind, text) {
+            const log = document.getElementById('testchat-log');
+            if (!log) return;
+            const div = document.createElement('div');
+            div.className = 'testchat-msg ' + kind;
+            div.textContent = text;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // ---------------- Reset all (Users tab) ----------------
+        async function resetAllUsers() {
+            if (!confirm('DANGER: This will delete ALL user messages, preferences, S3 docs, and OpenSearch entries.\n\nWA pairing sessions and corporate docs are preserved.\n\nAre you absolutely sure?')) return;
+            if (!confirm('Last chance. This is irreversible. Proceed?')) return;
+            try {
+                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                const r = await fetch('/admin/api/data/users/reset-all', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': csrf },
+                    credentials: 'same-origin',
+                });
+                const d = await r.json();
+                if (!r.ok) {
+                    alert('Reset failed: ' + (d.error || r.status));
+                } else {
+                    alert(`Reset complete. Removed: messages=${d.deleted?.messages ?? 0}, preferences=${d.deleted?.preferences ?? 0}, s3=${d.deleted?.s3Objects ?? 0}`);
+                    if (typeof loadUsers === 'function') loadUsers();
+                    if (typeof loadDataStats === 'function') loadDataStats();
+                }
+            } catch (e) { alert('Reset error: ' + e.message); }
+        }
+        window.resetAllUsers = resetAllUsers;
 </script>
-<!-- impeccable-live-start -->
-<script src="http://localhost:8400/live.js"></script>
-<!-- impeccable-live-end -->
 </body>
 </html>

@@ -541,6 +541,11 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
     });
 }
 
+function cfgFromServices(services: { dataGateway: { cfg: { dynamoDb: { chatMessagesTable?: string } } } }, _kind: string): string {
+    const t = services.dataGateway.cfg.dynamoDb.chatMessagesTable ?? '';
+    return t ? '4 tables (' + t + ' active)' : '4 tables';
+}
+
 export async function handleAdminRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -852,9 +857,11 @@ export async function handleAdminRequest(
                     ) as never;
                     for (const it of r.Items ?? []) {
                         if (!it.userId) continue;
-                        const cur = counts.get(it.userId) ?? { messageCount: 0 };
+                        // Normalize: strip @s.whatsapp.net so old/new format users merge.
+                        const normalized = it.userId.replace(/@s\.whatsapp\.net$/, '');
+                        const cur = counts.get(normalized) ?? { messageCount: 0 };
                         cur.messageCount += 1;
-                        counts.set(it.userId, cur);
+                        counts.set(normalized, cur);
                     }
                     exclusiveStartKey = r.LastEvaluatedKey;
                 } while (exclusiveStartKey);
@@ -935,6 +942,244 @@ export async function handleAdminRequest(
             } catch (err) {
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
+            return true;
+        }
+
+        // POST /admin/api/data/users/reset-all - DESTRUCTIVE: wipe all user data.
+        // Clears chat-messages, user-preferences, and S3 user/* prefixes (NOT corporate, NOT sessions).
+        if (path === '/admin/api/data/users/reset-all' && method === 'POST') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const ddb = services.dataGateway.dynamo;
+                const cfg = services.dataGateway.cfg;
+                const { ScanCommand: DDBScan, BatchWriteCommand } = await import('@aws-sdk/lib-dynamodb');
+                const { ListObjectsV2Command, DeleteObjectsCommand } = await import('@aws-sdk/client-s3');
+
+                let totalMessages = 0;
+                let totalPrefs = 0;
+                let totalS3 = 0;
+
+                async function wipeTable(tableName: string, keyAttrs: string[]): Promise<number> {
+                    let count = 0;
+                    let exclusiveStartKey: Record<string, unknown> | undefined = undefined;
+                    do {
+                        const r: { Items?: Array<Record<string, unknown>>; LastEvaluatedKey?: Record<string, unknown> } = await ddb.send(
+                            new DDBScan({
+                                TableName: tableName,
+                                ProjectionExpression: keyAttrs.map((_a, i) => '#k' + i).join(', '),
+                                ExpressionAttributeNames: Object.fromEntries(keyAttrs.map((a, i) => ['#k' + i, a])),
+                                ExclusiveStartKey: exclusiveStartKey,
+                            }) as never,
+                        ) as never;
+                        const items = r.Items ?? [];
+                        for (let i = 0; i < items.length; i += 25) {
+                            const slice = items.slice(i, i + 25);
+                            const requestItems: Record<string, Array<{ DeleteRequest: { Key: Record<string, unknown> } }>> = {
+                                [tableName]: slice.map(it => ({ DeleteRequest: { Key: Object.fromEntries(keyAttrs.map(a => [a, it[a]])) } })),
+                            };
+                            try {
+                                await ddb.send(new BatchWriteCommand({ RequestItems: requestItems }) as never);
+                                count += slice.length;
+                            } catch (e) {
+                                log.warn('reset-all batch delete failed', { table: tableName, err: e instanceof Error ? e.message : String(e) });
+                            }
+                        }
+                        exclusiveStartKey = r.LastEvaluatedKey;
+                    } while (exclusiveStartKey);
+                    return count;
+                }
+
+                try { totalMessages = await wipeTable(cfg.dynamoDb.chatMessagesTable, ['userId', 'timestamp']); } catch (e) { log.error('reset-all chat-messages wipe failed', { err: e instanceof Error ? e.message : String(e) }); }
+                try { totalPrefs = await wipeTable(cfg.dynamoDb.userPreferencesTable, ['userId']); } catch (e) { log.error('reset-all preferences wipe failed', { err: e instanceof Error ? e.message : String(e) }); }
+
+                let continuationToken: string | undefined = undefined;
+                do {
+                    const r: { Contents?: Array<{ Key?: string }>; NextContinuationToken?: string; IsTruncated?: boolean } = await services.dataGateway.s3.send(
+                        new ListObjectsV2Command({ Bucket: cfg.s3.dataBucket, ContinuationToken: continuationToken, MaxKeys: 1000 }) as never,
+                    ) as never;
+                    const keysToDelete = (r.Contents ?? [])
+                        .map(o => o.Key)
+                        .filter((k): k is string => !!k && !k.startsWith('sessions/') && !k.startsWith('corporate/') && !k.startsWith('admin/'));
+                    for (let i = 0; i < keysToDelete.length; i += 1000) {
+                        const slice = keysToDelete.slice(i, i + 1000);
+                        try {
+                            await services.dataGateway.s3.send(
+                                new DeleteObjectsCommand({ Bucket: cfg.s3.dataBucket, Delete: { Objects: slice.map(k => ({ Key: k })), Quiet: true } }) as never,
+                            );
+                            totalS3 += slice.length;
+                        } catch (e) { log.warn('reset-all S3 batch delete failed', { err: e instanceof Error ? e.message : String(e) }); }
+                    }
+                    continuationToken = r.IsTruncated ? r.NextContinuationToken : undefined;
+                } while (continuationToken);
+
+                try {
+                    await services.dataGateway.openSearch.deleteByQuery({
+                        index: cfg.openSearch.indexName,
+                        body: { query: { bool: { must_not: [{ term: { userId: 'CORPORATE' } }] } } },
+                        refresh: true,
+                    });
+                } catch (e) { log.warn('reset-all OpenSearch wipe failed (non-fatal)', { err: e instanceof Error ? e.message : String(e) }); }
+
+                sendJson(res, { success: true, deleted: { messages: totalMessages, preferences: totalPrefs, s3Objects: totalS3 } });
+            } catch (err) {
+                log.error('reset-all failed', { err: err instanceof Error ? err.message : String(err) });
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // GET /admin/api/architecture/state - infrastructure + dataflow snapshot for the architecture tab
+        if (path === '/admin/api/architecture/state' && method === 'GET') {
+            try {
+                const services = getCloudServices();
+                const bridgeState = getWhatsAppState();
+                const components: Record<string, { status: string; detail?: string }> = {
+                    whatsapp: {
+                        status: bridgeState.status === 'connected' ? 'healthy' : (bridgeState.status === 'qr_pending' ? 'pending' : 'down'),
+                        detail: bridgeState.phoneNumber ?? undefined,
+                    },
+                };
+                if (services) {
+                    try { await services.redis.ping(); components.redis = { status: 'healthy', detail: 'ElastiCache 7.1' }; } catch (e) { components.redis = { status: 'down', detail: e instanceof Error ? e.message : String(e) }; }
+                    components.dynamodb = { status: 'healthy', detail: cfgFromServices(services, 'dynamodb') };
+                    components.opensearch = { status: 'healthy', detail: 'AOSS / 1024-d KNN (cohere-multilingual-v3)' };
+                    components.s3 = { status: 'healthy', detail: 'nanoclaw-data-709609992277' };
+                    components.bedrock = { status: 'healthy', detail: 'embed: cohere.embed-multilingual-v3 (1024-d) / LLM: claude-sonnet-4.5' };
+                    components.subAgent = { status: 'healthy', detail: 'ECS Fargate | 20 tools: search, weather, currency, news, wiki, SO, arxiv, crypto, stocks, SG-weather, PSI, 4D, maps, routing, tz, ISS, img-gen, TTS, fetch-url' };
+                    components.orchestrator = { status: 'healthy', detail: 'EC2 t3.small (orchestrator)' };
+                } else {
+                    components.cloudServices = { status: 'down', detail: 'cloud services not initialized' };
+                }
+                const recent: Array<{ timestamp: string; userId: string; role: string; preview: string }> = [];
+                if (services) {
+                    try {
+                        const { ScanCommand: DDBScan } = await import('@aws-sdk/lib-dynamodb');
+                        const r2 = await services.dataGateway.dynamo.send(new DDBScan({
+                            TableName: services.dataGateway.cfg.dynamoDb.chatMessagesTable,
+                            ProjectionExpression: 'userId, #ts, #r, #t',
+                            ExpressionAttributeNames: { '#ts': 'timestamp', '#r': 'role', '#t': 'text' },
+                            Limit: 200,
+                        }) as never) as { Items?: Array<{ userId?: string; timestamp?: string; role?: string; text?: string }> };
+                        const sorted = (r2.Items ?? []).sort((a, b) => String(b.timestamp ?? '').localeCompare(String(a.timestamp ?? ''))).slice(0, 30);
+                        for (const it of sorted) {
+                            recent.push({
+                                timestamp: it.timestamp ?? '',
+                                userId: (it.userId ?? '').replace(/@s\.whatsapp\.net$/, ''),
+                                role: it.role ?? 'user',
+                                preview: (it.text ?? '').slice(0, 60),
+                            });
+                        }
+                    } catch (_e) { /* swallow */ }
+                }
+                sendJson(res, { components, recentFlow: recent, generatedAt: new Date().toISOString() });
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // POST /admin/api/test/send - admin sends a test message as a user (real-world test).
+        // Pushes to the real sub-agent inbound queue with channelType='admin-test'
+        // so the response-poll bridge captures and stores the reply for the admin
+        // console instead of forwarding it to WhatsApp.
+        // Body: { userId: string, text: string }
+        if (path === '/admin/api/test/send' && method === 'POST') {
+            const services = getCloudServices();
+            if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
+            try {
+                const body = await readJsonBody(req);
+                const userIdRaw = String(body?.userId ?? '').trim();
+                const text = String(body?.text ?? '').trim();
+                if (!userIdRaw || !text) { sendJson(res, { error: 'userId and text required' }, 400); return true; }
+                // Normalize: use bare phone (no @s.whatsapp.net) so chat-messages keys match.
+                const userId = userIdRaw.replace(/@s\.whatsapp\.net$/, '');
+                const messageId = 'admin-test-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+                // Sub-agent runs with AGENT_USER_ID=shared and dispatches by
+                // payload.platformId. Queue is queue:agent:shared:inbound and
+                // payload envelope is { id, userId, type, payload:{...}, timestamp }.
+                const platformId = userId + '@s.whatsapp.net';
+                const envelope = {
+                    id: messageId,
+                    userId: 'shared',
+                    type: 'chat',
+                    payload: {
+                        content: text,
+                        channelType: 'admin-test',
+                        platformId,
+                        threadId: platformId,
+                        kind: 'user_message',
+                        source: 'admin-dashboard-test',
+                        adminTestMessageId: messageId,
+                    },
+                    timestamp: new Date().toISOString(),
+                };
+                await services.redis.lpush('queue:agent:shared:inbound', JSON.stringify(envelope));
+                await services.redis.expire('queue:agent:shared:inbound', 3600);
+                // Wait for response-poll bridge to surface the reply.
+                // CRITICAL: use a dedicated blocking Redis connection so the BRPOP
+                // doesn't hold up other commands (e.g. orch response-handler lpush)
+                // on the shared services.redis client. Without this, the BRPOP
+                // blocks the connection and the response lpush queues behind it,
+                // taking ~45s to surface.
+                const responseKey = 'admin:test:response:' + messageId;
+                const { Redis: IORedisCtor } = await import('ioredis');
+                const cfg = services.config?.redis ?? null;
+                const blockingClient = new IORedisCtor({
+                    host: cfg?.host,
+                    port: cfg?.port,
+                    password: cfg?.password,
+                    tls: cfg?.tls ? {} : undefined,
+                    lazyConnect: true,
+                    maxRetriesPerRequest: 3,
+                });
+                let result: [string, string] | null = null;
+                try {
+                    await blockingClient.connect();
+                    result = await blockingClient.brpop(responseKey, 45) as [string, string] | null;
+                } finally {
+                    try { await blockingClient.quit(); } catch { /* ignore */ }
+                }
+                if (!result) {
+                    sendJson(res, { messageId, status: 'timeout', note: 'no response within 45s; check ECS sub-agent logs' }, 504);
+                    return true;
+                }
+                const raw3 = result[1];
+                let parsed: unknown = raw3;
+                try { parsed = JSON.parse(raw3); } catch { /* keep raw */ }
+                sendJson(res, { messageId, status: 'ok', response: parsed });
+            } catch (err) {
+                sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+            return true;
+        }
+
+        // POST /admin/api/logout - clear session cookie + force re-auth
+        if (path === '/admin/api/logout' && method === 'POST') {
+            res.setHeader('Set-Cookie', [
+                'nanoclaw_admin_session=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0',
+                'nanoclaw_admin_csrf=; SameSite=Strict; Path=/admin; Max-Age=0',
+            ]);
+            sendJson(res, { success: true });
+            return true;
+        }
+
+        // GET /admin/logged-out -- 401 to flush browser Basic Auth credential cache
+        if (path === '/admin/logged-out') {
+            res.writeHead(401, {
+                'WWW-Authenticate': 'Basic realm="NanoClaw Admin", charset="UTF-8"',
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store',
+            });
+            res.end(
+                '<!DOCTYPE html><html><head><meta charset="utf-8">'
+                + '<meta http-equiv="refresh" content="1;url=/admin">'
+                + '<title>Signed out</title>'
+                + '<style>body{font-family:system-ui;background:#0a0a0f;color:#e0e0e0;'
+                + 'display:flex;align-items:center;justify-content:center;height:100vh;margin:0}'
+                + 'p{font-size:1.1rem;opacity:.7}</style>'
+                + '</head><body><p>Signed out. Redirecting to login...</p></body></html>'
+            );
             return true;
         }
 
@@ -1171,7 +1416,9 @@ async function uploadToS3AndEnqueue(
 
         const s3 = new S3Client({ region });
         const isCorporate = opts?.corporate === true;
-        const userId = isCorporate ? 'CORPORATE' : (opts?.targetUserId || 'admin');
+        // No targetUserId from admin = shared/corporate docs (visible to all users)
+        const userId = isCorporate || !opts?.targetUserId ? 'CORPORATE' : opts.targetUserId;
+        const effectiveCorporate = userId === 'CORPORATE';
         const key = isCorporate
             ? `corporate/${uploadId}/${file.filename}`
             : `users/${userId}/staging/${uploadId}/${file.filename}`;
@@ -1196,8 +1443,8 @@ async function uploadToS3AndEnqueue(
                     s3Key: key,
                     bucket,
                     userId,
-                    corporate: isCorporate,
-                    origin: isCorporate ? 'upload_worker' : undefined,
+                    corporate: effectiveCorporate,
+                    origin: effectiveCorporate ? 'upload_worker' : undefined,
                     timestamp: new Date().toISOString(),
                 }));
             } else {

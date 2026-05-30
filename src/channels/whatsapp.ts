@@ -815,6 +815,19 @@ registerChannelAdapter('whatsapp', {
               normalized.videoMessage?.caption ||
               '';
 
+            // Extract quoted/reply context -- prepend to content so LLM has thread context
+            const _qMsg = normalized.extendedTextMessage?.contextInfo?.quotedMessage;
+            if (_qMsg) {
+              const _qText: string =
+                ((_qMsg as Record<string,unknown>).conversation as string) ||
+                (((_qMsg as Record<string,unknown>).extendedTextMessage as Record<string,unknown>|undefined)?.text as string) ||
+                (((_qMsg as Record<string,unknown>).imageMessage as Record<string,unknown>|undefined)?.caption as string) ||
+                '';
+              if (_qText && content) {
+                content = '[Replying to: "' + _qText.slice(0, 300) + (_qText.length > 300 ? '...' : '') + '"]\n' + content;
+              }
+            }
+
             // Normalize bot LID mention → assistant name for trigger matching
             if (botLidUser && content.includes(`@${botLidUser}`)) {
               content = content.replace(`@${botLidUser}`, `@${ASSISTANT_NAME}`);
@@ -914,6 +927,11 @@ registerChannelAdapter('whatsapp', {
                     log.info('WhatsApp document uploaded to S3 for processing', {
                       uploadId, filename: att.name, userId, s3Key,
                     });
+
+                    // Ack to user so they know processing started
+                    try {
+                      await sendRawMessage(chatJid, `📥 Got "${att.name}" \u2014 indexing it now. Ask me about it in ~30s.`);
+                    } catch { /* best effort */ }
 
                     // Cleanup local file after S3 upload
                     try { fs.unlinkSync(filePath); } catch { /* best effort */ }
@@ -1091,6 +1109,40 @@ registerChannelAdapter('whatsapp', {
             });
           } catch (err) {
             log.debug('Failed to send reaction', { platformId, err });
+          }
+          return;
+        }
+
+        // Image delivery (from generate_image tool)
+        if (message.kind === 'image' && content.url) {
+          try {
+            const imgResp = await fetch(content.url as string);
+            const imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+            await sock.sendMessage(platformId, {
+              image: imgBuffer,
+              caption: (content.caption as string) || '',
+              mimetype: 'image/png',
+            });
+          } catch (err) {
+            log.error('Failed to send image message', { platformId, err });
+            await sendRawMessage(platformId, `Sorry, couldn't send the image. Link: ${content.url as string}`);
+          }
+          return;
+        }
+
+        // Audio delivery (from text_to_speech tool)
+        if (message.kind === 'audio' && content.url) {
+          try {
+            const audioResp = await fetch(content.url as string);
+            const audioBuffer = Buffer.from(await audioResp.arrayBuffer());
+            await sock.sendMessage(platformId, {
+              audio: audioBuffer,
+              mimetype: 'audio/mpeg',
+              ptt: false,
+            });
+          } catch (err) {
+            log.error('Failed to send audio message', { platformId, err });
+            await sendRawMessage(platformId, `Sorry, couldn't send the audio. Link: ${content.url as string}`);
           }
           return;
         }

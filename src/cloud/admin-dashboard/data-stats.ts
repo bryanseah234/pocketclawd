@@ -51,19 +51,15 @@ export async function getDataStats(services: CloudServices): Promise<DataStats> 
         }
     }
 
-    // OpenSearch: _stats on the index
+    // OpenSearch: use count API (AOSS does not support _stats)
     let osDocCount = 0;
-    let osSizeBytes = 0;
+    const osSizeBytes = 0;
     try {
-        const r = await dataGateway.openSearch.indices.stats({ index: cfg.openSearch.indexName });
-        // Type-loose access: the response shape is heavily typed but varies by version
-        const statsBody = (r as unknown as { body?: Record<string, unknown> }).body ?? (r as unknown as Record<string, unknown>);
-        const indices = (statsBody as { indices?: Record<string, { primaries?: { docs?: { count?: number }; store?: { size_in_bytes?: number } } }> }).indices;
-        const idx = indices?.[cfg.openSearch.indexName];
-        osDocCount = idx?.primaries?.docs?.count ?? 0;
-        osSizeBytes = idx?.primaries?.store?.size_in_bytes ?? 0;
+        const countRes = await dataGateway.openSearch.count({ index: cfg.openSearch.indexName });
+        const countBody = (countRes as unknown as { body?: { count?: number } }).body ?? (countRes as unknown as { count?: number });
+        osDocCount = countBody?.count ?? 0;
     } catch (err) {
-        log.warn('Data stats: OpenSearch indices.stats failed', { err: err instanceof Error ? err.message : String(err) });
+        log.warn('Data stats: OpenSearch count failed', { err: err instanceof Error ? err.message : String(err) });
     }
 
     // S3: ListObjectsV2 across the entire bucket (paginated)
@@ -72,7 +68,7 @@ export async function getDataStats(services: CloudServices): Promise<DataStats> 
     try {
         let continuationToken: string | undefined = undefined;
         do {
-            const r: { Contents?: Array<{ Size?: number }>; NextContinuationToken?: string; IsTruncated?: boolean } = await dataGateway.s3.send(
+            const r: { Contents?: Array<{ Size?: number; Key?: string }>; NextContinuationToken?: string; IsTruncated?: boolean } = await dataGateway.s3.send(
                 new ListObjectsV2Command({
                     Bucket: cfg.s3.dataBucket,
                     ContinuationToken: continuationToken,
@@ -80,6 +76,12 @@ export async function getDataStats(services: CloudServices): Promise<DataStats> 
                 }),
             );
             for (const obj of r.Contents ?? []) {
+                // Skip WhatsApp Baileys session files - these are auth state,
+                // not user documents. Keeps Database Stats / dashboard counts
+                // honest (admin only cares about user/admin uploads).
+                if (obj.Key && (obj.Key.startsWith('sessions/') || obj.Key.startsWith('whatsapp-session/') || obj.Key.includes('/whatsapp-session') || /(^|\/)session-\d+_\d+\.\d+\.json$/.test(obj.Key))) {
+                    continue;
+                }
                 s3ObjectCount += 1;
                 s3SizeBytes += obj.Size ?? 0;
             }
@@ -134,6 +136,10 @@ export async function listAllDocuments(
             for (const obj of r.Contents ?? []) {
                 if (!obj.Key) continue;
                 const key = obj.Key;
+                // Skip WhatsApp Baileys session files (auth state, not docs).
+                if (key.startsWith('sessions/') || key.startsWith('whatsapp-session/') || key.includes('/whatsapp-session') || /(^|\/)session-\d+_\d+\.\d+\.json$/.test(key)) {
+                    continue;
+                }
                 const slash = key.indexOf('/');
                 const userPart = slash >= 0 ? key.substring(0, slash) : 'unknown';
                 const filename = slash >= 0 ? key.substring(slash + 1) : key;

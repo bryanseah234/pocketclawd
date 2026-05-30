@@ -345,7 +345,7 @@ export class DataGateway implements IDataGateway {
 
     /**
      * Ensure the documents index exists with proper mappings.
-     * Creates the index with knn_vector (1536 dims, cosinesimil, nmslib) if it doesn't exist.
+     * Creates the index with knn_vector (1024 dims, cosinesimil, nmslib) if it doesn't exist.
      * Call during initialization or from setup scripts.
      */
     async ensureIndex(): Promise<void> {
@@ -377,7 +377,7 @@ export class DataGateway implements IDataGateway {
                         content: { type: 'text', analyzer: 'standard' },
                         contentVector: {
                             type: 'knn_vector',
-                            dimension: 1536,
+                            dimension: 1024,
                             method: {
                                 name: 'hnsw',
                                 space_type: 'cosinesimil',
@@ -422,9 +422,7 @@ export class DataGateway implements IDataGateway {
 
         await this.openSearchClient.index({
             index: indexName,
-            id: chunk.id,
             body,
-            refresh: 'wait_for',
         });
     }
 
@@ -444,7 +442,6 @@ export class DataGateway implements IDataGateway {
 
         await this.openSearchClient.index({
             index: indexName,
-            id: chunk.id,
             body: {
                 id: chunk.id,
                 userId: DataGateway.CORPORATE_SENTINEL,
@@ -456,7 +453,6 @@ export class DataGateway implements IDataGateway {
                 chunkIndex: chunk.chunkIndex,
                 uploadedAt: chunk.uploadedAt,
             },
-            refresh: 'wait_for',
         });
     }
 
