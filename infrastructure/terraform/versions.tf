@@ -16,7 +16,7 @@ terraform {
   # Bootstrap the state bucket and lock table first (see backend.tf),
   # then uncomment this block and run `terraform init -migrate-state`.
   backend "s3" {
-    bucket         = "nanoclaw-terraform-state"
+    bucket         = "nanoclaw-tfstate-709609992277"
     key            = "infrastructure/terraform.tfstate"
     region         = "ap-southeast-1"
     dynamodb_table = "nanoclaw-terraform-locks"

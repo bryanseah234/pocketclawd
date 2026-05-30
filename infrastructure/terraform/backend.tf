@@ -16,7 +16,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "nanoclaw-terraform-state"
+  bucket = "nanoclaw-tfstate-709609992277"
 
   # Prevent accidental deletion of the state bucket
   lifecycle {
@@ -24,7 +24,7 @@ resource "aws_s3_bucket" "terraform_state" {
   }
 
   tags = {
-    Name        = "nanoclaw-terraform-state"
+    Name        = "nanoclaw-tfstate-709609992277"
     Purpose     = "Terraform remote state storage"
     Environment = var.environment
   }
