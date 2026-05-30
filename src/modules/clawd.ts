@@ -1,54 +1,39 @@
 /**
- * Clawd — runtime wiring (T16).
+ * Clawd — runtime wiring (cloud cron driver).
  *
- * Imported for side effects from `src/modules/index.ts`. On host startup:
- *   - Registers three scheduled jobs (02:00 ingest, 03:00 wiki, 07:00 digest)
- *   - Writes a `CLAWD_START` audit-log line so we can confirm the
- *     module loaded.
+ * Imported for side effects from `src/modules/index.ts`. On host startup it
+ * registers a single scheduled job — the 07:00 morning digest — behind a
+ * cron driver with a Redis distributed lock so a restart mid-window (or a
+ * second orchestrator replica) cannot double-run it.
  *
- * Cron uses `cron-parser` (already in package.json) for next-run calculation
- * and a single `setInterval` driver. This avoids depending on the agent-side
- * scheduler which lives inside containers.
+ * Cloud-only. The former local-mode jobs (file/cloud ingestion, wiki regen
+ * from the local pgvector store, mnemon GC) were removed when local mode was
+ * deleted; their persistence is now owned by DataGateway (DynamoDB + OpenSearch
+ * + S3) and the digest reads DynamoDB directly via clawd-wiring.ts.
  */
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { CloudScheduler } from './ingestion/scheduler.js';
-import { WikiGenerator } from './wiki-generator.js';
 import { envPath } from './paths.js';
-import { getKnowledgeBase } from './knowledge-base/index.js';
-import {
-  watchAllConfiguredRoots,
-  ProcessedRegistry,
-  processFile,
-} from './ingestion/file-watcher.js';
-import { startTelegramMtprotoIngester } from './ingestion/telegram-mtproto.js';
 import { getCloudServices } from '../cloud/bootstrap.js';
 import { cronLockKey } from '../cloud/redis-lock.js';
-import { assertLocalMode } from '../cloud/bootstrap.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
 
 const SCHEDULES = [
-  { name: 'cloud-ingest', cron: '0 2 * * *', handler: runCloudIngest },
-  { name: 'wiki-regen', cron: '0 3 * * *', handler: runWikiRegen },
-  // mnemon gc: visibility into growth + low-importance candidate list.
-  // Suggest-mode only — does not auto-evict. Auto-eviction policy TBD;
-  // see TODO in runMnemonGc().
-  { name: 'mnemon-gc', cron: '0 4 * * *', handler: runMnemonGc },
   { name: 'morning-digest', cron: '0 7 * * *', handler: runMorningDigest },
 ] as const;
 
 const driverInterval = 60 * 1000; // poll every minute
 let driverTimer: NodeJS.Timeout | null = null;
 /**
- * In-process dedup map (local-mode fallback). In cloud mode, tick() instead
+ * In-process dedup map (degraded fallback). In cloud mode, tick() instead
  * acquires a Redis distributed lock (cronLockKey + SET NX EX) per scheduled
  * window so a restart mid-window — or a second replica — cannot double-run a
- * job. See t2-10. The Map is retained for local/degraded operation where no
- * cloud Redis is wired.
+ * job. The Map is retained for degraded operation where no cloud Redis is
+ * wired.
  */
 const lastRun = new Map<string, number>();
 
@@ -65,97 +50,12 @@ async function audit(line: string): Promise<void> {
   }
 }
 
-async function runCloudIngest(): Promise<void> {
-  await audit('CRON | cloud-ingest START');
-  try {
-    const scheduler = new CloudScheduler();
-    const summary = await scheduler.runAll();
-    await audit(
-      `CRON | cloud-ingest END | facts=${summary.totalFacts} errors=${summary.totalErrors} duration=${summary.finishedAt.getTime() - summary.startedAt.getTime()}ms`,
-    );
-  } catch (e) {
-    await audit(`CRON | cloud-ingest FAIL | ${(e as Error).message}`);
-  }
-}
-
-async function runWikiRegen(): Promise<void> {
-  await audit('CRON | wiki-regen START');
-  // Wiki generation needs a Claude provider — wired by the host at startup
-  // via setWikiProvider(). If unset, skip and audit.
-  if (!claudeCallback) {
-    await audit('CRON | wiki-regen SKIP | no-provider');
-    return;
-  }
-  try {
-    const wiki = new WikiGenerator(claudeCallback);
-    const result = await wiki.generateAll();
-    await audit(
-      `CRON | wiki-regen END | succeeded=${result.succeeded.length} failed=${result.failed.length}`,
-    );
-  } catch (e) {
-    await audit(`CRON | wiki-regen FAIL | ${(e as Error).message}`);
-  }
-}
-
-async function runMnemonGc(): Promise<void> {
-  await audit('CRON | mnemon-gc START');
-  try {
-    const kb = await getKnowledgeBase();
-
-    // Tunables (env-overridable). Defaults are conservative.
-    const threshold = Number(process.env.MNEMON_GC_THRESHOLD ?? '0.5');
-    const scanLimit = Number(process.env.MNEMON_GC_SCAN_LIMIT ?? '50');
-    // Cap deletions per run so a misconfigured threshold can't wipe the store
-    // in a single pass — bounded blast radius.
-    const maxEvict = Number(process.env.MNEMON_GC_MAX_EVICT ?? '25');
-    const autoEvict = (process.env.MNEMON_GC_AUTO_EVICT ?? 'false') === 'true';
-
-    const candidates = await kb.lowImportance(threshold, scanLimit);
-
-    if (!autoEvict) {
-      // Suggest-mode (default): surface candidates without deleting, so we
-      // have visibility into store growth before enabling enforcement.
-      await audit(
-        `CRON | mnemon-gc END | mode=suggest candidates=${candidates.length} threshold=${threshold}`,
-      );
-      return;
-    }
-
-    // Enforcement mode: evict the lowest-importance candidates, bounded by
-    // maxEvict. Failures on individual items are logged but don't abort the
-    // run (best-effort GC).
-    const toEvict = candidates.slice(0, maxEvict);
-    let evicted = 0;
-    const failures: string[] = [];
-    for (const item of toEvict) {
-      if (typeof item.id !== 'number') {
-        // No stable id — cannot forget; skip (suggest-only for this item).
-        continue;
-      }
-      try {
-        await kb.forget(item.id);
-        evicted++;
-      } catch (e) {
-        failures.push(`${item.id}:${(e as Error).message}`);
-      }
-    }
-    await audit(
-      `CRON | mnemon-gc END | mode=evict candidates=${candidates.length} ` +
-      `evicted=${evicted} failed=${failures.length} ` +
-      `threshold=${threshold} maxEvict=${maxEvict}` +
-      (failures.length ? ` | failures=${failures.slice(0, 5).join(',')}` : ''),
-    );
-  } catch (e) {
-    await audit(`CRON | mnemon-gc FAIL | ${(e as Error).message}`);
-  }
-}
-
 async function runMorningDigest(): Promise<void> {
   await audit('CRON | morning-digest START');
   // Morning digest is delivery-driven: it composes a message and pushes it
-  // through NanoClaw's outbound channel for the clawd group. Concrete
-  // wiring is added by the runtime that owns delivery.ts; this stub keeps
-  // the cron contract live and audited.
+  // through NanoClaw's outbound channel for the clawd group. Concrete wiring
+  // is added by clawd-wiring.ts (Bedrock + DynamoDB); this keeps the cron
+  // contract live and audited.
   if (!digestCallback) {
     await audit('CRON | morning-digest SKIP | no-handler');
     return;
@@ -168,13 +68,7 @@ async function runMorningDigest(): Promise<void> {
   }
 }
 
-let claudeCallback: ((prompt: string) => Promise<string>) | null = null;
 let digestCallback: (() => Promise<void>) | null = null;
-
-/** Wire a Claude callback so the wiki cron can render entries. */
-export function setWikiProvider(fn: (prompt: string) => Promise<string>): void {
-  claudeCallback = fn;
-}
 
 /** Wire a digest delivery handler. */
 export function setDigestHandler(fn: () => Promise<void>): void {
@@ -202,8 +96,8 @@ async function tick(): Promise<void> {
   for (const job of SCHEDULES) {
     const next = nextRunFromCron(job.cron, new Date(now));
     if (!next) continue;
-    // Guard against concurrent execution: a long-running cloud-ingest can
-    // outlast its tick and we must NOT spawn a duplicate.
+    // Guard against concurrent execution: a long-running handler can outlast
+    // its tick and we must NOT spawn a duplicate.
     if (inflight.has(job.name)) continue;
     const last = lastRun.get(job.name) ?? 0;
     // Run if the scheduled time is within the last minute and we haven't
@@ -217,13 +111,9 @@ async function tick(): Promise<void> {
       // Distributed-lock guard (t2-10): when cloud services are wired, claim
       // the (job, scheduled-window) slot in Redis so a restart within the same
       // cron window — or a second orchestrator replica — cannot double-run the
-      // job. The in-process lastRun Map remains as the local-mode fallback.
+      // job. The in-process lastRun Map remains as the degraded fallback.
       const cloud = getCloudServices();
       if (cloud?.redis) {
-        // windowIso = the scheduled occurrence, minute-resolution, so each
-        // daily run has a unique, deterministic lock key. TTL 23h: long enough
-        // to block a same-day re-run, short enough to auto-clear before the
-        // next day's occurrence.
         const windowIso = sched.toISOString().slice(0, 16);
         const key = cronLockKey(job.name, windowIso);
         // Fire the async claim; only dispatch if we win it. We must not block
@@ -249,8 +139,7 @@ async function tick(): Promise<void> {
         continue;
       }
 
-      // Local-mode fallback: in-process dedup only.
-      // Record dispatch time so a retry within 5 minutes is skipped.
+      // Degraded fallback: in-process dedup only.
       lastRun.set(job.name, now);
       const p = job.handler().finally(() => {
         inflight.delete(job.name);
@@ -263,12 +152,9 @@ async function tick(): Promise<void> {
 }
 
 export function startClawdCron(): void {
-  assertLocalMode('clawd cron driver');
   if (driverTimer) return;
   // Validate every cron pattern before starting — nextRunFromCron only
   // supports `M H * * *`, so any other pattern would silently never fire.
-  // Audit-log unsupported patterns so operators see them instead of waiting
-  // forever for a job that can't run.
   for (const job of SCHEDULES) {
     if (nextRunFromCron(job.cron) === null) {
       void audit(
@@ -277,80 +163,11 @@ export function startClawdCron(): void {
       );
     }
   }
-  void audit('CLAWD_START | cron driver running, jobs=cloud-ingest@02:00, wiki-regen@03:00, mnemon-gc@04:00, morning-digest@07:00');
+  void audit('CLAWD_START | cron driver running, jobs=morning-digest@07:00');
   driverTimer = setInterval(() => void tick(), driverInterval);
   // Don't keep the event loop alive on shutdown — stopClawdCron clears
   // explicitly, but unref guards against forgetting to call it on SIGTERM.
   if (typeof driverTimer.unref === 'function') driverTimer.unref();
-  // Kick off file-watcher in background; failure here must not prevent
-  // the cron driver from running.
-  void startFileWatcher().catch((err) => {
-    void audit(`FILE_WATCHER_FAIL | ${(err as Error).message}`);
-  });
-  // Telegram MTProto ingester — no-ops if creds/session not present yet.
-  void startTelegramMtprotoIngester().catch((err) => {
-    void audit(`MTPROTO_FAIL | ${(err as Error).message}`);
-  });
-}
-
-/** Pipe a single Fact into the knowledge base. */
-async function mnemonRemember(
-  text: string,
-  tags: string[],
-  source: string,
-  sourceId: string,
-): Promise<void> {
-  // Errors are swallowed by design — file-watcher must not die on a single
-  // failed write. The KB layer handles transient pgvector retries internally.
-  try {
-    const kb = await getKnowledgeBase();
-    await kb.store({ text, source, source_id: sourceId, tags });
-  } catch {
-    /* swallow */
-  }
-}
-
-let fileWatcherStarted = false;
-async function startFileWatcher(): Promise<void> {
-  if (fileWatcherStarted) return;
-  fileWatcherStarted = true;
-  const registry = new ProcessedRegistry();
-  await audit('FILE_WATCHER_START | configuring chokidar over WATCH_PATHS_ROOT');
-  let processed = 0;
-  let skipped = 0;
-  await watchAllConfiguredRoots(async (file: string) => {
-    try {
-      const result = await processFile(file, registry);
-      if (result === null) {
-        skipped += 1;
-        return;
-      }
-      // Each chunk → KB insight, tagged for source-attribution. The Fact
-      // already carries a stable (source, sourceId) pair derived from the
-      // file's SHA + chunk index, so re-ingestion of unchanged files is a
-      // dedup no-op at the (source, source_id) unique constraint.
-      for (const fact of result.facts) {
-        await mnemonRemember(
-          fact.text,
-          ['clawd', `src:file`, `path:${truncForTag(fact.source)}`],
-          fact.source,
-          fact.sourceId ?? fact.source,
-        );
-      }
-      processed += 1;
-      if (processed % 100 === 0) {
-        void audit(`FILE_WATCHER_PROGRESS | processed=${processed} skipped=${skipped}`);
-      }
-    } catch (err) {
-      // Per-file failure must not kill the watcher
-      void audit(`FILE_WATCHER_FILE_FAIL | ${file} | ${(err as Error).message}`);
-    }
-  });
-  void audit('FILE_WATCHER_RUNNING | listening for adds + changes');
-}
-
-function truncForTag(value: string): string {
-  return value.replace(/[\s,]/g, '_').slice(0, 80);
 }
 
 export function stopClawdCron(): void {
@@ -362,4 +179,3 @@ export function stopClawdCron(): void {
 
 // Self-register on import — same pattern as other modules in this folder.
 startClawdCron();
-

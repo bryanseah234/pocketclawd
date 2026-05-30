@@ -1,22 +1,18 @@
 /**
- * Clawd — host-side wiring for cron handlers (F2 + F3 wired in Wave 9).
+ * Clawd — host-side wiring for the morning-digest cron handler.
  *
  * Imported for side effects from `src/modules/index.ts`.
  *
- * As of Wave 9 the wiring is no longer no-op:
- *
- *   - F3 wiki regen (03:00): wired to a Bedrock callback via `setWikiProvider`.
- *     Calls Sonnet 4.5 with the prompt the WikiGenerator emits, returns the
- *     raw text, audit-logs success/fail.
- *
  *   - F2 morning digest (07:00): wired via `setDigestHandler`. Iterates the
- *     consenting users in DDB, asks Bedrock for a 3-bullet digest of their
- *     last 24h of chat history, and pushes the result to the WhatsApp
- *     channel through the delivery adapter. Best-effort per user.
+ *     consenting users in DynamoDB, asks Bedrock (Sonnet 4.5) for a 3-bullet
+ *     digest of their last 24h of chat history, and pushes the result to the
+ *     WhatsApp channel through the delivery adapter. Best-effort per user.
  *
- * Both handlers are gated on env: set CLAWD_CRON_WIKI=true / CLAWD_CRON_DIGEST=true
- * to enable them in the running orchestrator. Defaults are FALSE so existing
- * deployments stay quiet until Bryan flips the switch.
+ * Gated on env: set CLAWD_CRON_DIGEST=true to enable it in the running
+ * orchestrator. Default is FALSE so deployments stay quiet until opted in.
+ *
+ * (The former F3 wiki-regen path was removed with local mode — it depended on
+ * the deleted local pgvector WikiGenerator.)
  */
 
 import * as fs from 'node:fs/promises';
@@ -24,7 +20,7 @@ import * as path from 'node:path';
 
 import { onDeliveryAdapterReady, getDeliveryAdapter } from '../delivery.js';
 import { envPath } from './paths.js';
-import { setWikiProvider, setDigestHandler } from './clawd.js';
+import { setDigestHandler } from './clawd.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
@@ -38,11 +34,11 @@ async function audit(line: string): Promise<void> {
   }
 }
 
-// ── F3: Bedrock-backed wiki provider ──
+// ── Bedrock chat (Sonnet 4.5) used by the digest ──
 async function bedrockChat(prompt: string): Promise<string> {
   const { BedrockRuntimeClient, InvokeModelCommand } = await import('@aws-sdk/client-bedrock-runtime');
   const region = process.env.AWS_REGION || 'ap-southeast-1';
-  const modelId = process.env.CLAWD_WIKI_MODEL_ID || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
+  const modelId = process.env.CLAWD_DIGEST_MODEL_ID || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
   const client = new BedrockRuntimeClient({ region });
   const body = {
     anthropic_version: 'bedrock-2023-05-31',
@@ -134,17 +130,13 @@ async function buildAndDeliverDigest(): Promise<void> {
   await audit(`CRON | morning-digest END | delivered=${delivered}`);
 }
 
-// Register the wiring under env gates so existing deployments stay quiet
-// until Bryan opts in.
-if (process.env.CLAWD_CRON_WIKI === 'true') {
-  setWikiProvider(bedrockChat);
-}
+// Register the digest handler under an env gate so deployments stay quiet
+// until opted in.
 if (process.env.CLAWD_CRON_DIGEST === 'true') {
   setDigestHandler(buildAndDeliverDigest);
 }
 
 onDeliveryAdapterReady(() => {
-  const wikiOn = process.env.CLAWD_CRON_WIKI === 'true';
   const digestOn = process.env.CLAWD_CRON_DIGEST === 'true';
-  void audit(`CLAWD_WIRING | delivery ready | wiki=${wikiOn ? 'wired' : 'off'} digest=${digestOn ? 'wired' : 'off'}`);
+  void audit(`CLAWD_WIRING | delivery ready | digest=${digestOn ? 'wired' : 'off'}`);
 });

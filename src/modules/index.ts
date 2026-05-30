@@ -22,7 +22,6 @@ import './scheduling/index.js';
 import './permissions/index.js';
 import './agent-to-agent/index.js';
 import './self-mod/index.js';
-import './knowledge-base/register.js';
 
 // Clawd — registers cron driver for cloud ingestion, wiki, digest.
 import './clawd.js';

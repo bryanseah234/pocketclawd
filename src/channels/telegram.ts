@@ -15,12 +15,6 @@ import { sanitizeTelegramLegacyMarkdown } from './telegram-markdown-sanitize.js'
 import { registerChannelAdapter } from './channel-registry.js';
 import type { ChannelAdapter, ChannelSetup, InboundMessage } from './adapter.js';
 import { tryConsume } from './telegram-pairing.js';
-import {
-  startConnect,
-  submitCode,
-  submitPassword,
-  cancel as cancelConnect,
-} from '../modules/telegram-mtproto-service.js';
 
 /**
  * Retry a one-shot operation that can fail on transient network errors at
@@ -131,134 +125,6 @@ async function sendPairingConfirmation(token: string, platformId: string): Promi
   }
 }
 
-/**
- * Send arbitrary text to a chat via the bot. Used by the connect flow.
- * Failures are logged, not propagated.
- */
-async function sendBotMessage(token: string, platformId: string, text: string): Promise<void> {
-  const chatId = platformId.split(':').slice(1).join(':');
-  if (!chatId) return;
-  try {
-    const res = await tgFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text }),
-    });
-    if (!res.ok) {
-      log.warn('Bot sendMessage non-OK', { status: res.status });
-    }
-  } catch (err) {
-    log.warn('Bot sendMessage failed', { err });
-  }
-}
-
-/**
- * Per-chat state machine for the /connect_telegram flow. Lets the user
- * complete a multi-step sign-in by replying to the bot in plain text after
- * the initial slash command.
- */
-type ConnectStage = 'awaiting_phone' | 'awaiting_code' | 'awaiting_password';
-const connectState = new Map<string, ConnectStage>(); // platformId -> stage
-
-interface HandleConnectArgs {
-  text: string;
-  platformId: string;
-  token: string;
-  authorUserId: string | null;
-}
-
-/**
- * Try to consume the message as part of a /connect_telegram flow.
- * Returns true if the message was handled (and routing should stop),
- * false if it should fall through to normal pairing/routing.
- */
-async function tryHandleConnectFlow(args: HandleConnectArgs): Promise<boolean> {
-  const { text, platformId, token, authorUserId } = args;
-  const trimmed = text.trim();
-  const lower = trimmed.toLowerCase();
-
-  // Slash commands always take precedence over conversation state.
-  if (lower === '/connect_telegram' || lower.startsWith('/connect_telegram ')) {
-    connectState.set(platformId, 'awaiting_phone');
-    await sendBotMessage(
-      token,
-      platformId,
-      [
-        '🔌 Telegram MTProto sign-in',
-        '',
-        'This signs Clawd in AS YOU so it can read your DMs and group history.',
-        '⚠️ Treat the resulting session like a password — anyone with it can read your Telegram.',
-        '',
-        'Reply with your phone number in international format (e.g. +6592348112).',
-        'Send /cancel to abort.',
-      ].join('\n'),
-    );
-    return true;
-  }
-
-  if (lower === '/cancel' || lower === '/cancel_telegram') {
-    if (connectState.has(platformId)) {
-      cancelConnect(authorUserId ?? platformId);
-      connectState.delete(platformId);
-      await sendBotMessage(token, platformId, '✋ Sign-in cancelled.');
-      return true;
-    }
-    // No flow in progress — let normal routing handle this
-    return false;
-  }
-
-  const stage = connectState.get(platformId);
-  if (!stage) return false;
-
-  // Now we're inside an in-progress flow; the message is one of:
-  // (a) phone number → kick off MTProto + Telegram texts the code
-  // (b) SMS code → submit, may need 2FA password next
-  // (c) 2FA password → submit, finish
-  const userKey = authorUserId ?? platformId;
-
-  if (stage === 'awaiting_phone') {
-    const phone = trimmed.replace(/[\s-]/g, '');
-    if (!/^\+?\d{8,15}$/.test(phone)) {
-      await sendBotMessage(
-        token,
-        platformId,
-        'That doesn\'t look like a phone number. Send international format like +6592348112, or /cancel to abort.',
-      );
-      return true;
-    }
-    const phoneE164 = phone.startsWith('+') ? phone : `+${phone}`;
-    await sendBotMessage(token, platformId, `📱 Texting a code to ${phoneE164}...`);
-    const result = await startConnect(userKey, phoneE164);
-    if (result.step === 'awaiting_code') {
-      connectState.set(platformId, 'awaiting_code');
-    } else {
-      connectState.delete(platformId);
-    }
-    await sendBotMessage(token, platformId, result.message);
-    return true;
-  }
-
-  if (stage === 'awaiting_code') {
-    const result = await submitCode(userKey, trimmed);
-    if (result.step === 'awaiting_password') {
-      connectState.set(platformId, 'awaiting_password');
-    } else {
-      connectState.delete(platformId);
-    }
-    await sendBotMessage(token, platformId, result.message);
-    return true;
-  }
-
-  if (stage === 'awaiting_password') {
-    const result = await submitPassword(userKey, trimmed);
-    connectState.delete(platformId);
-    await sendBotMessage(token, platformId, result.message);
-    return true;
-  }
-
-  return false;
-}
-
 function createPairingInterceptor(
   botUsernamePromise: Promise<string | null>,
   hostOnInbound: ChannelSetup['onInbound'],
@@ -276,15 +142,6 @@ function createPairingInterceptor(
         hostOnInbound(platformId, threadId, message);
         return;
       }
-
-      // Clawd /connect_telegram flow — short-circuits routing on match.
-      const handledByConnect = await tryHandleConnectFlow({
-        text,
-        platformId,
-        token,
-        authorUserId,
-      });
-      if (handledByConnect) return;
 
       const consumed = await tryConsume({
         text,

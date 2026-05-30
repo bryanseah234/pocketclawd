@@ -57,7 +57,6 @@ import { log } from '../log.js';
 import { registerChannelAdapter } from './channel-registry.js';
 import { normalizeOptions, type NormalizedOption } from './ask-question.js';
 import type { ChannelAdapter, ChannelSetup, ConversationInfo, InboundMessage, OutboundMessage } from './adapter.js';
-import { archiveChatMessage } from '../modules/chat-archive.js';
 import { WhatsAppSessionBackup } from '../modules/whatsapp-session-backup.js';
 
 const baileysLogger = pino({ level: 'silent' });
@@ -493,18 +492,6 @@ registerChannelAdapter('whatsapp', {
 
     /** Download media from an inbound message, save to /workspace/attachments/. */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    /** Roll up an attachments array into per-type counts for chat-archive. */
-    function summarizeAttachments(
-      atts: Array<{ type: string; name: string; localPath: string }>,
-    ): { image?: number; video?: number; audio?: number; document?: number; sticker?: number; voice?: number } {
-      const out: { [k: string]: number } = {};
-      for (const a of atts) {
-        const k = a.type === 'audio' ? 'audio' : a.type;
-        out[k] = (out[k] ?? 0) + 1;
-      }
-      return out as { image?: number; video?: number; audio?: number; document?: number };
-    }
-
     async function downloadInboundMedia(
       msg: WAMessage,
       normalized: any,
@@ -846,23 +833,6 @@ registerChannelAdapter('whatsapp', {
               : rawSender;
             const senderName = msg.pushName || sender.split('@')[0];
             const fromMe = msg.key.fromMe || false;
-
-            // Archive every chat message into mnemon (configurable via
-            // INGEST_CHAT_MODE env var). This is fire-and-forget — does
-            // NOT block message routing. Skips when mode=off.
-            archiveChatMessage({
-              platform: 'whatsapp',
-              chatId: chatJid,
-              chatName: undefined,
-              isGroup,
-              senderId: sender,
-              senderName,
-              text: content,
-              fromSelf: fromMe,
-              occurredAt: new Date(timestamp),
-              messageId: msg.key.id || `${chatJid}-${timestamp}`,
-              attachments: attachments.length > 0 ? summarizeAttachments(attachments) : undefined,
-            });
 
             // Cloud mode: upload document attachments to S3 for processing pipeline
             if (process.env.NANOCLAW_ENV === 'cloud' && attachments.length > 0) {
