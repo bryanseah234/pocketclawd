@@ -43,7 +43,7 @@ def _resolve_default_model_id() -> str:
 
 
 DEFAULT_MODEL_ID = _resolve_default_model_id()
-VECTOR_DIMENSION = 1536
+VECTOR_DIMENSION = 1024
 DEFAULT_BATCH_SIZE = 50
 
 # Retry configuration: exponential backoff 1s, 2s, 4s, 8s, 16s
@@ -345,12 +345,16 @@ class EmbeddingPipeline:
         """Build the model-specific InvokeModel body."""
         mid = self.model_id.lower()
         if "cohere" in mid:
-            # Cohere Embed v3/v4 schema. Truncate=END handles oversize.
-            return {
-                "texts": [text],
-                "input_type": "search_document",
-                "truncate": "END",
+            # All cohere Bedrock models use: {texts, input_type}
+            # truncate is NOT supported -- text must be <= 2048 chars
+            input_t = getattr(self, "_input_type", "search_document")
+            # Hard-truncate to 2048 chars to avoid ValidationException
+            safe_text = text[:2048] if len(text) > 2048 else text
+            body_c: dict[str, object] = {
+                "texts": [safe_text],
+                "input_type": input_t,
             }
+            return body_c
         # Default to Titan Embeddings v2 schema.
         return {
             "inputText": text,
@@ -375,13 +379,13 @@ class EmbeddingPipeline:
             return list(response["embedding"])
         raise ValueError(f"Unrecognised embedding response shape: keys={list(response.keys())}")
 
-    async def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str, input_type: str = "search_query") -> list[float]:
         """
         Embed a single text string into an embedding vector.
 
         Vector dimension depends on the active model:
         - Titan v2: 1536 (configurable)
-        - Cohere Embed v4: 1536 (default for embed-v4:0)
+        - Cohere embed-multilingual-v3: 1024 (active in prod)
 
         Args:
             text: Input text to embed.
@@ -389,6 +393,10 @@ class EmbeddingPipeline:
         Returns:
             List of floats representing the embedding vector.
         """
+        if not text or not text.strip():
+            logger.warning("embed_text called with empty/blank string, returning zero vector")
+            return [0.0] * VECTOR_DIMENSION
+        self._input_type = input_type  # pass to _build_request_body
         body = self._build_request_body(text)
         response = await self._invoke_with_retry(body)
         return self._parse_response(response)

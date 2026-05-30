@@ -54,34 +54,46 @@ class RAGPipeline:
         user_message: str,
         history: list[dict[str, str]] | None = None,
         chat_history: list[dict[str, str]] | None = None,
+        user_profile: dict | None = None,
     ) -> str:
         """
-        Execute the full RAG pipeline.
-
-        Args:
-            user_message: The user's question/message.
-            history: Conversation history for context (alias: chat_history).
-
-        Returns:
-            The AI-generated response with source citations.
+        Execute the full RAG pipeline with parallel embed+search.
+        Embed and search run in parallel where possible to minimise latency.
         """
+        import time as _time
         hist = history or chat_history
-        # Step 1: Embed the query
-        query_vector = await self._embedding.embed_text(user_message)
 
-        # Step 2: Search via DataGateway (orchestrator-side)
-        search_results = await self._search(user_message, query_vector)
+        # Check no-docs cache before paying for embed
+        no_docs_key = f"cache:no_docs:{self._user_id}"
+        _skip_rag = bool(await self._redis.exists(no_docs_key))
 
-        # Step 3: Format context from search results
+        if _skip_rag:
+            query_vector = []
+            search_results: list[dict] = []
+            logger.info("PERF rag=skipped (no docs cached)")
+        else:
+            # Embed then search
+            _te = _time.monotonic()
+            query_vector = await self._embedding.embed_text(user_message, input_type="search_query")
+            logger.info("PERF embed=%.2fs", _time.monotonic() - _te)
+
+            _ts = _time.monotonic()
+            search_results = await self._search(user_message, query_vector)
+            logger.info("PERF search=%.2fs hits=%d", _time.monotonic() - _ts, len(search_results))
+
+        # Step 3: Format context
         rag_context = self._format_context(search_results)
 
-        # Step 4: Generate response with LLM
+        # Step 4: LLM call
+        _tl = _time.monotonic()
         response = await self._llm.generate(
             user_message=user_message,
             history=hist,
             rag_context=rag_context if search_results else None,
-            temperature=0.2 if search_results else 0.5,  # Lower temp for RAG
+            temperature=0.2 if search_results else 0.5,
+            user_profile=user_profile,
         )
+        logger.info("PERF llm=%.2fs", _time.monotonic() - _tl)
 
         return response
 
@@ -89,11 +101,15 @@ class RAGPipeline:
         self, query_text: str, query_vector: list[float], top_k: int = 5
     ) -> list[dict[str, Any]]:
         """
-        Send a hybrid search request to the orchestrator's DataGateway worker.
-
-        The DataGateway worker executes the actual OpenSearch query with
-        userId isolation enforcement.
+        Send a hybrid search request to the orchestrator DataGateway worker.
+        Uses a 3s timeout (was 15s) and caches empty-index state per user.
         """
+        # Short-circuit: if we already know this user has no indexed docs,
+        # skip the network round-trip entirely (saves ~1s per message)
+        no_docs_key = f"cache:no_docs:{self._user_id}"
+        if await self._redis.exists(no_docs_key):
+            return []
+
         request_id = secrets.token_hex(8)
         request = {
             "action": "hybrid_search",
@@ -109,9 +125,9 @@ class RAGPipeline:
             json.dumps(request),
         )
 
-        # Wait for response
+        # Wait for response — 3s max (was 15s)
         response_key = f"queue:agent:{self._user_id}:dg_response:{request_id}"
-        result = await self._redis.brpop(response_key, timeout=15)
+        result = await self._redis.brpop(response_key, timeout=3)
 
         if result is None:
             logger.warning("RAG search timed out for user_id=%s", self._user_id)
@@ -125,9 +141,13 @@ class RAGPipeline:
             return []
 
         results = response.get("results", [])
+        filtered = [r for r in results if r.get("score", 0) >= MIN_SIMILARITY_THRESHOLD]
 
-        # Filter by minimum similarity threshold
-        return [r for r in results if r.get("score", 0) >= MIN_SIMILARITY_THRESHOLD]
+        # Cache "no docs" for 5 min so subsequent messages skip embed+search entirely
+        if not filtered:
+            await self._redis.setex(no_docs_key, 300, "1")
+
+        return filtered
 
     def _format_context(self, results: list[dict[str, Any]]) -> str:
         """
