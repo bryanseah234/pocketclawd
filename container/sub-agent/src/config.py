@@ -50,13 +50,23 @@ class Settings(BaseSettings):
 
     @property
     def inbound_queue_key(self) -> str:
-        """Redis key for receiving messages from the orchestrator."""
-        return f"queue:agent:{self.agent.user_id}:inbound"
+        """Redis key for receiving messages from the orchestrator.
+
+        Worker-pool mode: all workers pull from the shared dispatch queue.
+        Each message carries userId for per-user data isolation. AGENT_USER_ID
+        is still set but used for identity, not queue routing. Sourced from the
+        shared namespace (redis_keys.py) which mirrors src/cloud/redis-keys.ts.
+        """
+        from .redis_keys import WORKER_POOL_INBOUND
+
+        return WORKER_POOL_INBOUND
 
     @property
     def response_queue_key(self) -> str:
         """Redis key for sending responses back to the orchestrator."""
-        return "queue:orchestrator:responses"
+        from .redis_keys import ORCHESTRATOR_RESPONSES
+
+        return ORCHESTRATOR_RESPONSES
 
 
 def get_settings() -> Settings:

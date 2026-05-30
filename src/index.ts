@@ -340,6 +340,19 @@ async function main(): Promise<void> {
         }
       }
 
+      // ── Direct cloud-responder fallback (deprecated, t2-12) ────────────
+      // Only used when the sub-agent path is unavailable AND explicitly
+      // enabled. Defaults to ON to preserve current behavior, but operators
+      // should set CLOUD_RESPONDER_ENABLED=false once the ECS sub-agent is
+      // confirmed healthy — running both risks double-replies.
+      const cloudResponderEnabled = (process.env.CLOUD_RESPONDER_ENABLED ?? 'true') !== 'false';
+      if (!cloudResponderEnabled) {
+        log.warn('Sub-agent path unavailable and CLOUD_RESPONDER_ENABLED=false; dropping message', {
+          platformId: event.platformId,
+          messageId: event.message.id,
+        });
+        return;
+      }
       try {
         await respondToDM(adapter, event.platformId, inbound);
       } catch (err) {

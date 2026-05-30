@@ -12,6 +12,12 @@
 
 import { Redis } from 'ioredis';
 
+import {
+    agentInboundKey as sharedAgentInboundKey,
+    orchestratorResponseKey as sharedOrchestratorResponseKey,
+    dlqKey as sharedDlqKey,
+} from '../redis-keys.js';
+
 import type {
     AgentResponse,
     DLQEntry,
@@ -158,7 +164,7 @@ export class MessageQueue implements IMessageQueue {
 
         // Scan all DLQ keys and retry eligible messages
         let retriedCount = 0;
-        const pattern = this.keyWithPrefix('queue:dlq:*');
+        const pattern = this.keyWithPrefix('queue:agent:*:dlq');
         let cursor = '0';
 
         do {
@@ -181,13 +187,13 @@ export class MessageQueue implements IMessageQueue {
     async listDLQ(limit = 25): Promise<Record<string, DLQEntry[]>> {
         this.assertConnected();
         const out: Record<string, DLQEntry[]> = {};
-        const pattern = this.keyWithPrefix('queue:dlq:*');
+        const pattern = this.keyWithPrefix('queue:agent:*:dlq');
         let cursor = '0';
         do {
             const [nextCursor, keys] = await this.redis!.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
             cursor = nextCursor;
             for (const dlqKey of keys) {
-                const userId = dlqKey.split(':').pop() ?? 'unknown';
+                const parts = dlqKey.split(':'); const userId = parts[parts.length - 2] ?? 'unknown';
                 const raws = await this.redis!.lrange(dlqKey, 0, limit - 1);
                 out[userId] = raws.map(raw => JSON.parse(raw) as DLQEntry);
             }
@@ -245,15 +251,19 @@ export class MessageQueue implements IMessageQueue {
     }
 
     private agentInboundKey(userId: string): string {
-        return this.keyWithPrefix(`queue:agent:${userId}:inbound`);
+        // Delegates to the shared namespace so the 'dispatch' sentinel maps to
+        // the worker-pool queue (queue:agent:dispatch) that the ECS sub-agent
+        // actually BRPOPs — fixing the prior queue:agent:dispatch:inbound
+        // mismatch. See src/cloud/redis-keys.ts (t4-25).
+        return this.keyWithPrefix(sharedAgentInboundKey(userId));
     }
 
     private orchestratorResponseKey(): string {
-        return this.keyWithPrefix('queue:orchestrator:responses');
+        return this.keyWithPrefix(sharedOrchestratorResponseKey());
     }
 
     private dlqKey(userId: string): string {
-        return this.keyWithPrefix(`queue:dlq:${userId}`);
+        return this.keyWithPrefix(sharedDlqKey(userId));
     }
 
     private keyWithPrefix(key: string): string {

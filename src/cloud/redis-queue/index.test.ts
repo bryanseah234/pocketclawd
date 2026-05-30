@@ -260,7 +260,7 @@ describe('MessageQueue', () => {
             expect(mockRedisInstance.lpush).toHaveBeenCalledOnce();
 
             const [key, value] = mockRedisInstance.lpush.mock.calls[0];
-            expect(key).toBe('queue:dlq:user-1');
+            expect(key).toBe('queue:agent:user-1:dlq');
 
             const entry = JSON.parse(value) as DLQEntry;
             expect(entry.message).toEqual(msg);
@@ -305,7 +305,7 @@ describe('MessageQueue', () => {
                 retryCount: 1,
             };
 
-            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:dlq:user-1']]);
+            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:agent:user-1:dlq']]);
             mockRedisInstance.llen.mockResolvedValueOnce(1);
             mockRedisInstance.rpop.mockResolvedValueOnce(JSON.stringify(entry));
 
@@ -332,7 +332,7 @@ describe('MessageQueue', () => {
                 retryCount: 3,
             };
 
-            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:dlq:user-1']]);
+            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:agent:user-1:dlq']]);
             mockRedisInstance.llen.mockResolvedValueOnce(1);
             mockRedisInstance.rpop.mockResolvedValueOnce(JSON.stringify(entry));
 
@@ -342,7 +342,7 @@ describe('MessageQueue', () => {
 
             // Verify the message was put back in DLQ (not re-enqueued to inbound)
             expect(mockRedisInstance.lpush).toHaveBeenCalledWith(
-                'queue:dlq:user-1',
+                'queue:agent:user-1:dlq',
                 JSON.stringify(entry),
             );
         });
@@ -361,7 +361,7 @@ describe('MessageQueue', () => {
                 retryCount: 3,
             };
 
-            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:dlq:user-1']]);
+            mockRedisInstance.scan.mockResolvedValueOnce(['0', ['queue:agent:user-1:dlq']]);
             mockRedisInstance.llen.mockResolvedValueOnce(2);
             mockRedisInstance.rpop
                 .mockResolvedValueOnce(JSON.stringify(retryable))
