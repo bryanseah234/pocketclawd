@@ -35,9 +35,9 @@ resource "aws_secretsmanager_secret_version" "app_config" {
     WHATSAPP_SESSION_S3_PREFIX = "sessions/"
 
     # Redis connection (auto-populated from Terraform)
-    redis_host = aws_elasticache_cluster.redis.cache_nodes[0].address
-    redis_port = aws_elasticache_cluster.redis.cache_nodes[0].port
-    redis_tls  = false
+    redis_host = local.redis_host
+    redis_port = local.redis_port
+    redis_tls  = local.redis_tls
 
     # OpenSearch endpoint (auto-populated)
     opensearch_endpoint   = aws_opensearchserverless_collection.documents.collection_endpoint

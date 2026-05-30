@@ -164,6 +164,49 @@ resource "aws_cloudwatch_metric_alarm" "ecs_subagent_no_tasks" {
   }
 }
 
+# ─── t5-30: queue depth + orchestrator restarts ─────────────────────────────
+
+# Dispatch queue backlog — app emits NanoClaw/Application QueueDepth every 60s.
+# Sustained depth means sub-agent workers aren't keeping up (or are down).
+resource "aws_cloudwatch_metric_alarm" "queue_depth" {
+  alarm_name          = "${var.project_name}-queue-depth"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "QueueDepth"
+  namespace           = "NanoClaw/Application"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = var.queue_depth_alarm_threshold
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Dispatch queue depth above threshold for 3 minutes — sub-agent pool may be saturated or down"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "${var.project_name}-queue-depth-alarm"
+  }
+}
+
+# Orchestrator restart detector — app emits OrchestratorRestart=1 on every boot.
+# More than one restart inside the window implies a crash-loop.
+resource "aws_cloudwatch_metric_alarm" "orchestrator_restarts" {
+  alarm_name          = "${var.project_name}-orchestrator-restarts"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "OrchestratorRestart"
+  namespace           = "NanoClaw/Application"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Orchestrator restarted more than once in 5 minutes — possible crash-loop"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "${var.project_name}-orchestrator-restarts-alarm"
+  }
+}
+
 # ─── Wave 6: SNS subscriptions ───────────────────────────────────────────────
 # Email + SMS to Bryan. Email needs manual confirmation via the link AWS sends.
 # SMS goes via direct subscription; Singapore (+65) is supported by SNS Standard topic

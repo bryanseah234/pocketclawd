@@ -54,4 +54,7 @@ export const METRIC_NAMES = {
     ErrorCount: 'ErrorCount',
     MessageProcessingTime: 'MessageProcessingTime',
     ActiveContainers: 'ActiveContainers',
+    // t5-30: operational alarms
+    QueueDepth: 'QueueDepth',
+    OrchestratorRestart: 'OrchestratorRestart',
 } as const;

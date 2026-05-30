@@ -25,6 +25,7 @@ import { log, setErrorSink } from '../log.js';
 import { DataGateway } from './data-gateway/index.js';
 import { HealthCheckAggregator } from './health/index.js';
 import { CloudWatchLogger } from './logging/index.js';
+import { METRIC_NAMES } from './logging/types.js';
 import { RateLimiter } from './rate-limiter/index.js';
 import { MessageQueue } from './redis-queue/index.js';
 import { SchedulerService } from './scheduler/index.js';
@@ -168,6 +169,26 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
     log.info('Cloud bootstrap: initializing CloudWatch logger');
     const logger = new CloudWatchLogger({ region: 'ap-southeast-1' });
     log.info('Cloud bootstrap: CloudWatch logger ready');
+
+    // t5-30: emit a restart marker so the OrchestratorRestart alarm can detect
+    // crash-loops / unexpected respawns. One data point per boot.
+    logger.emitMetric({ name: METRIC_NAMES.OrchestratorRestart, value: 1, unit: 'Count' });
+
+    // t5-30: sample the shared dispatch-queue depth every 60s and publish it as
+    // a CloudWatch metric so the QueueDepth alarm can fire on backlog. Best-
+    // effort, fire-and-forget; never blocks or throws into the boot path.
+    const queueDepthTimer = setInterval(() => {
+        void messageQueue
+            .getDispatchQueueDepth()
+            .then((depth) => {
+                logger.emitMetric({ name: METRIC_NAMES.QueueDepth, value: depth, unit: 'Count' });
+            })
+            .catch(() => {
+                // Swallow — metrics are best-effort.
+            });
+    }, 60_000);
+    // Don't keep the event loop alive solely for metrics sampling.
+    if (typeof queueDepthTimer.unref === 'function') queueDepthTimer.unref();
 
     // 7. Health check aggregator (non-critical — graceful degradation)
     let healthCheck: HealthCheckAggregator;

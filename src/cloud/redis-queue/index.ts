@@ -316,6 +316,20 @@ export class MessageQueue implements IMessageQueue {
         return depth >= BACKPRESSURE_THRESHOLD;
     }
 
+    /**
+     * Depth of the shared cloud dispatch queue (the sentinel queue all
+     * inbound messages land on in cloud mode). Used by the t5-30 metrics
+     * sampler to publish QueueDepth to CloudWatch. In Streams mode this
+     * returns XLEN of the dispatch stream instead of LLEN of the list.
+     */
+    async getDispatchQueueDepth(): Promise<number> {
+        this.assertConnected();
+        if (this.streamsEnabled) {
+            return this.redis!.xlen(this.streamKey('dispatch'));
+        }
+        return this.redis!.llen(this.agentInboundKey('dispatch'));
+    }
+
     // ── Private helpers ──
 
     private async retryDLQForKey(dlqKey: string): Promise<number> {

@@ -89,6 +89,33 @@ variable "redis_num_cache_nodes" {
   default     = 1
 }
 
+# t7-49: encrypted replication-group migration toggles
+variable "redis_use_replication_group" {
+  description = "Use an encrypted aws_elasticache_replication_group instead of the legacy standalone cluster. BLUE/GREEN: flipping this replaces the data store and changes the endpoint (see REDIS-CUTOVER.md)."
+  type        = bool
+  default     = false
+}
+
+variable "redis_replica_count" {
+  description = "Number of read replicas in the replication group (0 = primary only, no automatic failover; >=1 enables Multi-AZ failover)."
+  type        = number
+  default     = 1
+}
+
+variable "redis_auth_token" {
+  description = "AUTH token for transit-encrypted Redis (16-128 chars). Source from Secrets Manager; never commit a literal. Required only when redis_use_replication_group = true."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+# t5-30: queue-depth alarm threshold
+variable "queue_depth_alarm_threshold" {
+  description = "Dispatch queue depth (messages) that, sustained for 3 minutes, triggers the queue-depth alarm."
+  type        = number
+  default     = 50
+}
+
 # ─── DynamoDB ────────────────────────────────────────────────────────────────
 
 variable "dynamodb_billing_mode" {

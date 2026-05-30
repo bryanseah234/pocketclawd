@@ -83,6 +83,8 @@ export interface IMessageQueue {
 
     // Backpressure
     getQueueDepth(userId: string): Promise<number>;
+    /** Depth of the shared cloud dispatch queue (t5-30 metrics). */
+    getDispatchQueueDepth(): Promise<number>;
     isBackpressured(userId: string): Promise<boolean>;
 }
 

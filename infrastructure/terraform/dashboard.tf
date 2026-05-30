@@ -181,7 +181,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Redis Memory Usage (Bytes)"
           region = var.aws_region
           metrics = [
-            ["AWS/ElastiCache", "BytesUsedForCache", "CacheClusterId", aws_elasticache_cluster.redis.cluster_id, { stat = "Average", period = 300 }]
+            ["AWS/ElastiCache", "BytesUsedForCache", "CacheClusterId", local.redis_metric_cluster_id, { stat = "Average", period = 300 }]
           ]
           view = "timeSeries"
           yAxis = {
@@ -199,7 +199,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Redis Current Connections"
           region = var.aws_region
           metrics = [
-            ["AWS/ElastiCache", "CurrConnections", "CacheClusterId", aws_elasticache_cluster.redis.cluster_id, { stat = "Average", period = 60 }]
+            ["AWS/ElastiCache", "CurrConnections", "CacheClusterId", local.redis_metric_cluster_id, { stat = "Average", period = 60 }]
           ]
           view = "timeSeries"
           yAxis = {
@@ -217,7 +217,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           title  = "Redis CPU Utilization (%)"
           region = var.aws_region
           metrics = [
-            ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", aws_elasticache_cluster.redis.cluster_id, { stat = "Average", period = 60 }]
+            ["AWS/ElastiCache", "CPUUtilization", "CacheClusterId", local.redis_metric_cluster_id, { stat = "Average", period = 60 }]
           ]
           view = "timeSeries"
           yAxis = {
