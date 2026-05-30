@@ -29,6 +29,9 @@ import { RateLimiter } from './rate-limiter/index.js';
 import { MessageQueue } from './redis-queue/index.js';
 import { SchedulerService } from './scheduler/index.js';
 import { SecretsLoader } from './secrets/index.js';
+import { RedisPdpaFlowStore } from './pdpa/index.js';
+
+import type { PdpaFlowStore } from './pdpa/index.js';
 
 import type { NanoClawCloudConfig } from './secrets/index.js';
 import type { IMessageQueue, AgentResponse } from './redis-queue/index.js';
@@ -57,6 +60,7 @@ export interface CloudServices {
     logger: CloudWatchLogger;
     healthCheck: HealthCheckAggregator;
     scheduler: SchedulerService;
+    pdpaFlowStore: PdpaFlowStore;
     redis: RedisClient;
 }
 
@@ -229,6 +233,11 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         });
     }
 
+    // PDPA flow store — Redis-backed so consent/deletion flows survive
+    // orchestrator restarts (improvement t2-9). Shares the bootstrap Redis
+    // connection.
+    const pdpaFlowStore = new RedisPdpaFlowStore(redis);
+
     _services = {
         config,
         secretsLoader,
@@ -238,6 +247,7 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         logger,
         healthCheck,
         scheduler,
+        pdpaFlowStore,
         redis,
     };
 
