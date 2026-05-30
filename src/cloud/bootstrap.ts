@@ -51,6 +51,26 @@ export function isCloudMode(): boolean {
     return process.env.NANOCLAW_ENV === 'cloud';
 }
 
+/**
+ * t4-24: hard guard for local-mode-only entrypoints.
+ *
+ * Local mode (file-watcher ingestion, pgvector KB, Telegram MTProto, the
+ * clawd cron driver, the Google/Microsoft/Apple ingesters) is DEPRECATED and
+ * not part of the cloud deployment surface. These modules still compile and
+ * are reachable for local dev, but they must never run inside a cloud
+ * container. Call this at the top of any local-only side-effecting entrypoint
+ * so an accidental cloud invocation fails loudly instead of silently doing
+ * local-only work against cloud infra. See docs/LOCAL-MODE-DEPRECATED.md.
+ */
+export function assertLocalMode(feature: string): void {
+    if (isCloudMode()) {
+        throw new Error(
+            `${feature} is a deprecated local-mode-only feature and cannot run in cloud mode ` +
+            `(NANOCLAW_ENV=cloud). See docs/LOCAL-MODE-DEPRECATED.md.`,
+        );
+    }
+}
+
 // ── Cloud services singleton ──
 
 export interface CloudServices {

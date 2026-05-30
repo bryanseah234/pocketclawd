@@ -26,6 +26,7 @@ import { TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions/index.js';
 import { Logger, LogLevel } from 'telegram/extensions/Logger.js';
 import { envPath, expandHome } from './paths.js';
+import { assertLocalMode } from '../cloud/bootstrap.js';
 
 export type ConnectStep = 'idle' | 'awaiting_code' | 'awaiting_password' | 'connected' | 'error';
 
@@ -72,6 +73,7 @@ export async function hasExistingSession(): Promise<boolean> {
  * Telegram texts the code to that phone within seconds.
  */
 export async function startConnect(userKey: string, phone: string): Promise<{ step: ConnectStep; message: string }> {
+  assertLocalMode('Telegram MTProto');
   // Cancel any prior in-progress flow for this user
   cancel(userKey);
 

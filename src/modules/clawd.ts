@@ -26,6 +26,7 @@ import {
 import { startTelegramMtprotoIngester } from './ingestion/telegram-mtproto.js';
 import { getCloudServices } from '../cloud/bootstrap.js';
 import { cronLockKey } from '../cloud/redis-lock.js';
+import { assertLocalMode } from '../cloud/bootstrap.js';
 
 const LOG_PATH = envPath('LOG_PATH', 'logs');
 const AUDIT_LOG = path.join(LOG_PATH, 'audit.log');
@@ -262,6 +263,7 @@ async function tick(): Promise<void> {
 }
 
 export function startClawdCron(): void {
+  assertLocalMode('clawd cron driver');
   if (driverTimer) return;
   // Validate every cron pattern before starting — nextRunFromCron only
   // supports `M H * * *`, so any other pattern would silently never fire.

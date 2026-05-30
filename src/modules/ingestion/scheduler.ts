@@ -15,6 +15,7 @@ import { githubIngesters } from './github.js';
 import { slackIngesters } from './slack.js';
 import type { CloudIngester, Fact, IngestResult } from './types.js';
 import { getKnowledgeBase } from '../knowledge-base/index.js';
+import { assertLocalMode } from '../../cloud/bootstrap.js';
 
 export interface IngestSummary {
   startedAt: Date;
@@ -46,6 +47,7 @@ export class CloudScheduler {
    * failure does not abort the others.
    */
   async runAll(options: RunOptions = {}): Promise<IngestSummary> {
+    assertLocalMode('cloud ingestion scheduler');
     const since = options.since ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
     const ingesters = options.ingesters ?? ALL_INGESTERS;
     const onFact = options.onFact ?? defaultOnFact;
