@@ -149,7 +149,9 @@ describe('CORPORATE sentinel — indexCorporateDocument bypass', () => {
         await gw.indexCorporateDocument(chunk);
         expect(mockOsIndex).toHaveBeenCalledTimes(1);
         const arg = mockOsIndex.mock.calls[0][0];
-        expect(arg.id).toBe('corp-1');
+        // AOSS rejects client-supplied top-level doc ids on index(); the chunk
+        // id is carried as a body field instead. Assert body.id, not arg.id.
+        expect(arg.body.id).toBe('corp-1');
         expect(arg.body.userId).toBe('CORPORATE');
         expect(arg.body.content).toBe('corp content');
     });
