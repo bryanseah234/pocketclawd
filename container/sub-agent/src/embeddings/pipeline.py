@@ -379,7 +379,7 @@ class EmbeddingPipeline:
             return list(response["embedding"])
         raise ValueError(f"Unrecognised embedding response shape: keys={list(response.keys())}")
 
-    async def embed_text(self, text: str, input_type: str = "search_query") -> list[float]:
+    async def embed_text(self, text: str, input_type: str = "search_document") -> list[float]:
         """
         Embed a single text string into an embedding vector.
 

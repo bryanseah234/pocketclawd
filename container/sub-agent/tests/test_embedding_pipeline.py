@@ -196,7 +196,9 @@ class TestEmbeddingPipeline:
         body = json.loads(call_kwargs["body"])
         assert body["texts"] == ["Test input"]
         assert body["input_type"] == "search_document"
-        assert body["truncate"] == "END"
+        # Cohere on Bedrock rejects a `truncate` param (ValidationException); the
+        # pipeline hard-truncates text to 2048 chars instead, so no truncate key.
+        assert "truncate" not in body
 
     @pytest.mark.asyncio
     async def test_embed_text_titan_in_other_region(self):

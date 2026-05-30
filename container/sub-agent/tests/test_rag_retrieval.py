@@ -34,7 +34,7 @@ class MockEmbeddingPipeline:
     def __init__(self, vector: list[float] | None = None):
         self._vector = vector or [0.1] * 1536
 
-    async def embed_text(self, text: str) -> list[float]:
+    async def embed_text(self, text: str, input_type: str = "search_document") -> list[float]:
         return self._vector
 
 

@@ -1,19 +1,24 @@
 """
-Tests for discovery_skill.py — new-user onboarding flow.
+Tests for discovery_skill.py -- new-user onboarding flow.
 
-Requirements: 1.1, 1.2, 1.3, 1.4
+Covers the 3-question flow: NAME -> USE -> STYLE -> COMPLETE.
+(Rewritten to match the current name/use/style API; the prior version targeted
+a superseded depth/domain flow.)
 """
 
-import json
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.persona.discovery_skill import (
-    DEPTH_QUESTION,
-    DOMAIN_QUESTION,
-    INVALID_DEPTH_PROMPT,
-    INVALID_DOMAIN_PROMPT,
+    COMPLETE_ACK,
+    COMPLETE_ACK_NO_Q,
+    INVALID_STYLE,
+    INVALID_USE,
+    NAME_QUESTION,
+    STYLE_QUESTION,
+    USE_LABELS,
+    USE_QUESTION,
     DiscoveryPhase,
     DiscoveryState,
     activate,
@@ -22,151 +27,126 @@ from src.persona.discovery_skill import (
 )
 
 
-# ── Fixtures ─────────────────────────────────────────────────────────────────
-
-
 def make_redis() -> AsyncMock:
     r = AsyncMock()
     r.lpush = AsyncMock(return_value=1)
+    r.hset = AsyncMock(return_value=1)
+    r.expire = AsyncMock(return_value=True)
+    r.delete = AsyncMock(return_value=1)
     return r
 
 
-# ── activate() ───────────────────────────────────────────────────────────────
-
-
-def test_activate_returns_state_and_depth_question():
+def test_activate_returns_state_and_name_question():
     state, question = activate("user-1", "What is a Lambda function?")
     assert state.user_id == "user-1"
     assert state.original_message == "What is a Lambda function?"
-    assert state.phase == DiscoveryPhase.DEPTH
-    assert question == DEPTH_QUESTION
-
-
-# ── handle_response — depth phase ────────────────────────────────────────────
+    assert state.phase == DiscoveryPhase.NAME
+    assert question == NAME_QUESTION
 
 
 @pytest.mark.asyncio
-async def test_valid_detailed_depth_advances_to_domain():
+async def test_name_capitalized_and_advances_to_use():
     redis = make_redis()
     state, _ = activate("user-1", "Q?")
-    complete, msg, new_state = await handle_response(redis, state, "detailed")
+    complete, msg, new_state = await handle_response(redis, state, "bryan")
     assert not complete
-    assert msg == DOMAIN_QUESTION
-    assert new_state.phase == DiscoveryPhase.DOMAIN
-    assert new_state.technical_depth == "detailed"
-    assert new_state.failed_attempts == 0
+    assert new_state.user_name == "Bryan"
+    assert new_state.phase == DiscoveryPhase.USE
+    assert msg == USE_QUESTION.format(name="Bryan")
+    redis.hset.assert_awaited()
 
 
 @pytest.mark.asyncio
-async def test_valid_highlevel_depth_case_insensitive():
+async def test_blank_name_falls_back_to_there():
     redis = make_redis()
     state, _ = activate("user-1", "Q?")
-    complete, msg, new_state = await handle_response(redis, state, "  High-Level  ")
-    assert not complete
-    assert new_state.technical_depth == "high-level"
+    _, _, new_state = await handle_response(redis, state, "   ")
+    assert new_state.user_name == "There"
+    assert new_state.phase == DiscoveryPhase.USE
 
 
 @pytest.mark.asyncio
-async def test_invalid_depth_retries_with_reprompt():
+async def test_valid_use_advances_to_style():
     redis = make_redis()
-    state, _ = activate("user-1", "Q?")
-    complete, msg, new_state = await handle_response(redis, state, "super-detailed")
+    state = DiscoveryState(user_id="u1", original_message="Q?", phase=DiscoveryPhase.USE, user_name="Bryan")
+    complete, msg, new_state = await handle_response(redis, state, "2")
     assert not complete
-    assert msg == INVALID_DEPTH_PROMPT
-    assert new_state.phase == DiscoveryPhase.DEPTH  # still waiting for depth
+    assert new_state.primary_use == USE_LABELS["2"]
+    assert new_state.phase == DiscoveryPhase.STYLE
+    assert msg == STYLE_QUESTION
+
+
+@pytest.mark.asyncio
+async def test_invalid_use_reprompts_and_increments_failures():
+    redis = make_redis()
+    state = DiscoveryState(user_id="u1", original_message="Q?", phase=DiscoveryPhase.USE, user_name="Bryan")
+    complete, msg, new_state = await handle_response(redis, state, "banana")
+    assert not complete
+    assert msg == INVALID_USE
+    assert new_state.phase == DiscoveryPhase.USE
     assert new_state.failed_attempts == 1
 
 
 @pytest.mark.asyncio
-async def test_multiple_invalid_depth_increments_attempts():
+async def test_valid_style_completes_with_original_question():
     redis = make_redis()
-    state, _ = activate("user-1", "Q?")
-    for n in range(1, 4):
-        _, _, state = await handle_response(redis, state, "gibberish")
-        assert state.failed_attempts == n
-
-
-# ── handle_response — domain phase ───────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_valid_domain_completes_and_stores_prefs():
-    redis = make_redis()
-    state, _ = activate("user-1", "Q?")
-    # Advance to domain phase
-    _, _, state = await handle_response(redis, state, "detailed")
-    # Answer domain question
-    complete, msg, final_state = await handle_response(redis, state, "frontend")
+    state = DiscoveryState(
+        user_id="u1", original_message="What is a Lambda?", phase=DiscoveryPhase.STYLE,
+        user_name="Bryan", primary_use=USE_LABELS["2"],
+    )
+    complete, msg, new_state = await handle_response(redis, state, "short")
     assert complete
-    assert final_state.phase == DiscoveryPhase.COMPLETE
-    assert final_state.primary_domain == "frontend"
-    # Should have called lpush to enqueue put_user_preference
-    redis.lpush.assert_called_once()
-    call_args = redis.lpush.call_args
-    queue_key = call_args[0][0]
-    payload = json.loads(call_args[0][1])
-    assert queue_key == "queue:orchestrator:data_gateway"
-    assert payload["action"] == "put_user_preference"
-    assert payload["user_id"] == "user-1"
-    assert payload["preferences"]["technical_depth"] == "detailed"
-    assert payload["preferences"]["primary_domain"] == "frontend"
-    assert payload["preferences"]["discoveryCompleted"] is True
+    assert new_state.phase == DiscoveryPhase.COMPLETE
+    assert new_state.reply_style == "short"
+    assert msg == COMPLETE_ACK.format(name="Bryan", use=USE_LABELS["2"], style="short")
+    redis.lpush.assert_awaited()
+    redis.delete.assert_awaited()
 
 
 @pytest.mark.asyncio
-async def test_invalid_domain_retries():
+async def test_valid_style_completes_without_original_question():
     redis = make_redis()
-    state, _ = activate("user-1", "Q?")
-    _, _, state = await handle_response(redis, state, "high-level")
-    complete, msg, new_state = await handle_response(redis, state, "mobile")
-    assert not complete
-    assert msg == INVALID_DOMAIN_PROMPT
-    assert new_state.phase == DiscoveryPhase.DOMAIN
-    assert new_state.failed_attempts == 1
+    state = DiscoveryState(
+        user_id="u1", original_message="", phase=DiscoveryPhase.STYLE,
+        user_name="Bryan", primary_use=USE_LABELS["1"],
+    )
+    complete, msg, _ = await handle_response(redis, state, "detailed")
+    assert complete
+    assert msg == COMPLETE_ACK_NO_Q.format(name="Bryan", use=USE_LABELS["1"], style="detailed")
 
 
 @pytest.mark.asyncio
-async def test_all_valid_domains_accepted():
-    for domain in ("frontend", "infrastructure", "data"):
-        redis = make_redis()
-        state, _ = activate("user-1", "Q?")
-        _, _, state = await handle_response(redis, state, "detailed")
-        complete, _, final_state = await handle_response(redis, state, domain)
-        assert complete, f"Expected complete=True for domain={domain}"
-        assert final_state.primary_domain == domain
-
-
-# ── Full flow ─────────────────────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_full_flow_stores_both_prefs_and_signals_resume():
+async def test_invalid_style_reprompts():
     redis = make_redis()
-    state, depth_q = activate("user-99", "Help me debug this Lambda.")
-    assert not is_complete(state)
-
-    # Q1: depth
-    complete, msg, state = await handle_response(redis, state, "high-level")
+    state = DiscoveryState(
+        user_id="u1", original_message="Q?", phase=DiscoveryPhase.STYLE,
+        user_name="Bryan", primary_use=USE_LABELS["3"],
+    )
+    complete, msg, new_state = await handle_response(redis, state, "medium")
     assert not complete
-    assert not is_complete(state)
+    assert msg == INVALID_STYLE
+    assert new_state.phase == DiscoveryPhase.STYLE
 
-    # Q2: domain
-    complete, ack, state = await handle_response(redis, state, "infrastructure")
+
+def test_is_complete_true_only_when_phase_complete():
+    s = DiscoveryState(user_id="u1", original_message="Q?")
+    assert not is_complete(s)
+    s.phase = DiscoveryPhase.COMPLETE
+    assert is_complete(s)
+
+
+@pytest.mark.asyncio
+async def test_full_flow_name_use_style():
+    redis = make_redis()
+    state, q1 = activate("u1", "How do I deploy?")
+    assert q1 == NAME_QUESTION
+    _, q2, state = await handle_response(redis, state, "Sam")
+    assert q2 == USE_QUESTION.format(name="Sam")
+    _, q3, state = await handle_response(redis, state, "4")
+    assert q3 == STYLE_QUESTION
+    complete, ack, state = await handle_response(redis, state, "detailed")
     assert complete
     assert is_complete(state)
-    assert "high-level" in ack
-    assert "infrastructure" in ack
-    # Original question reference in ack
-    assert "back to your question" in ack.lower() or "\u2026" in ack
-
-
-@pytest.mark.asyncio
-async def test_redis_failure_does_not_raise(caplog):
-    """Best-effort storage: Redis error should not propagate to caller."""
-    redis = make_redis()
-    redis.lpush.side_effect = Exception("connection lost")
-    state, _ = activate("user-1", "Q?")
-    _, _, state = await handle_response(redis, state, "detailed")
-    # Should not raise
-    complete, _, final_state = await handle_response(redis, state, "data")
-    assert complete  # flow completes even if storage fails
+    assert state.user_name == "Sam"
+    assert state.primary_use == USE_LABELS["4"]
+    assert state.reply_style == "detailed"

@@ -138,8 +138,9 @@ class RAGRetrieval:
         if conversation_history is None:
             conversation_history = []
 
-        # Step 1: Embed the query
-        query_vector = await self.embedding_pipeline.embed_text(query)
+        # Step 1: Embed the query (search_query input_type — queries live in a
+        # different Cohere embedding subspace than indexed documents)
+        query_vector = await self.embedding_pipeline.embed_text(query, input_type="search_query")
 
         # Step 2: Call hybrid search
         raw_results = await self._hybrid_search(query, query_vector, user_id)
