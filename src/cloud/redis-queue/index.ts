@@ -116,6 +116,106 @@ export class MessageQueue implements IMessageQueue {
         return JSON.parse(value) as QueueMessage;
     }
 
+    // ── Redis Streams (at-least-once) — additive, flag-gated (t2-8) ──
+    //
+    // When REDIS_STREAMS_ENABLED=true, callers may use these XADD/XREADGROUP/
+    // XACK methods instead of LPUSH/BRPOP. Messages are only removed from the
+    // pending entries list (PEL) after an explicit ack, so a worker crash mid-
+    // processing leaves the message claimable by another consumer rather than
+    // lost. The list-based methods above are left fully intact so flipping the
+    // flag off restores the exact previous behavior (non-breaking).
+
+    /** Whether Streams mode is enabled (env-gated, default off). */
+    get streamsEnabled(): boolean {
+        return (process.env.REDIS_STREAMS_ENABLED ?? 'false') === 'true';
+    }
+
+    private streamKey(userId: string): string {
+        // Distinct keyspace from the list keys so the two transports never
+        // collide; a list key and a stream key cannot share a name in Redis.
+        return this.keyWithPrefix(
+            userId === 'dispatch'
+                ? 'stream:agent:dispatch'
+                : `stream:agent:${userId}:inbound`,
+        );
+    }
+
+    /** XADD a message onto the agent inbound stream. Returns the stream id. */
+    async enqueueForAgentStream(userId: string, message: QueueMessage): Promise<string> {
+        this.assertConnected();
+        this.assertUserId(userId);
+        const key = this.streamKey(userId);
+        // MAXLEN ~ caps unbounded growth; '~' = approximate trim (cheap).
+        const id = await this.redis!.xadd(
+            key,
+            'MAXLEN',
+            '~',
+            10000,
+            '*',
+            'data',
+            JSON.stringify(message),
+        );
+        return id ?? '';
+    }
+
+    /**
+     * Read + claim one message via a consumer group (at-least-once). Creates
+     * the group lazily. Returns { id, message } so the caller can XACK after
+     * successful processing. Returns null on timeout.
+     */
+    async dequeueForAgentStream(
+        userId: string,
+        group: string,
+        consumer: string,
+        blockMs: number,
+    ): Promise<{ id: string; message: QueueMessage } | null> {
+        this.assertConnected();
+        this.assertUserId(userId);
+        const key = this.streamKey(userId);
+        await this.ensureGroup(key, group);
+        // '>' = only new, never-delivered messages for this group.
+        const res = (await this.blockingRedis!.xreadgroup(
+            'GROUP',
+            group,
+            consumer,
+            'COUNT',
+            1,
+            'BLOCK',
+            blockMs,
+            'STREAMS',
+            key,
+            '>',
+        )) as Array<[string, Array<[string, string[]]>]> | null;
+        if (!res || res.length === 0) return null;
+        const entries = res[0][1];
+        if (!entries || entries.length === 0) return null;
+        const [id, fields] = entries[0];
+        // fields = ['data', '<json>']
+        const dataIdx = fields.indexOf('data');
+        if (dataIdx < 0) return null;
+        return { id, message: JSON.parse(fields[dataIdx + 1]) as QueueMessage };
+    }
+
+    /** Acknowledge a processed stream message, removing it from the PEL. */
+    async ackForAgentStream(userId: string, group: string, id: string): Promise<void> {
+        this.assertConnected();
+        this.assertUserId(userId);
+        const key = this.streamKey(userId);
+        await this.redis!.xack(key, group, id);
+    }
+
+    /** Idempotently create a consumer group at the stream head (MKSTREAM). */
+    private async ensureGroup(key: string, group: string): Promise<void> {
+        try {
+            await this.redis!.xgroup('CREATE', key, group, '$', 'MKSTREAM');
+        } catch (err) {
+            // BUSYGROUP = already exists; any other error is real.
+            if (!String((err as Error).message).includes('BUSYGROUP')) {
+                throw err;
+            }
+        }
+    }
+
     // ── Sub-Agent → Orchestrator ──
 
     async enqueueResponse(userId: string, response: AgentResponse): Promise<void> {

@@ -51,6 +51,7 @@ import { startTypingRefresh, stopTypingRefresh } from './modules/typing/index.js
 import { log } from './log.js';
 import { resolveSession, writeSessionMessage, writeOutboundDirect } from './session-manager.js';
 import { wakeContainer } from './container-runner.js';
+import { ensureContainer, recordActivity } from './cloud/container-manager/lifecycle.js';
 import { getSession } from './db/sessions.js';
 import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from './types.js';
 import type { InboundEvent } from './channels/adapter.js';
@@ -522,7 +523,14 @@ async function deliverToAgent(
         }
 
         const messageId = messageIdForAgent(event.message.id, agent.agent_group_id);
-        await services.messageQueue.enqueueForAgent(userId, {
+        // Cloud worker-pool: enqueue to shared dispatch queue.
+        // N ECS workers pull from queue:agent:dispatch; userId is in the payload.
+        // On-prem: ensureContainer spawns per-user Docker containers.
+        if (!isCloudMode()) {
+          try { await ensureContainer(userId); } catch (e) { /* non-fatal */ }
+        }
+        const dispatchQueue = isCloudMode() ? 'dispatch' : userId;
+        const queueMessage = {
           id: messageId,
           userId,
           type: event.message.kind,
@@ -537,7 +545,15 @@ async function deliverToAgent(
             threadId: deliveryAddr.threadId,
           },
           timestamp: event.message.timestamp,
-        });
+        };
+        // At-least-once Streams path (t2-8) when enabled; otherwise the
+        // original LPUSH path. Both write distinct keyspaces so a rollback is
+        // a pure flag flip.
+        if (services.messageQueue.streamsEnabled) {
+          await services.messageQueue.enqueueForAgentStream(dispatchQueue, queueMessage);
+        } else {
+          await services.messageQueue.enqueueForAgent(dispatchQueue, queueMessage);
+        }
 
         log.info('Message enqueued to Redis', {
           sessionId: session.id,

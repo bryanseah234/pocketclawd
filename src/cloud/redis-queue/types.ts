@@ -58,6 +58,21 @@ export interface IMessageQueue {
     enqueueForAgent(userId: string, message: QueueMessage): Promise<void>;
     dequeueForAgent(userId: string, timeout: number): Promise<QueueMessage | null>;
 
+    // ── Redis Streams (at-least-once), flag-gated via REDIS_STREAMS_ENABLED (t2-8) ──
+    /** Whether Streams mode is active. */
+    readonly streamsEnabled: boolean;
+    /** XADD a message onto the agent inbound stream; returns the entry id. */
+    enqueueForAgentStream(userId: string, message: QueueMessage): Promise<string>;
+    /** XREADGROUP one message; returns { id, message } or null on timeout. */
+    dequeueForAgentStream(
+        userId: string,
+        group: string,
+        consumer: string,
+        blockMs: number,
+    ): Promise<{ id: string; message: QueueMessage } | null>;
+    /** XACK a processed stream entry. */
+    ackForAgentStream(userId: string, group: string, id: string): Promise<void>;
+
     // Sub-Agent → Orchestrator
     enqueueResponse(userId: string, response: AgentResponse): Promise<void>;
     dequeueResponse(timeout: number): Promise<AgentResponse | null>;
