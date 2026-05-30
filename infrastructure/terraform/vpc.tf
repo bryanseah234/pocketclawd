@@ -260,6 +260,18 @@ resource "aws_security_group" "vpc_endpoints" {
     description     = "HTTPS from EC2 instance"
   }
 
+  # private_dns_enabled=true on the secretsmanager/bedrock-runtime endpoints
+  # redirects those services' DNS VPC-wide to these private ENIs. The sub-agent
+  # Fargate tasks call Bedrock constantly, so they MUST be allowed in too or
+  # every worker Bedrock/Secrets call breaks once the endpoints exist.
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [aws_security_group.sub_agent.id]
+    description     = "HTTPS from sub-agent Fargate tasks"
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
