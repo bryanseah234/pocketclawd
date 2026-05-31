@@ -239,3 +239,8 @@ _q*.cjs
 dist-*
 orch-*
 NUL
+
+# Terraform secret var files (never commit auth tokens)
+*.auto.tfvars
+*.tfvars.json
+cutover.auto.tfvars

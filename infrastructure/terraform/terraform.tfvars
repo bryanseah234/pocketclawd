@@ -39,3 +39,13 @@ tags = {
   Application = "whatsapp-assistant"
   Region      = "ap-southeast-1"
 }
+
+
+# ─── Redis replication group (cutover W3-W11) ──────────────────────────
+# Steady state: transit-encrypted replication group (1 primary + 1 replica).
+# redis_auth_token is NOT set here — it is a secret. Source it at apply time:
+#   export TF_VAR_redis_auth_token=$(aws secretsmanager get-secret-value \
+#     --secret-id nanoclaw/app-config --query SecretString --output text \
+#     --profile clawd-prod | python -c 'import sys,json;print(json.load(sys.stdin)["redis_password"])')
+redis_use_replication_group = true
+redis_replica_count         = 1
