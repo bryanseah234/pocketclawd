@@ -21,10 +21,10 @@ vi.mock('./container-runner.js', () => ({
 
 vi.mock('./config.js', async () => {
   const actual = await vi.importActual<typeof import('./config.js')>('./config.js');
-  return { ...actual, DATA_DIR: '/tmp/nanoclaw-test-delivery' };
+  return { ...actual, DATA_DIR: __TEST_DIR };
 });
 
-const TEST_DIR = '/tmp/nanoclaw-test-delivery';
+const TEST_DIR = __TEST_DIR;
 
 import {
   initTestDb,
@@ -37,6 +37,15 @@ import {
 import { getDeliveredIds } from './db/session-db.js';
 import { resolveSession, outboundDbPath, openInboundDb } from './session-manager.js';
 import { deliverSessionMessages, setDeliveryAdapter } from './delivery.js';
+
+// Per-run unique temp dir so parallel vitest workers never collide on a
+// shared path (was __TEST_DIR, which races + resolves to X:\tmp on Windows).
+const __TEST_DIR = vi.hoisted(() => {
+  const p = require('node:path');
+  const os = require('node:os');
+  return p.join(os.tmpdir(), `nanoclaw-test-delivery-` + process.pid + '-' + Math.random().toString(36).slice(2));
+});
+
 
 function now(): string {
   return new Date().toISOString();

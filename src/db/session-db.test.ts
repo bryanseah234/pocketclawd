@@ -8,11 +8,20 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 
 import { getInboundSourceSessionId, migrateMessagesInTable } from './session-db.js';
 
-const TEST_DIR = '/tmp/nanoclaw-session-db-test';
+// Per-run unique temp dir so parallel vitest workers never collide on a
+// shared path (was __TEST_DIR, which races + resolves to X:\tmp on Windows).
+const __TEST_DIR = vi.hoisted(() => {
+  const p = require('node:path');
+  const os = require('node:os');
+  return p.join(os.tmpdir(), `nanoclaw-session-db-test-` + process.pid + '-' + Math.random().toString(36).slice(2));
+});
+
+
+const TEST_DIR = __TEST_DIR;
 const DB_PATH = path.join(TEST_DIR, 'inbound.db');
 
 afterEach(() => {

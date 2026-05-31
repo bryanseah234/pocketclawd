@@ -64,7 +64,9 @@ describe('sub-agent response content wrap (regression)', () => {
         // The exact wrap line must remain present.
         expect(src).toContain('JSON.stringify({ text: rawContent })');
         // And we still pass `content` (the wrapped string) into the adapter.
-        expect(src).toMatch(/deliveryAdapter\.deliver\(channelType, platformId, threadId, kind, content\)/);
+        // Tolerant of the kind-var rename (kind -> resolvedKind): the invariant is
+        // that the WRAPPED `content` (not rawContent) is the last deliver() arg.
+        expect(src).toMatch(/deliveryAdapter\.deliver\(channelType, platformId, threadId, \w+, content\)/);
     });
 
     it('source: src/index.ts does NOT pass rawContent directly to deliver()', () => {

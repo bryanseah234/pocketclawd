@@ -54,6 +54,15 @@ import {
 import { getSession, findSession } from './db/sessions.js';
 import type { InboundEvent } from './channels/adapter.js';
 
+// Per-run unique temp dir so parallel vitest workers never collide on a
+// shared path (was __TEST_DIR, which races + resolves to X:\tmp on Windows).
+const __TEST_DIR = vi.hoisted(() => {
+  const p = require('node:path');
+  const os = require('node:os');
+  return p.join(os.tmpdir(), `nanoclaw-test-host-` + process.pid + '-' + Math.random().toString(36).slice(2));
+});
+
+
 // Mock container runner to prevent actual Docker spawning
 vi.mock('./container-runner.js', () => ({
   wakeContainer: vi.fn().mockResolvedValue(undefined),
@@ -65,14 +74,14 @@ vi.mock('./container-runner.js', () => ({
 // Override DATA_DIR for tests
 vi.mock('./config.js', async () => {
   const actual = await vi.importActual('./config.js');
-  return { ...actual, DATA_DIR: '/tmp/nanoclaw-test-host' };
+  return { ...actual, DATA_DIR: __TEST_DIR };
 });
 
 function now() {
   return new Date().toISOString();
 }
 
-const TEST_DIR = '/tmp/nanoclaw-test-host';
+const TEST_DIR = __TEST_DIR;
 
 beforeEach(() => {
   // Clean test directory

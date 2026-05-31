@@ -137,7 +137,7 @@ describe('DataGateway OpenSearch operations', () => {
                             content: { type: 'text', analyzer: 'standard' },
                             contentVector: {
                                 type: 'knn_vector',
-                                dimension: 1536,
+                                dimension: 1024,
                                 method: {
                                     name: 'hnsw',
                                     space_type: 'cosinesimil',
@@ -167,9 +167,10 @@ describe('DataGateway OpenSearch operations', () => {
         it('indexes a document chunk with userId and all fields', async () => {
             await gateway.indexDocument('user-abc', sampleChunk);
 
+            // AOSS rejects client-provided doc IDs (no top-level `id`) and the
+            // refresh=wait_for param; the doc id is carried inside `body` instead.
             expect(mockIndex).toHaveBeenCalledWith({
                 index: 'documents',
-                id: 'chunk-001',
                 body: {
                     id: 'chunk-001',
                     userId: 'user-abc',
@@ -181,7 +182,6 @@ describe('DataGateway OpenSearch operations', () => {
                     chunkIndex: 0,
                     uploadedAt: '2024-01-15T10:00:00.000Z',
                 },
-                refresh: 'wait_for',
             });
         });
 

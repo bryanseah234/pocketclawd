@@ -22,6 +22,15 @@ import { createMessagingGroup, getMessagingGroupByPlatform } from '../../db/mess
 import { upsertUser } from './db/users.js';
 import { grantRole } from './db/user-roles.js';
 
+// Per-run unique temp dir so parallel vitest workers never collide on a
+// shared path (was __TEST_DIR, which races + resolves to X:\tmp on Windows).
+const __TEST_DIR = vi.hoisted(() => {
+  const p = require('node:path');
+  const os = require('node:os');
+  return p.join(os.tmpdir(), `nanoclaw-test-channel-approval-` + process.pid + '-' + Math.random().toString(36).slice(2));
+});
+
+
 // Mock container runner — prevent actual docker spawn.
 vi.mock('../../container-runner.js', () => ({
   wakeContainer: vi.fn().mockResolvedValue(undefined),
@@ -54,10 +63,10 @@ vi.mock('./user-dm.js', () => ({
 
 vi.mock('../../config.js', async () => {
   const actual = await vi.importActual('../../config.js');
-  return { ...actual, DATA_DIR: '/tmp/nanoclaw-test-channel-approval' };
+  return { ...actual, DATA_DIR: __TEST_DIR };
 });
 
-const TEST_DIR = '/tmp/nanoclaw-test-channel-approval';
+const TEST_DIR = __TEST_DIR;
 
 function now() {
   return new Date().toISOString();

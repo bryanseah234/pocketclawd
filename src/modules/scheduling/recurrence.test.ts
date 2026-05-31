@@ -8,21 +8,32 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ensureSchema, openInboundDb } from '../../db/session-db.js';
 import { insertTask } from './db.js';
 import { handleRecurrence } from './recurrence.js';
 import type { Session } from '../../types.js';
 
-const TEST_DIR = '/tmp/nanoclaw-recurrence-test';
-const DB_PATH = path.join(TEST_DIR, 'inbound.db');
+// Per-run unique temp dir so parallel vitest workers never collide on a
+// shared path (was __TEST_DIR, which races + resolves to X:\tmp on Windows).
+const __TEST_DIR = vi.hoisted(() => {
+  const p = require('node:path');
+  const os = require('node:os');
+  return p.join(os.tmpdir(), `nanoclaw-recurrence-test-` + process.pid + '-' + Math.random().toString(36).slice(2));
+});
+
+
+const TEST_DIR = __TEST_DIR;
+let __dbSeq = 0;
 
 function freshDb() {
-  if (fs.existsSync(TEST_DIR)) fs.rmSync(TEST_DIR, { recursive: true });
+  // Unique DB file per call: avoids deleting a file whose handle is still open
+  // (Windows locks open files -> EPERM/stale-data). Each freshDb() is fully isolated.
   fs.mkdirSync(TEST_DIR, { recursive: true });
-  ensureSchema(DB_PATH, 'inbound');
-  return openInboundDb(DB_PATH);
+  const dbPath = path.join(TEST_DIR, `inbound-${__dbSeq++}.db`);
+  ensureSchema(dbPath, 'inbound');
+  return openInboundDb(dbPath);
 }
 
 function fakeSession(): Session {
@@ -39,7 +50,11 @@ function fakeSession(): Session {
 }
 
 afterEach(() => {
-  if (fs.existsSync(TEST_DIR)) fs.rmSync(TEST_DIR, { recursive: true });
+  try {
+    if (fs.existsSync(TEST_DIR)) fs.rmSync(TEST_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+  } catch {
+    /* best-effort: unique per-run dir, OS temp reaper handles any locked leftover */
+  }
 });
 
 describe('handleRecurrence', () => {
