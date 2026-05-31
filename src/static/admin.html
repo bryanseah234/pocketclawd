@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Clawd Admin</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 28 28'%3E%3Cellipse cx='14' cy='18' rx='8' ry='9' fill='%23C9973A'/%3E%3Cpolygon points='8,12 10.5,5 13,11' fill='%23C9973A'/%3E%3Cpolygon points='20,12 17.5,5 15,11' fill='%23C9973A'/%3E%3Ccircle cx='10' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='18' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='10' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Ccircle cx='18' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Cpolygon points='12,20 16,20 14,23' fill='%233D2B1F' opacity='0.7'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -59,29 +63,33 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 32px;
-            padding-bottom: 16px;
+            margin: 8px 0 36px;
+            padding-bottom: 22px;
             border-bottom: 1px solid var(--border);
         }
 
         header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
+            font-family: var(--font-heading);
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 14px;
         }
 
         header h1 .logo {
-            width: 28px;
-            height: 28px;
+            width: 40px;
+            height: 40px;
             background: var(--accent);
-            border-radius: 6px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(201,151,58,0.35);
+            flex-shrink: 0;
         }
+        header h1 .logo svg { display: block; }
 
         .connection-badge {
             display: flex;
@@ -145,8 +153,12 @@
             background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: var(--radius-card);
-            padding: 20px;
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.25s cubic-bezier(0.22,1,0.36,1), transform 0.25s cubic-bezier(0.22,1,0.36,1);
         }
+        .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .card h2, .card h3 { font-family: var(--font-heading); letter-spacing: -0.01em; }
 
         .card-header {
             display: flex;
@@ -316,16 +328,20 @@
 
         /* Buttons */
         .btn {
-            padding: 8px 16px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 6px;
-            font-size: 0.8rem;
-            font-weight: 500;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
         }
+        .btn:hover { transform: translateY(-1px); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 12px rgba(201,151,58,0.4); }
         .btn-primary:hover { background: var(--accent-hover); }
         .btn-danger { background: var(--danger); color: white; }
         .btn-danger:hover { background: #dc2626; }
@@ -477,22 +493,29 @@
         /* Tab Navigation */
         .tab-nav {
             display: flex;
-            gap: 0;
-            margin-bottom: 24px;
-            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 32px;
+            padding: 6px;
+            background: rgba(255,255,255,0.45);
+            border: 1px solid var(--border);
+            border-radius: 14px;
         }
 
         .tab-btn {
-            padding: 10px 20px;
+            padding: 9px 18px;
             background: none;
             border: none;
-            border-bottom: 2px solid transparent;
+            border-radius: 9px;
             color: var(--text-secondary);
-            font-size: 0.85rem;
+            font-family: var(--font-body);
+            font-size: 0.92rem;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: color 0.18s ease, background 0.18s ease;
         }
+        .tab-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.6); }
+        .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         .tab-btn:hover {
             color: var(--text-primary);
@@ -500,8 +523,9 @@
         }
 
         .tab-btn.active {
-            color: var(--accent);
-            border-bottom-color: var(--accent);
+            color: #fff;
+            background: var(--accent);
+            box-shadow: 0 2px 8px rgba(201,151,58,0.32);
         }
 
         .tab-panel {
@@ -665,15 +689,15 @@
         }
         .pulse-tile {
             position: relative;
-            background: var(--surface);
+            background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 14px 16px;
-            min-height: 96px;
+            padding: 16px 18px;
+            min-height: 100px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            box-shadow: 0 1px 2px rgba(61,43,31,0.04);
+            box-shadow: var(--shadow-sm);
             transition: box-shadow 0.2s ease, transform 0.2s ease;
             overflow: hidden;
         }
@@ -689,12 +713,13 @@
             color: var(--text-muted);
         }
         .pulse-value {
-            font-family: var(--font-display, 'Playfair Display', serif);
-            font-size: 1.85rem;
-            font-weight: 600;
-            color: var(--text);
-            line-height: 1.1;
-            margin: 4px 0 6px;
+            font-family: var(--font-heading);
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.015em;
+            color: var(--text-primary);
+            line-height: 1.05;
+            margin: 6px 0 6px;
             font-variant-numeric: tabular-nums;
         }
         .pulse-sub {
@@ -1023,7 +1048,7 @@
     <div class="container">
         <header>
             <h1>
-                <span class="logo">C</span>
+                <span class="logo"><svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><ellipse cx="14" cy="18" rx="8" ry="9" fill="#FDFAF4"/><polygon points="8,12 10.5,5 13,11" fill="#FDFAF4"/><polygon points="20,12 17.5,5 15,11" fill="#FDFAF4"/><circle cx="10" cy="16.5" r="3.3" fill="#FDFAF4"/><circle cx="18" cy="16.5" r="3.3" fill="#FDFAF4"/><circle cx="10" cy="16.5" r="1.9" fill="#3D2B1F"/><circle cx="18" cy="16.5" r="1.9" fill="#3D2B1F"/><polygon points="12,20 16,20 14,22.5" fill="#3D2B1F" opacity="0.75"/></svg></span>
                 Clawd Admin
             </h1>
             <div class="header-right">
