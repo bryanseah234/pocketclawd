@@ -58,24 +58,8 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   restrict_public_buckets = true
 }
 
-resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "nanoclaw-terraform-locks"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  # Prevent accidental deletion of the lock table
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  tags = {
-    Name        = "nanoclaw-terraform-locks"
-    Purpose     = "Terraform state locking"
-    Environment = var.environment
-  }
-}
+# NOTE: The DynamoDB lock table (aws_dynamodb_table.terraform_locks,
+# "nanoclaw-terraform-locks") was REMOVED once the S3 backend migrated to
+# native locking (use_lockfile = true in versions.tf, TF >= 1.10). S3
+# conditional-write locking needs no separate table. If you ever revert to
+# dynamodb_table locking, re-add this resource and bootstrap it per the header.
