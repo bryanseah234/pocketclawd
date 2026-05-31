@@ -16,6 +16,8 @@ WORKDIR /app
 
 # Copy dependency manifests first for layer caching
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+# Copy the preinstall guard so the package.json preinstall hook can run
+COPY scripts/ ./scripts/
 
 # Install all dependencies (dev included — needed for TypeScript build)
 RUN pnpm install --frozen-lockfile

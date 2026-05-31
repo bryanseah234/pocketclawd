@@ -38,7 +38,7 @@
     "svc:export": "cmd /c powershell -NoProfile -ExecutionPolicy Bypass -File scripts/service/migrate-export.ps1",
     "ingest:now": "tsx scripts/ingest-now.ts",
     "tg:login": "tsx scripts/telegram-mtproto-login.ts",
-    "preinstall": "node scripts/check-node-version.mjs"
+    "preinstall": "node -e \"const fs=require('fs'),cp=require('child_process'),f='scripts/check-node-version.mjs';if(fs.existsSync(f)){const r=cp.spawnSync(process.execPath,[f],{stdio:'inherit'});process.exit(r.status||0);}\""
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1053.0",
