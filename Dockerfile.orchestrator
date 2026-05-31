@@ -15,9 +15,10 @@ RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 WORKDIR /app
 
 # Copy dependency manifests first for layer caching
+# NOTE: scripts/ is .dockerignore'd; the package.json preinstall guard
+# self-skips when scripts/check-node-version.mjs is absent (node:22-alpine
+# already pins the version, so the guard is a host-dev convenience only).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-# Copy the preinstall guard so the package.json preinstall hook can run
-COPY scripts/ ./scripts/
 
 # Install all dependencies (dev included — needed for TypeScript build)
 RUN pnpm install --frozen-lockfile
