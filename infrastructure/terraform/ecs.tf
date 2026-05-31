@@ -270,7 +270,7 @@ resource "aws_ecs_task_definition" "sub_agent" {
 
     mountPoints = [
       { sourceVolume = "app-data", containerPath = "/app/data", readOnly = false },
-      { sourceVolume = "tmp",      containerPath = "/tmp",      readOnly = false },
+      { sourceVolume = "tmp", containerPath = "/tmp", readOnly = false },
     ]
 
     logConfiguration = {
@@ -282,7 +282,7 @@ resource "aws_ecs_task_definition" "sub_agent" {
       }
     }
 
-    user                   = "1001:1001"
+    user = "1001:1001"
   }])
 
   tags = {

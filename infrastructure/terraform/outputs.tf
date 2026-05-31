@@ -19,7 +19,7 @@ output "ec2_private_ip" {
 
 output "redis_endpoint" {
   description = "ElastiCache Redis endpoint (replication-group primary when enabled, else legacy cluster node)"
-  value = var.redis_use_replication_group ? "${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:${aws_elasticache_replication_group.redis[0].port}" : "${aws_elasticache_cluster.redis[0].cache_nodes[0].address}:${aws_elasticache_cluster.redis[0].cache_nodes[0].port}"
+  value       = var.redis_use_replication_group ? "${aws_elasticache_replication_group.redis[0].primary_endpoint_address}:${aws_elasticache_replication_group.redis[0].port}" : "${aws_elasticache_cluster.redis[0].cache_nodes[0].address}:${aws_elasticache_cluster.redis[0].cache_nodes[0].port}"
 }
 
 output "redis_transit_encryption" {

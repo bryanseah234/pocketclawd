@@ -16,11 +16,11 @@ terraform {
   # Bootstrap the state bucket and lock table first (see backend.tf),
   # then uncomment this block and run `terraform init -migrate-state`.
   backend "s3" {
-    bucket         = "nanoclaw-tfstate-709609992277"
-    key            = "infrastructure/terraform.tfstate"
-    region         = "ap-southeast-1"
-    use_lockfile   = true # S3-native conditional-write locking (replaces deprecated dynamodb_table)
-    encrypt        = true
+    bucket       = "nanoclaw-tfstate-709609992277"
+    key          = "infrastructure/terraform.tfstate"
+    region       = "ap-southeast-1"
+    use_lockfile = true # S3-native conditional-write locking (replaces deprecated dynamodb_table)
+    encrypt      = true
   }
 }
 

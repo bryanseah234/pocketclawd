@@ -20,7 +20,7 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
     let scanned = 0, queued = 0, skipped = 0;
 
     try {
-        const { S3Client, ListObjectsV2Command, GetObjectCommand } = await import('@aws-sdk/client-s3');
+        const { S3Client, ListObjectsV2Command } = await import('@aws-sdk/client-s3');
         const bucket = services.config.s3.dataBucket;
         const region = process.env.AWS_REGION || 'ap-southeast-1';
         const s3 = new S3Client({ region });

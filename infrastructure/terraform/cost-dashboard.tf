@@ -47,9 +47,9 @@ resource "aws_cloudwatch_dashboard" "cost" {
             ["...", "AmazonBedrock", { stat = "Maximum", period = 21600 }],
             ["...", "AWSSecretsManager", { stat = "Maximum", period = 21600 }]
           ]
-          view  = "timeSeries"
+          view    = "timeSeries"
           stacked = true
-          yAxis = { left = { min = 0 } }
+          yAxis   = { left = { min = 0 } }
         }
       },
       {

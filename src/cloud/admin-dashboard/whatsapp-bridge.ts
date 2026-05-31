@@ -8,7 +8,7 @@
  */
 
 import QRCode from 'qrcode';
-import { broadcastWaStateChange, registerWaStateProvider } from './wa-state.js';
+import { registerWaStateProvider } from './wa-state.js';
 
 // ── Types ──
 

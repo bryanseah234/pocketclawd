@@ -659,7 +659,7 @@ export class HealthCheckAggregator {
 
     private async checkComponent(
 
-        name: string,
+        _name: string,
 
         checker: () => Promise<boolean>,
 

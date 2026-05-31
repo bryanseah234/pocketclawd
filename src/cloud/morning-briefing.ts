@@ -98,7 +98,7 @@ async function buildBriefingMessage(
     unreadEmails: string[],
 ): Promise<string> {
     const day = new Date().toLocaleDateString('en-SG', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Singapore' });
-    const lines = [`Good morning${userName ? ', ' + userName : ''}! Here\'s your briefing for *${day}*:\n`];
+    const lines = [`Good morning${userName ? ', ' + userName : ''}! Here's your briefing for *${day}*:\n`];
     if (calEvents.length > 0) {
         lines.push('*Calendar*');
         calEvents.forEach(e => lines.push(`  \u2022 ${e}`));

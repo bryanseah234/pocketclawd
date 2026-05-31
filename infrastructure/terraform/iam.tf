@@ -125,9 +125,9 @@ resource "aws_iam_role_policy" "orchestrator_ec2" {
         Resource = "arn:aws:logs:${var.aws_region}:*:log-group:/nanoclaw/*"
       },
       {
-        Sid    = "CloudWatchMetrics"
-        Effect = "Allow"
-        Action = ["cloudwatch:PutMetricData"]
+        Sid      = "CloudWatchMetrics"
+        Effect   = "Allow"
+        Action   = ["cloudwatch:PutMetricData"]
         Resource = "*"
       },
       {
@@ -135,7 +135,7 @@ resource "aws_iam_role_policy" "orchestrator_ec2" {
         Effect = "Allow"
         # aoss:APIAccessAll is required — data-access policy alone is insufficient
         # for the OpenSearch Serverless collection.
-        Action = ["aoss:APIAccessAll"]
+        Action   = ["aoss:APIAccessAll"]
         Resource = "arn:aws:aoss:${var.aws_region}:*:collection/*"
       },
     ]
