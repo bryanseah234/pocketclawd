@@ -37,13 +37,11 @@ Underneath both surfaces is **NanoClaw v2** — an open-source agent harness tha
 | **WhatsApp number** | +65 8473 1565 (sandbox / Bryan's device pairing) |
 | **Telegram** | Available via the `/add-telegram` skill |
 
-The admin dashboard is HTTP Basic-auth protected; the credentials live in your Hermes memory store (or ask Bryan).
-
 ---
 
-## Architecture (one paragraph)
+## Architecture
 
-A single **EC2 r6i.4xlarge** in `ap-southeast-1` runs the **Node.js orchestrator** as a Docker container. The orchestrator handles WhatsApp pairing (Baileys), the admin UI, message routing, the data gateway, schedulers (digest 07:00 SGT, wiki regen 03:00 SGT), and queue dispatch. Heavy AI work — RAG embedding, document ingestion, agent reasoning — runs in a separate **Python 3.11 sub-agent** on **ECS Fargate** (1 vCPU / 2 GB), which BRPOPs from a Redis queue. State is split across **DynamoDB** (chat history, user prefs, webhook tokens, error sink), **OpenSearch Serverless** (RAG vector search), **S3** (`nanoclaw-data-709609992277` for documents, drafts, WhatsApp session), **ElastiCache Redis** (`nanoclaw-redis-rg`, message bus), **Secrets Manager** (`nanoclaw/app-config` for runtime config, `nanoclaw/google-secrets` for Google ingestion), and **CloudWatch** for logs and metrics. Images are built and pushed to **ECR** by GitHub Actions (`deploy-feature.yml`) and shipped to EC2 via SSM.
+A single **EC2 r6i.4xlarge** in `ap-southeast-1` runs the **Node.js orchestrator** as a Docker container. The orchestrator handles WhatsApp pairing (Baileys), the admin UI, message routing, the data gateway, schedulers (digest 07:00 SGT, cloud ingestion 02:00 SGT) and queue dispatch. Heavy AI work — RAG embedding, document ingestion, agent reasoning — runs in a separate **Python 3.11 sub-agent** on **ECS Fargate** (1 vCPU / 2 GB), which BRPOPs from a Redis queue. State is split across **DynamoDB** (chat history, user prefs, webhook tokens, error sink), **OpenSearch Serverless** (RAG vector search), **S3** (`nanoclaw-data-709609992277` for documents, drafts, WhatsApp session), **ElastiCache Redis** (`nanoclaw-redis-rg`, message bus), **Secrets Manager** (`nanoclaw/app-config` for runtime config, `nanoclaw/google-secrets` for Google ingestion), and **CloudWatch** for logs and metrics. Images are built and pushed to **ECR** by GitHub Actions (`deploy-feature.yml`) and shipped to EC2 via SSM.
 
 For the long version see [docs/architecture.md](docs/architecture.md). For deploy procedure see [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md). For live resource identifiers see [docs/aws-resource-inventory.md](docs/aws-resource-inventory.md).
 
@@ -76,9 +74,9 @@ WhatsApp / Telegram
 ## What Clawd does today
 
 ### Conversational
-- Answers questions in plain English over WhatsApp. Sub-agent routes through Bedrock with conversation context (last 30 messages from DynamoDB) plus retrieved RAG chunks.
+- Answers questions in plain English over WhatsApp. Sub-agent routes through Bedrock with conversation context (last 100 messages from DynamoDB) plus retrieved RAG chunks.
 - Onboarding flow: discovery questions on first contact (depth preference, focus area), preferences stored in DynamoDB, applied silently to all later replies.
-- Persona is configurable per-deployment via the `systemPromptTemplate` key in Secrets Manager — see [docs/CLAWD.md](docs/CLAWD.md) for the slot taxonomy (identity, onboarding, response style, guardrails, confidence tiers, coding rules, escalation).
+- Persona is configurable per-deployment via the `systemPromptTemplate` key in Secrets Manager — see [docs/CLAWD.md](docs/CLAWD.md) for the slot taxonomy (identity, voice, formatting, memory, capabilities, guardrails, confidence tiers, interaction style, escalation).
 
 ### Document handling
 - Upload via WhatsApp attachment **or** via the admin dashboard.
@@ -106,7 +104,6 @@ WhatsApp / Telegram
 
 ### Background work
 - **07:00 SGT daily** — morning digest cron (calendar + emails + tasks). Off by default per user; opt-in via WhatsApp.
-- **03:00 SGT daily** — Obsidian wiki regeneration from the user's knowledge base.
 - **02:00 SGT daily** — cloud ingestion sweep across linked Google / Microsoft / Apple sources.
 - All cron jobs are fault-isolated: a Google failure won't block a Microsoft sweep, etc.
 
@@ -116,7 +113,6 @@ WhatsApp / Telegram
 - Per-user data inspector: messages, preferences, indexed docs.
 - Manual ingestion / deletion controls.
 - Health endpoint at `/admin/api/health` (Redis, DynamoDB, OpenSearch, WhatsApp session).
-- Same "premium stationery" design system as the landing page (oatmeal #F5F0E8, espresso #3D2B1F, mustard #C9973A, Playfair Display + Inter).
 
 ---
 
@@ -203,22 +199,6 @@ Failed deploys auto-rollback via the prior tag stored in SSM Parameter Store.
 
 ---
 
-## Design system
-
-The same "premium stationery" aesthetic powers both the landing page (`src/static/landing.html`) and the admin dashboard (`src/static/admin.html`):
-
-- **Background** `#F5F0E8` oatmeal parchment
-- **Text** `#3D2B1F` deep espresso
-- **Accent** `#C9973A` mustard gold
-- **Headings** Playfair Display (serif, editorial)
-- **Body** Inter (clean, readable)
-- **Cards** `rgba(255,255,255,0.7)` frosted white on oatmeal
-- **Shadows** warm `rgba(61,43,31,0.08)` — never cold black
-
-Full token spec at [DESIGN.md](DESIGN.md). Both pages are static HTML/CSS/JS so [impeccable](https://github.com/anthropic-experimental/impeccable) can iterate on them with zero conversion friction.
-
----
-
 ## Documentation map
 
 | Doc | When you need it |
@@ -244,14 +224,3 @@ NanoClaw harness internals (channels-as-skills, agent-runner, two-DB split) live
 
 ---
 
-## Status
-
-Active. The platform is live and serving WhatsApp messages from `+65 8473 1565`. The codebase is on `feature/nanoclaw-aws-deployment` (latest deploy: SHA `9abee18`). For known gaps and next-up work see [docs/prd-gap-analysis.md](docs/prd-gap-analysis.md).
-
-## License
-
-Source code: MIT (see [LICENSE](LICENSE)). Branding, copy, and the persona layer are © Bryan Tan / TokenLab.
-
-## Acknowledgements
-
-Built on top of [NanoClaw v2](https://github.com/nanocoai/nanoclaw) by Nanoco AI. WhatsApp connectivity via [Baileys](https://github.com/WhiskeySockets/Baileys). Full contributor list in [CONTRIBUTORS.md](CONTRIBUTORS.md).

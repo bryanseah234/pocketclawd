@@ -18,7 +18,7 @@ External penetration test scheduled: Q3 2026.
 |----|----------|----------|---------|--------|
 | S-01 | LOW | Auth | Admin dashboard uses HTTP Basic auth over plain HTTP | ACCEPTED — internal use only; HTTPS via Caddy planned (runbook ready) |
 | S-02 | LOW | Secrets | `ADMIN_PASS` passed as env var at container start | ACCEPTED — alternative is reading from Secrets Manager at boot, planned post-Caddy |
-| S-03 | INFO | Network | EC2 SG allows :22, :3000 from 0.0.0.0/0 | ACCEPTED short-term — required during build; lock to admin IP set in C-04 |
+| S-03 | INFO | Network | EC2 SG allows :3000 and :443 from 0.0.0.0/0; port 22 (SSH) is CLOSED (SSM-only access) | ACCEPTED short-term — front :3000 with HTTPS via Caddy and lock to admin IP set |
 | S-04 | INFO | Data | ElastiCache Redis (replication group `nanoclaw-redis-rg`) runs with transit encryption (`redis_tls=true`) + AUTH token | ACCEPTED — cluster is private to the VPC, no public reachability |
 | S-05 | INFO | Deps | `better-sqlite3` native module compiles via gyp | LOW — used only for legacy session DB; no user data stored in SQLite |
 | S-06 | INFO | CI | GitHub Actions uses OIDC, no static AWS keys | GOOD — `sts:AssumeRoleWithWebIdentity` |
@@ -139,8 +139,8 @@ later (one ECS task per user) if a future threat model demands it.
   `exportUserData`, deletion via `/forget` → `deleteAllUserData`, 24h SLA,
   apse1 residency
 - **Encryption:** at-rest AES-256 (KMS-auto) on DynamoDB, S3, OpenSearch,
-  EBS; in-transit TLS 1.2+ to all AWS endpoints; ElastiCache TLS off but
-  private to VPC
+  EBS; in-transit TLS 1.2+ to all AWS endpoints; ElastiCache Redis runs
+  with transit encryption (TLS) + AUTH, private to VPC
 - **Retention:** 90 days on chat history (DDB TTL); 1 year on audit logs;
   35 days DDB PITR; S3 versioning forever (storage-class transition rules)
 - **Breach notification:** DPO within 24h of confirmed breach; severity

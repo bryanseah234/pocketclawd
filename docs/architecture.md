@@ -84,7 +84,7 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
 3.  Router enqueues to Redis (queue:agent:dispatch) with user metadata
 4.  ECS sub-agent BRPOPs the queue
 5.  Sub-agent processes:
-    a.  Load last 30 messages from DynamoDB  (nanoclaw-chat-messages)
+    a.  Load last 100 messages from DynamoDB  (nanoclaw-chat-messages)
     b.  If RAG triggered: embed query (Cohere Multilingual v3) → hybrid search OpenSearch (top 3)
     c.  Call Bedrock with persona + history + context + user message
         Default model: global.anthropic.claude-sonnet-4-5-20250929-v1:0
@@ -165,7 +165,6 @@ Entry: `src/index.ts`. Lives in a Docker container on EC2 with `--user root`
   through the channel adapter that owns the original thread.
 - **Schedulers** — `src/modules/clawd.ts` registers crons:
     02:00 SGT  cloud ingestion sweep
-    03:00 SGT  Obsidian wiki regeneration
     07:00 SGT  morning digest (per opted-in user)
 - **Container manager** — `src/cloud/container-manager/lifecycle.ts`. Triggers
   `aws ecs update-service ... --force-new-deployment` on new image rollout.

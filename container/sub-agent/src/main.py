@@ -376,7 +376,7 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
 
 
 async def _get_chat_history(user_id: str) -> list[dict[str, Any]]:
-    """Fetch last 30 messages from DynamoDB via orchestrator Redis queue."""
+    """Fetch last 100 messages from DynamoDB via orchestrator Redis queue."""
     if state.redis is None:
         return []
 
@@ -395,7 +395,7 @@ async def _get_chat_history(user_id: str) -> list[dict[str, Any]]:
         "action": "get_chat_history",
         "request_id": request_id,
         "user_id": user_id,
-        "limit": 10,  # last 10 turns is enough context; 30 was expensive
+        "limit": 100,  # last 100 messages of context
     }
     await state.redis.lpush("queue:orchestrator:data_gateway", json.dumps(request))
 

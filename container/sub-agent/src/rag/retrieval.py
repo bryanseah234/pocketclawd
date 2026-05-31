@@ -5,7 +5,7 @@ Implements:
 - Hybrid retrieval: 70% vector similarity (cosine, threshold 0.7) + 30% BM25 keyword
 - Cross-encoder reranking via Bedrock LLM scoring
 - Top 3 chunk selection with source attribution
-- 30-message conversation history management (up to 3000 tokens)
+- 100-message conversation history management (up to 12000 tokens)
 
 Requirements: REQ-3.3
 """
@@ -30,8 +30,8 @@ COSINE_SIMILARITY_THRESHOLD = 0.7
 VECTOR_WEIGHT = 0.7
 BM25_WEIGHT = 0.3
 TOP_K_RESULTS = 3
-MAX_CONVERSATION_MESSAGES = 30
-MAX_CONVERSATION_TOKENS = 3000
+MAX_CONVERSATION_MESSAGES = 100
+MAX_CONVERSATION_TOKENS = 12000
 ENCODING_NAME = "cl100k_base"
 
 
@@ -361,7 +361,7 @@ class RAGRetrieval:
         self, conversation_history: list[dict[str, str]]
     ) -> list[dict[str, str]]:
         """
-        Trim conversation history to last 30 messages or 3000 tokens.
+        Trim conversation history to last 100 messages or 12000 tokens.
 
         Keeps the most recent messages, removing oldest first until both
         constraints are satisfied.
@@ -372,10 +372,10 @@ class RAGRetrieval:
         Returns:
             Trimmed conversation history.
         """
-        # First, limit to last 30 messages
+        # First, limit to last 100 messages
         trimmed = conversation_history[-MAX_CONVERSATION_MESSAGES:]
 
-        # Then, trim by token count (remove oldest until under 3000 tokens)
+        # Then, trim by token count (remove oldest until under 12000 tokens)
         while trimmed:
             total_tokens = sum(
                 self._token_count(msg.get("content", "")) for msg in trimmed

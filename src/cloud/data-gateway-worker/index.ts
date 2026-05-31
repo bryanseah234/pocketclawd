@@ -875,7 +875,7 @@ async function handleGetChatHistory(
 
 
 
-    const limit = (request.limit as number) || 30;
+    const limit = (request.limit as number) || 100;
 
     const messages = await services.dataGateway.getChatHistory(userId, limit);
 

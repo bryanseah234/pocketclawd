@@ -142,9 +142,9 @@ class BedrockClaude:
 
         messages: list[dict[str, Any]] = []
 
-        # Add conversation history (last 30 messages max)
+        # Add conversation history (last 100 messages max)
         if history:
-            for msg in history[-30:]:
+            for msg in history[-100:]:
                 messages.append({
                     "role": msg["role"],
                     "content": [{"text": msg["content"]}],

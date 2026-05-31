@@ -134,12 +134,10 @@ node node_modules/vitest/vitest.mjs run --reporter=basic
 
 ## Action versions backlog
 
-GitHub-blog-posted timeline forces Node 20 actions off the runner by
-**June 2nd 2026**, with full removal on **September 16th 2026**. The
-following actions in our workflows still pin to Node-20 majors and should
-bump before then:
-
-- `actions/checkout@v4` → v5
-- `aws-actions/configure-aws-credentials@v4` → v5
-- `docker/build-push-action@v6` → latest
-- `docker/setup-buildx-action@v3` → latest
+**RESOLVED.** GitHub's deprecation timeline forces Node 20 actions off the
+runner by **September 16th 2026**. Rather than chase per-action major bumps,
+all five workflows set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` at the top
+`env:` block — GitHub's official opt-in that runs every JavaScript action on
+the Node 24 runtime regardless of the action's pinned major. This neutralises
+the deprecation deadline for `actions/checkout`, `aws-actions/configure-aws-credentials`,
+and the `docker/*` actions in one line, and is trivially reversible.

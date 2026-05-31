@@ -5,7 +5,7 @@ Tests cover:
 - Hybrid search with threshold filtering
 - Cross-encoder reranking via mocked Bedrock
 - Top 3 chunk selection with source attribution
-- Conversation history trimming (30 messages / 3000 tokens)
+- Conversation history trimming (100 messages / 12000 tokens)
 - Context building with source attribution formatting
 - Score parsing edge cases
 """
@@ -283,12 +283,12 @@ class TestConversationHistoryTrimming:
             bedrock_client=MockBedrockClient(),
             http_client=MockHttpClient(),
         )
-        # Create messages with ~200 tokens each (well over 3000 total for 30 msgs)
+        # Create messages with ~200 tokens each (well over 12000 total for 100 msgs)
         long_content = "word " * 200  # ~200 tokens
-        history = [{"role": "user", "content": long_content} for _ in range(30)]
+        history = [{"role": "user", "content": long_content} for _ in range(100)]
         trimmed = retrieval.trim_conversation_history(history)
-        # Should have fewer than 30 messages due to token limit
-        assert len(trimmed) < 30
+        # Should have fewer than 100 messages due to token limit
+        assert len(trimmed) < 100
         # Total tokens should be under the limit
         total_tokens = sum(
             retrieval._token_count(msg["content"]) for msg in trimmed
