@@ -13,7 +13,7 @@
 
 | Component | AWS service | Identifier |
 |---|---|---|
-| Orchestrator | EC2 t3.xlarge | `i-0f9cd20350cfdc1a6` |
+| Orchestrator | EC2 r6i.4xlarge | `i-0f9cd20350cfdc1a6` |
 | Sub-agent | ECS Fargate | `nanoclaw-cluster/nanoclaw-sub-agent` |
 | Chat storage | DynamoDB | `nanoclaw-chat-messages` |
 | User preferences | DynamoDB | `nanoclaw-user-preferences` |
@@ -21,9 +21,9 @@
 | System errors | DynamoDB | `nanoclaw-system-errors` |
 | Object storage | S3 | `nanoclaw-data-709609992277` |
 | Vector search | OpenSearch Serverless | `nanoclaw-documents` (`66ik2p21jw225em9uj25`) |
-| Message queue | ElastiCache Redis | `nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
+| Message queue | ElastiCache Redis | `nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
 | Secrets | Secrets Manager | `nanoclaw/app-config`, `nanoclaw/google-secrets` |
-| LLM | Bedrock | `global.anthropic.claude-sonnet-4-5-...` (sub-agent), `global.anthropic.claude-haiku-4-5-...` (orchestrator), `global.cohere.embed-v4:0` (embedding) |
+| LLM | Bedrock | `global.anthropic.claude-sonnet-4-5-...` (orchestrator + sub-agent), `cohere.embed-multilingual-v3` (embedding, 1024-dim) |
 | Container registry | ECR | `nanoclaw/orchestrator`, `nanoclaw/agent` |
 
 ---
@@ -51,9 +51,9 @@ aws ssm send-command --instance-ids i-0f9cd20350cfdc1a6 \
   --document-name AWS-RunShellScript --region ap-southeast-1 \
   --parameters 'commands=[
     "aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com",
-    "docker pull 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw/orchestrator:feature-latest",
+    "docker pull 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw-orchestrator:current",
     "docker stop nanoclaw-orchestrator && docker rm nanoclaw-orchestrator",
-    "docker run -d --name nanoclaw-orchestrator --restart unless-stopped --user root --network host -v /var/run/docker.sock:/var/run/docker.sock -v /opt/nanoclaw-data:/app/data -e NANOCLAW_ENV=cloud -e AWS_REGION=ap-southeast-1 -e USE_SUBAGENT=1 -e WHATSAPP_ENABLED=true -e DATA_BUCKET=nanoclaw-data-709609992277 -e CLAWD_CRON_DIGEST=true -e CLAWD_CRON_WIKI=true -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw/orchestrator:feature-latest"
+    "docker run -d --name nanoclaw-orchestrator --restart unless-stopped --user root --network host -v /var/run/docker.sock:/var/run/docker.sock -v /opt/nanoclaw-data:/app/data -e NANOCLAW_ENV=cloud -e AWS_REGION=ap-southeast-1 -e USE_SUBAGENT=1 -e WHATSAPP_ENABLED=true -e DATA_BUCKET=nanoclaw-data-709609992277 -e CLAWD_CRON_DIGEST=true -e CLAWD_CRON_DIGEST=true -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw-orchestrator:current"
   ]'
 ```
 
@@ -117,12 +117,9 @@ Recovery:
 # 1. Expand the EBS volume
 aws ec2 modify-volume --volume-id vol-0c15cf0eccb7dd78e --size 256 --region ap-southeast-1
 
-# 2. SSH via EC2 Instance Connect (SSM is dead)
-aws ec2-instance-connect send-ssh-public-key \
-  --instance-id i-0f9cd20350cfdc1a6 --instance-os-user ubuntu \
-  --availability-zone ap-southeast-1a \
-  --ssh-public-key file://~/eic-key.pub
-ssh -i ~/eic-key ubuntu@3.0.132.150
+# 2. Open an interactive shell via SSM Session Manager
+#    (SSH/port 22 is CLOSED — admin_ssh_cidrs=[]; SSM is the only host access path)
+aws ssm start-session --target i-0f9cd20350cfdc1a6 --region ap-southeast-1
 
 # 3. Grow partition + filesystem
 sudo growpart /dev/nvme0n1 1
@@ -133,10 +130,10 @@ df -h /
 sudo docker system prune -af
 # (NOT --volumes if you have bind-mounted /opt/nanoclaw-data — check first)
 
-# 5. Re-deploy fresh image directly via SSH (don't wait for GHA rebuild)
+# 5. Re-deploy fresh image via SSM RunShellScript (don't wait for GHA rebuild)
 ECR=709609992277.dkr.ecr.ap-southeast-1.amazonaws.com
 aws ecr get-login-password --region ap-southeast-1 | sudo docker login --username AWS --password-stdin $ECR
-sudo docker pull $ECR/nanoclaw/orchestrator:feature-latest
+sudo docker pull $ECR/nanoclaw-orchestrator:current
 sudo docker stop nanoclaw-orchestrator && sudo docker rm nanoclaw-orchestrator
 sudo docker run -d ...   # full env block per docs/AWS-DEPLOYMENT.md §5
 ```
@@ -157,8 +154,9 @@ WhatsApp messages go un-acknowledged; admin dashboard QR section shows
 open http://3.0.132.150:3000/admin
 # Tab "WhatsApp" → click "Generate new QR" → scan with phone
 
-# If dashboard is down, force fresh QR via SSH
-ssh -i ~/eic-key ubuntu@3.0.132.150
+# If dashboard is down, force fresh QR via SSM Session Manager
+aws ssm start-session --target i-0f9cd20350cfdc1a6 --region ap-southeast-1
+# then, inside the session:
 sudo docker exec nanoclaw-orchestrator rm -rf /app/sessions/baileys_auth_info
 sudo docker restart nanoclaw-orchestrator
 sudo docker logs -f nanoclaw-orchestrator   # scan QR from log output

@@ -143,12 +143,12 @@ terraform apply
 
 | Resource | Identifier |
 |---|---|
-| EC2 instance | `i-0f9cd20350cfdc1a6` (t3.xlarge, ap-southeast-1a) |
+| EC2 instance | `i-0f9cd20350cfdc1a6` (r6i.4xlarge, ap-southeast-1a) |
 | EBS root | `vol-0c15cf0eccb7dd78e` (128 GB gp3) |
 | Public IP | `3.0.132.150` (port 22 + 3000 open; lock down post-incident) |
 | ECS cluster | `nanoclaw-cluster` |
 | ECS service | `nanoclaw-sub-agent` (Fargate, 1 task, 1024/2048) |
-| Redis | `nanoclaw-redis-ec2vpc` (`nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379`) |
+| Redis | `nanoclaw-redis-rg` (`nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com:6379`) |
 | OpenSearch | `nanoclaw-documents` (`66ik2p21jw225em9uj25.ap-southeast-1.aoss.amazonaws.com`) |
 | S3 | `nanoclaw-data-709609992277` |
 | DynamoDB | `nanoclaw-chat-messages`, `nanoclaw-user-preferences`, `nanoclaw-webhook-tokens`, `nanoclaw-system-errors` |

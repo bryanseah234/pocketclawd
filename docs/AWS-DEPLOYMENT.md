@@ -4,7 +4,7 @@ This is the full admin procedure to bring a fresh Clawd / NanoClaw stack live
 on AWS. The deployed instance at `3.0.132.150` was built from this exact
 procedure.
 
-**Architecture summary:** EC2 `t3.xlarge` orchestrator + Baileys + admin UI;
+**Architecture summary:** EC2 `r6i.4xlarge` orchestrator + Baileys + admin UI;
 ECS Fargate task for the Python sub-agent; managed services for state
 (DynamoDB, OpenSearch Serverless, ElastiCache Redis, S3, Bedrock, Secrets
 Manager); GitHub Actions for CI/CD via OIDC.
@@ -47,8 +47,8 @@ Manager); GitHub Actions for CI/CD via OIDC.
 - IAM user / SSO with admin access for first-time provisioning
 - Bedrock model access enabled in `ap-southeast-1` for the inference profiles
   `global.anthropic.claude-sonnet-4-5-20250929-v1:0`,
-  `global.anthropic.claude-haiku-4-5-20251001-v1:0`, and
-  `global.cohere.embed-v4:0`
+  `global.anthropic.claude-sonnet-4-5-20250929-v1:0`, and
+  `cohere.embed-multilingual-v3`
 
 ```bash
 aws bedrock list-inference-profiles --region ap-southeast-1
@@ -75,13 +75,13 @@ Resources created:
 | File | Resources |
 |---|---|
 | `vpc.tf` | VPC, public + private subnets, NAT, security groups |
-| `ec2.tf` | EC2 t3.xlarge, IAM role, instance profile, user-data |
+| `ec2.tf` | EC2 r6i.4xlarge, IAM role, instance profile, user-data |
 | `ecs.tf` | `nanoclaw-cluster`, `nanoclaw-sub-agent` service + task def |
 | `ecr.tf` | `nanoclaw/orchestrator` + `nanoclaw/agent` registries |
 | `s3.tf` | `nanoclaw-data-{account}` data bucket with lifecycle rules |
 | `dynamodb.tf` | 4 tables (chat-messages, user-preferences, webhook-tokens, system-errors) |
 | `opensearch.tf` | Serverless `nanoclaw-documents` collection (VECTORSEARCH) + data-access policy |
-| `redis.tf` | ElastiCache `nanoclaw-redis-ec2vpc` (cache.t3.micro, redis 7.1.0) |
+| `redis.tf` | ElastiCache `nanoclaw-redis-rg` (cache.r6g.large, redis 7.1.0) |
 | `secrets.tf` | `nanoclaw/app-config` skeleton + `nanoclaw/google-secrets` placeholder |
 | `iam.tf` | EC2 instance role + ECS task role with **`aoss:APIAccessAll`** (critical) |
 | `cloudwatch.tf` | Log groups + alarms + dashboard |
@@ -111,7 +111,7 @@ aws secretsmanager put-secret-value \
   --secret-string '{
     "redis_host":               "'$(terraform output -raw redis_endpoint)'",
     "redis_port":               6379,
-    "redis_tls":                false,
+    "redis_tls":                true,
     "dynamodb_chat_messages_table":     "nanoclaw-chat-messages",
     "dynamodb_user_preferences_table":  "nanoclaw-user-preferences",
     "dynamodb_webhook_tokens_table":    "nanoclaw-webhook-tokens",
@@ -119,10 +119,10 @@ aws secretsmanager put-secret-value \
     "opensearch_endpoint":      "'$(terraform output -raw opensearch_endpoint)'",
     "opensearch_index_name":    "documents",
     "s3_data_bucket":           "'$(terraform output -raw s3_data_bucket)'",
-    "llm_model_id":             "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "llm_model_id":             "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "llm_subagent_model_id":    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "llm_region":               "ap-southeast-1",
-    "BEDROCK_EMBEDDING_MODEL_ID": "global.cohere.embed-v4:0",
+    "BEDROCK_EMBEDDING_MODEL_ID": "cohere.embed-multilingual-v3",
     "ecr_registry_url":         "'$(terraform output -raw ecr_registry_url)'",
     "ecr_agent_image":          "nanoclaw/agent:latest",
     "WHATSAPP_SESSION_S3_PREFIX": "sessions/",
@@ -229,7 +229,7 @@ sudo docker run -d \
   -e WHATSAPP_ENABLED=true \
   -e DATA_BUCKET=$(terraform output -raw s3_data_bucket) \
   -e CLAWD_CRON_DIGEST=true \
-  -e CLAWD_CRON_WIKI=true \
+  -e CLAWD_CRON_DIGEST=true \
   -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets \
   -e ADMIN_USER=admin \
   -e ADMIN_PASS=<SET-A-STRONG-PASSWORD> \
@@ -273,7 +273,7 @@ aws logs tail /ecs/nanoclaw-sub-agent --follow --region ap-southeast-1
 ```
 
 The task gets `AWS_REGION=ap-southeast-1` from the task def so the embedding
-pipeline resolves to Cohere v4 automatically. The Bedrock model id comes from
+pipeline resolves to Cohere Multilingual v3 automatically. The Bedrock model id comes from
 `BEDROCK_LLM_MODEL_ID` (forwarded by `src/cloud/container-manager/lifecycle.ts`)
 which the orchestrator pulls from `nanoclaw/app-config:llm_subagent_model_id`.
 
@@ -359,7 +359,7 @@ aws logs tail /ecs/nanoclaw-sub-agent --follow --region ap-southeast-1   # sub-a
 You should see (orchestrator):
 ```
 Inbound WhatsApp message ... fromMe=false
-Routing message → queue:agent:shared:inbound
+Routing message → queue:agent:dispatch
 ```
 
 …and (sub-agent):
@@ -380,7 +380,7 @@ Message delivered id=... platformMsgId=...
 
 | Tier | Instance | vCPU | RAM | Concurrent users | ~Monthly |
 |---|---|---|---|---|---|
-| Starter (current) | t3.xlarge | 4 | 16 GB | 5–20 | $120 |
+| Starter (current) | r6i.4xlarge | 4 | 16 GB | 5–20 | $120 |
 | | r6i.xlarge | 4 | 32 GB | 20–50 | $200 |
 | | r6i.2xlarge | 8 | 64 GB | 50–100 | $400 |
 | Heavy | r6i.4xlarge | 16 | 128 GB | 100–200 | $800 |
@@ -390,7 +390,7 @@ To scale up: edit `terraform.tfvars` (`instance_type = "r6i.xlarge"`) and
 persists via S3.
 
 To scale the sub-agent horizontally: `aws ecs update-service ... --desired-count 3`.
-The shared queue (`queue:agent:shared:inbound`) means tasks share work via
+The shared queue (`queue:agent:dispatch`) means tasks share work via
 BRPOP — no per-user routing needed.
 
 ---
@@ -406,7 +406,7 @@ minimum). Alternatives:
   RAG pipeline because hybrid search support differs
 
 EC2 Reserved Instance (1-year, no upfront): ~30% savings.
-ElastiCache cache.t3.micro is free-tier eligible for 12 months on new accounts.
+ElastiCache cache.r6g.large is free-tier eligible for 12 months on new accounts.
 DynamoDB on-demand is fine; switch to provisioned only if you exceed ~$25/mo.
 
 ---

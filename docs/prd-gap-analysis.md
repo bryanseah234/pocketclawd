@@ -20,16 +20,16 @@ deployment.
 
 | Status | Item |
 |---|---|
-| ✅ DONE | EC2 t3.xlarge running, port 3000 live, container healthy |
+| ✅ DONE | EC2 r6i.4xlarge running, port 3000 live, container healthy |
 | ✅ DONE | NanoClaw orchestrator as Docker container (`--restart unless-stopped`) |
 | ✅ DONE | Sub-agent on ECS Fargate (1 task, 1 vCPU / 2 GB) |
 | ✅ DONE | Baileys WhatsApp integration in orchestrator (paired `+65 8473 1565`) |
 | ✅ DONE | Admin dashboard with QR code (`src/cloud/admin-dashboard/` + `src/static/admin.html`) |
 | ✅ DONE | DynamoDB tables (4: chat-messages, user-preferences, webhook-tokens, system-errors) |
 | ✅ DONE | OpenSearch Serverless collection `nanoclaw-documents` |
-| ✅ DONE | ElastiCache Redis (`nanoclaw-redis-ec2vpc`) for message queue |
+| ✅ DONE | ElastiCache Redis (`nanoclaw-redis-rg`) for message queue |
 | ✅ DONE | Bedrock LLM — Sonnet 4.5 (sub-agent) + Haiku 4.5 (orchestrator) via inference profiles |
-| ✅ DONE | Bedrock embeddings — Cohere Embed v4 (Titan v2 not GA in apse1; pipeline auto-resolves by region) |
+| ✅ DONE | Bedrock embeddings — Cohere Embed Multilingual v3 (Titan v2 not GA in apse1; pipeline auto-resolves by region) |
 | ✅ DONE | S3 document storage (`nanoclaw-data-709609992277`) |
 | ✅ DONE | Secrets Manager config (`nanoclaw/app-config`, `nanoclaw/google-secrets`) |
 | ✅ DONE | RAG pipeline — hybrid kNN + BM25 in OpenSearch with mandatory userId filter |
@@ -100,8 +100,8 @@ These weren't in the PRD but emerged during the build and are live:
   literals) so [impeccable](https://github.com/anthropic-experimental/impeccable)
   lives natively
 - **Pulse strip** with SSE-driven live tiles
-- **Cohere Embed v4 fallback** — pipeline picks Cohere v4 in regions where
-  Titan v2 is unavailable, output forced to 1536-dim to keep the index parity
+- **Cohere Embed Multilingual v3 fallback** — pipeline picks Cohere Multilingual v3 in regions where
+  Titan v2 is unavailable, output forced to 1024-dim to keep the index parity
 - **DataGateway worker** — `nanoclaw:uploads:pending` queue + draft artefact
   upload action, keeping the data-isolation invariant on every S3 write
 - **EC2 disk-full recovery skill** — battle-tested during Bryan's ops day,

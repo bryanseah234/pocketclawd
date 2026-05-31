@@ -17,15 +17,15 @@ the architecture.
 
 ## Bedrock — LLM + embeddings
 
-Provider for both inference (Claude) and embeddings (Cohere v4). Inference
+Provider for both inference (Claude) and embeddings (Cohere Multilingual v3). Inference
 profiles available in `ap-southeast-1`:
 
 | Inference profile name | Inference-profile id | Use |
 |---|---|---|
 | Global Anthropic Claude Sonnet 4.6 | `global.anthropic.claude-sonnet-4-6` | (available) |
 | Global Anthropic Claude Sonnet 4.5 | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | **Sub-agent default** (`llm_subagent_model_id`) |
-| Global Anthropic Claude Haiku 4.5 | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | **Orchestrator default** (`llm_model_id`) |
-| Global Cohere Embed v4 | `global.cohere.embed-v4:0` | **Embedding default** (forced 1536-dim) |
+| Global Anthropic Claude Haiku 4.5 | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | **Orchestrator default** (`llm_model_id`) |
+| Global Cohere Embed Multilingual v3 | `cohere.embed-multilingual-v3` | **Embedding default** (forced 1024-dim) |
 | APAC Claude Sonnet 4 | `apac.anthropic.claude-sonnet-4-20250514-v1:0` | (available, not used) |
 | APAC Anthropic Claude 3.5 Sonnet v2 | `apac.anthropic.claude-3-5-sonnet-20241022-v2:0` | (available, legacy) |
 | APAC Anthropic Claude 3 Sonnet | `apac.anthropic.claude-3-sonnet-20240229-v1:0` | (available, legacy) |
@@ -41,9 +41,9 @@ The active model split runs:
 
 | Surface | Secret key | Live value |
 |---|---|---|
-| Orchestrator (delivery + light classification) | `llm_model_id` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` |
+| Orchestrator (delivery + light classification) | `llm_model_id` | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` |
 | Sub-agent (per-user reasoning, RAG) | `llm_subagent_model_id` | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` |
-| Embedding pipeline | resolved from region | `global.cohere.embed-v4:0` (Titan v2 not GA in apse1) |
+| Embedding pipeline | resolved from region | `cohere.embed-multilingual-v3` (Titan v2 not GA in apse1) |
 
 Containers spawned by `src/cloud/container-manager/lifecycle.ts` get the
 sub-agent model id forwarded as `BEDROCK_LLM_MODEL_ID`; the
@@ -57,7 +57,7 @@ it (env > caller arg > `DEFAULT_MODEL_ID`).
 | Field | Value |
 |---|---|
 | Instance ID | `i-0f9cd20350cfdc1a6` |
-| Instance type | **t3.xlarge** (4 vCPU, 16 GB RAM) |
+| Instance type | **r6i.4xlarge** (4 vCPU, 16 GB RAM) |
 | AZ | `ap-southeast-1a` |
 | VPC | `vpc-0eaf5fb467fe952b8` |
 | Private IP | `10.0.2.228` |
@@ -129,17 +129,17 @@ Used for hybrid (kNN + BM25) retrieval over Cohere-v4-embedded chunks.
 
 ## ElastiCache — Redis
 
-Three clusters in the account; Clawd uses **`nanoclaw-redis-ec2vpc`**:
+Three clusters in the account; Clawd uses **`nanoclaw-redis-rg`**:
 
 | Cluster ID | Engine | Status | Endpoint | Notes |
 |---|---|---|---|---|
-| **`nanoclaw-redis-ec2vpc`** | redis 7.1.0 | available | (`nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379`) | **Active — pointed to by `nanoclaw/app-config:redis_host`** |
+| **`nanoclaw-redis-rg`** | redis 7.1.0 | available | (`nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com:6379`) | **Active — pointed to by `nanoclaw/app-config:redis_host`** |
 | `nanoclaw-redis` | redis 7.1.0 | available | `nanoclaw-redis.sipa0z.0001.apse1.cache.amazonaws.com:6379` | Parallel/standby |
 | `ai-whatsapp-dev-redis-001` | valkey 7.2.6 | available | (separate project) | Not Clawd |
 
-`nanoclaw-redis-ec2vpc`:
-- TLS: `false` (per `nanoclaw/app-config:redis_tls`) — kept private to the VPC
-- `cache.t3.micro` node type
+`nanoclaw-redis-rg`:
+- TLS: `true` (per `nanoclaw/app-config:redis_tls`) — kept private to the VPC
+- `cache.r6g.large` node type
 
 ---
 
@@ -168,7 +168,7 @@ versioning enabled; server-side encryption AES-256 (KMS-auto).
 Active keys in `nanoclaw/app-config`:
 
 ```
-redis_host                              nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com
+redis_host                              nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com
 redis_port                              6379
 redis_tls                               false
 dynamodb_chat_messages_table            nanoclaw-chat-messages
@@ -178,10 +178,10 @@ dynamodb_system_errors_table            nanoclaw-system-errors
 opensearch_endpoint                     https://66ik2p21jw225em9uj25.ap-southeast-1.aoss.amazonaws.com
 opensearch_index_name                   documents
 s3_data_bucket                          nanoclaw-data-709609992277
-llm_model_id                            global.anthropic.claude-haiku-4-5-20251001-v1:0
+llm_model_id                            global.anthropic.claude-sonnet-4-5-20250929-v1:0
 llm_subagent_model_id                   global.anthropic.claude-sonnet-4-5-20250929-v1:0
 llm_region                              ap-southeast-1
-BEDROCK_EMBEDDING_MODEL_ID              amazon.titan-embed-text-v2:0  (legacy; pipeline overrides to Cohere v4 by region)
+BEDROCK_EMBEDDING_MODEL_ID              amazon.titan-embed-text-v2:0  (legacy; pipeline overrides to Cohere Multilingual v3 by region)
 ecr_registry_url                        709609992277.dkr.ecr.ap-southeast-1.amazonaws.com
 ecr_agent_image                         nanoclaw/agent:latest
 WHATSAPP_SESSION_S3_PREFIX              sessions/

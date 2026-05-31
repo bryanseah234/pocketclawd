@@ -40,8 +40,9 @@ Push to feature/nanoclaw-aws-deployment
                          ▼
    ┌─────────────────────────────────────────────────────────┐
    │ Deploy                                                  │
-   │   • SSM → EC2: pull, stop+rm old, docker run new        │
-   │     (--user root, full env block per AWS-DEPLOYMENT)    │
+   │   • SSM → EC2: BLUE/GREEN — pre-pull image as :next,    │
+   │     smoke-test on :3001 (bridge net), swap to :current, │
+   │     restart orchestrator (full env per AWS-DEPLOYMENT)  │
    │   • aws ecs update-service nanoclaw-sub-agent           │
    │     --force-new-deployment   ← rolls Fargate task       │
    │   • Health check /health   (15 retries × 5s)            │

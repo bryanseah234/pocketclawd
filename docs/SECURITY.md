@@ -68,11 +68,11 @@ its ECS task role.
 |---|---|---|---|
 | Inbound | 80, 443 | 0.0.0.0/0 | Caddy + Let's Encrypt (when TLS enabled) |
 | Inbound | 3000 | 0.0.0.0/0 | Orchestrator HTTP (admin + landing) |
-| Inbound | 22 | 0.0.0.0/0 | EC2 Instance Connect (recovery only — lock down after each incident) |
+| Inbound | 22 | (closed) | SSH disabled — `admin_ssh_cidrs=[]`. Host access is via AWS SSM Session Manager only |
 | Outbound | 443 | * | AWS service endpoints, Baileys → WhatsApp |
 | Outbound | 5222, 5223 | * | WhatsApp websocket |
 
-**Hardening backlog:** lock 22/3000 to admin IP set, front 3000 with HTTPS via Caddy, drop direct :3000 once Caddy is up.
+**Hardening backlog:** port 22 is already closed (SSM-only access); front 3000 with HTTPS via Caddy and drop direct :3000 once Caddy is up.
 
 ### VPC topology
 - VPC `vpc-0eaf5fb467fe952b8` in `ap-southeast-1`
@@ -168,11 +168,11 @@ Store and pages the on-call channel.
 ### Manual recovery paths
 - **Disk full on EC2** → see `~/.hermes/skills/devops/aws-ec2-disk-full-recovery/SKILL.md`
 - **TLS cert expired** → see `docs/runbooks/caddy-tls-setup.md`
-- **WhatsApp re-pair** → admin dashboard QR; if dashboard offline, SSH and
-  delete the session blob, restart, scan fresh QR from journal
+- **WhatsApp re-pair** → admin dashboard QR; if dashboard offline, use SSM
+  Session Manager to delete the session blob, restart, scan fresh QR from journal
 
 ---
 
 ## Findings register
 See `docs/security-assessment.md` for the live findings register, including
-accepted risks (Basic auth over HTTP, 22/3000 open to 0/0).
+accepted risks (Basic auth over HTTP, :3000 open to 0/0; port 22 is closed, SSM-only).

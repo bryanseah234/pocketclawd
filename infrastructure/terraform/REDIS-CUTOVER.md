@@ -1,5 +1,11 @@
 # Redis Cutover Runbook (t7-49)
 
+> **STATUS: COMPLETE.** The cutover is done. Production runs the encrypted, HA replication
+> group `nanoclaw-redis-rg` (1 primary + 1 replica, `cache.r6g.large`, transit encryption +
+> AUTH). The old standalone `nanoclaw-redis-ec2vpc` cluster was destroyed. The AUTH token is
+> sourced from Secrets Manager at apply via `TF_VAR_redis_auth_token` and is **not** stored in
+> any tfvars file in git. The steps below are retained as historical record / rollback reference.
+
 Migrate from the standalone `aws_elasticache_cluster` to an encrypted,
 highly-available `aws_elasticache_replication_group` (at-rest + in-transit
 encryption, Multi-AZ failover).

@@ -23,12 +23,12 @@ grounded in their own documents and conversation history.
 | Channel — WhatsApp | Baileys v7 (rc.9) | Multi-device WhatsApp Web protocol; cheap; works without Meta Business API |
 | Channel — Telegram | NanoClaw Chat SDK adapter | Standard NanoClaw skill-installable channel |
 | LLM (sub-agent) | AWS Bedrock — `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Default reasoning model |
-| LLM (orchestrator fallback) | AWS Bedrock — `global.anthropic.claude-haiku-4-5-20251001-v1:0` | Cheap, fast, used for delivery-side classification |
-| Embeddings | AWS Bedrock — `global.cohere.embed-v4:0` | Titan v2 not GA in ap-southeast-1; output dimension forced to 1536 to keep OpenSearch index compatible |
+| LLM (orchestrator fallback) | AWS Bedrock — `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Cheap, fast, used for delivery-side classification |
+| Embeddings | AWS Bedrock — `cohere.embed-multilingual-v3` | Titan v2 not GA in ap-southeast-1; output dimension forced to 1024 to keep OpenSearch index compatible |
 | Vector search | OpenSearch Serverless `nanoclaw-documents` | Hybrid kNN + BM25 |
 | Database | DynamoDB (4 tables) | Per-user partition key, on-demand billing, point-in-time recovery |
 | Object storage | S3 `nanoclaw-data-709609992277` | Documents, drafts, WhatsApp session, exports |
-| Queue | ElastiCache Redis `nanoclaw-redis-ec2vpc` (7.1.0) | Async orchestrator ↔ sub-agent |
+| Queue | ElastiCache Redis `nanoclaw-redis-rg` (7.1.0) | Async orchestrator ↔ sub-agent |
 | Secrets | AWS Secrets Manager — `nanoclaw/app-config`, `nanoclaw/google-secrets` | Runtime config + Google OAuth payload |
 | Container registry | ECR — `nanoclaw/orchestrator`, `nanoclaw/agent` | Per-SHA tags + `feature-latest` / `latest` |
 | Sub-agent runtime | ECS Fargate — `nanoclaw-cluster/nanoclaw-sub-agent` | 1 vCPU / 2 GB / 1 task; force-new-deployment on each rollout |
@@ -50,7 +50,7 @@ LPUSH/BRPOP semantics.
 ### Key patterns
 
 ```
-queue:agent:shared:inbound          orchestrator → sub-agent
+queue:agent:dispatch          orchestrator → sub-agent
 queue:orchestrator:responses        sub-agent → orchestrator
 queue:dlq:{userId}                  per-user dead-letter queue
 nanoclaw:uploads:pending            data-gateway-worker upload queue
@@ -133,7 +133,7 @@ Index: `documents`.
       "documentId": { "type": "keyword" },
       "chunkId":    { "type": "keyword" },
       "text":       { "type": "text" },
-      "embedding":  { "type": "knn_vector", "dimension": 1536,
+      "embedding":  { "type": "knn_vector", "dimension": 1024,
                       "method": { "engine": "nmslib",
                                   "space_type": "cosinesimil",
                                   "name": "hnsw" } },
@@ -247,7 +247,7 @@ Exceeding rate limits queues the message rather than dropping it.
   `/forget` triggers deletion within 24 hours. CORPORATE-tagged shared
   documents are exempt from per-user delete-all by design.
 - **Encryption:** at-rest AES-256 (KMS-auto) on DynamoDB, S3, OpenSearch, and
-  EBS. In-transit TLS 1.2+ to all AWS endpoints. ElastiCache `redis_tls=false`
+  EBS. In-transit TLS 1.2+ to all AWS endpoints. ElastiCache `redis_tls=true`
   on the active cluster — kept private to the VPC.
 - **Audit log:** `nanoclaw-system-errors` retained 1 year. WhatsApp QR scans,
   admin logins, and DSAR requests written to CloudWatch.

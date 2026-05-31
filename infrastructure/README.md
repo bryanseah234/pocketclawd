@@ -8,8 +8,8 @@ http://3.0.132.150:3000.
 
 - Account: `709609992277`
 - Region: `ap-southeast-1` (Singapore — PDPA residency)
-- Compute: EC2 **t3.xlarge** + ECS Fargate (1 task, 1 vCPU / 2 GB)
-- LLM: AWS Bedrock — Claude Sonnet 4.5 / Haiku 4.5 / Cohere Embed v4
+- Compute: EC2 **r6i.4xlarge** + ECS Fargate (1 task, 1 vCPU / 2 GB)
+- LLM: AWS Bedrock — Claude Sonnet 4.5 / Haiku 4.5 / Cohere Embed Multilingual v3
 - State stores: DynamoDB (4 tables) + S3 + OpenSearch Serverless + Redis
 
 ## Files
@@ -22,7 +22,7 @@ http://3.0.132.150:3000.
 | `ecr.tf` | `nanoclaw/orchestrator`, `nanoclaw/agent` repositories |
 | `dynamodb.tf` | 4 tables (chat-messages, user-preferences, webhook-tokens, system-errors) |
 | `opensearch.tf` | Serverless `nanoclaw-documents` collection (VECTORSEARCH) |
-| `redis.tf` | ElastiCache Redis cluster (`nanoclaw-redis-ec2vpc`) |
+| `redis.tf` | ElastiCache Redis cluster (`nanoclaw-redis-rg`) |
 | `s3.tf` | `nanoclaw-data-{account}` bucket with lifecycle rules |
 | `secrets.tf` | `nanoclaw/app-config`, `nanoclaw/google-secrets` placeholders |
 | `iam.tf` | EC2 + ECS task roles (incl. `aoss:APIAccessAll` — required) |
@@ -42,8 +42,8 @@ docker --version             # for image builds
 Bedrock model access must be enabled in the AWS console for the three
 inference profiles before `apply`:
 - `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
-- `global.anthropic.claude-haiku-4-5-20251001-v1:0`
-- `global.cohere.embed-v4:0`
+- `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- `cohere.embed-multilingual-v3`
 
 ```bash
 aws bedrock list-inference-profiles --region ap-southeast-1
@@ -78,7 +78,7 @@ Key outputs (used by deployment scripts and CI):
 | `ec2_instance_id` | `i-0f9cd20350cfdc1a6` |
 | `ec2_public_ip` | `3.0.132.150` |
 | `ecr_registry_url` | `709609992277.dkr.ecr.ap-southeast-1.amazonaws.com` |
-| `redis_endpoint` | `nanoclaw-redis-ec2vpc.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
+| `redis_endpoint` | `nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
 | `opensearch_endpoint` | `https://66ik2p21jw225em9uj25.ap-southeast-1.aoss.amazonaws.com` |
 | `s3_data_bucket` | `nanoclaw-data-709609992277` |
 
@@ -90,7 +90,7 @@ terraform apply
 ```
 
 Terraform state lives in S3 (configured in `versions.tf`); DO NOT keep it
-local. State locking via DynamoDB is enabled.
+local. State locking uses S3-native locking (`use_lockfile=true` in versions.tf); the old DynamoDB lock table `nanoclaw-terraform-locks` was destroyed and is no longer used. State bucket: `s3://nanoclaw-tfstate-709609992277`.
 
 ## Targeted updates
 
@@ -119,9 +119,9 @@ procedures.
 
 | Service | ~Monthly |
 |---|---|
-| EC2 t3.xlarge | $120 |
+| EC2 r6i.4xlarge | $120 |
 | ECS Fargate (1 task) | $30 |
-| ElastiCache cache.t3.micro | $12 |
+| ElastiCache cache.r6g.large | $12 |
 | DynamoDB on-demand | $5 |
 | OpenSearch Serverless (2 OCU min) | $350 |
 | S3 (< 10 GB) | $1 |
@@ -140,7 +140,7 @@ the EC2 cuts ~$350/mo at the cost of operational burden.
   ECS task role; missing it returns an opaque 403 from OpenSearch
 - Bedrock requires inference-profile IDs (`global.` / `apac.` prefix), not
   bare model IDs
-- Cohere Embed v4 is the embedding default in apse1 because Titan v2 is
+- Cohere Embed Multilingual v3 is the embedding default in apse1 because Titan v2 is
   not GA there; the Python pipeline auto-selects by region
 - Sub-agent task gets `BEDROCK_LLM_MODEL_ID` injected from
   `nanoclaw/app-config:llm_subagent_model_id` at task launch via

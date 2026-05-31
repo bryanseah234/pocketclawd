@@ -6,11 +6,11 @@ Clawd is a WhatsApp-native AI assistant deployed on AWS (`ap-southeast-1`). The 
 
 - **Region:** `ap-southeast-1` (Singapore — PDPA data residency)
 - **Account:** `709609992277`
-- **Compute:** EC2 `t3.xlarge` (orchestrator + Baileys + admin) + ECS Fargate (sub-agent)
+- **Compute:** EC2 `r6i.4xlarge` (orchestrator + Baileys + admin) + ECS Fargate (sub-agent)
 - **LLM:** AWS Bedrock — Claude Sonnet 4.5 (sub-agent), Claude Haiku 4.5 (orchestrator fallback)
-- **Embeddings:** AWS Bedrock — Cohere Embed v4 (1536-dim, region-resolved)
+- **Embeddings:** AWS Bedrock — Cohere Embed Multilingual v3 (1024-dim, region-resolved)
 - **Vector store:** OpenSearch Serverless `nanoclaw-documents`
-- **State:** DynamoDB (4 tables) + S3 `nanoclaw-data-709609992277` + Redis `nanoclaw-redis-ec2vpc`
+- **State:** DynamoDB (4 tables) + S3 `nanoclaw-data-709609992277` + Redis `nanoclaw-redis-rg`
 - **Config:** AWS Secrets Manager — `nanoclaw/app-config`, `nanoclaw/google-secrets`
 - **Admin:** http://3.0.132.150:3000/admin (HTTP Basic auth)
 

@@ -335,7 +335,7 @@ Architecture follows Vivian Balakrishnan's capture-layer + curation-layer patter
 ## Clawd Quick Reference
 
 - **Agent identity**: `groups/clawd/CLAUDE.md` (Clawd directives)
-- **Active branch convention**: `feature/clawd-build` (per `CONTRIBUTING.md`)
+- **Active branch convention**: `feature/nanoclaw-aws-deployment` (per `CONTRIBUTING.md`)
 - **Plan**: `.omo/plans/clawd.md` (T0-T19 + F1-F4 final review)
 - **Knowledge re-arch plan**: `.omo/plans/clawd-knowledge-rearch.md`
 - **Notepad**: `.omo/notepads/clawd/` (learnings, blockers)

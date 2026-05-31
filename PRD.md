@@ -5,7 +5,7 @@
 **Date:** 2026-05-24
 **Status:** Active (v2.0 — R0-R7 complete)
 **Replaces:** PRD v3.0 (deleted at R7; content preserved in git history at commit `c76d488` and recoverable via `git show c76d488:PRD.v1.archived.md`)
-**Branch of record:** `feature/clawd-build`
+**Branch of record:** `feature/nanoclaw-aws-deployment`
 **Single user:** Bryan Tan
 
 ---
@@ -14,15 +14,15 @@
 
 ## Deployment status (refreshed 2026-05-29)
 
-This PRD documents the **Clawd single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). That vision still holds for **local development**, but the product has additionally been **deployed to AWS in `ap-southeast-1`** as a multi-user NanoClaw variant with Bedrock as the LLM. The two surfaces deliberately co-exist:
+> **HISTORICAL DOCUMENT.** This PRD documents the original **Clawd single-user, host-resident vision** (Bryan-on-Windows, Claude Code subscription, pgvector). **That local surface has since been removed from the codebase** (Postgres/pgvector local build deleted, commit 8eb072f). The shipping product is the multi-user AWS deployment in `ap-southeast-1` with Bedrock — see `docs/AWS-DEPLOYMENT.md`. This PRD is retained for historical/product-rationale reference; the surfaces do **not** co-exist.
 
 | Surface | Source of truth | Provider |
 |---|---|---|
-| AWS multi-user cloud (LIVE) | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `docs/architecture.md`, `src/cloud/` | AWS Bedrock — Sonnet 4.5 / Haiku 4.5 / Cohere Embed v4 |
+| AWS multi-user cloud (LIVE) | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md`, `docs/architecture.md`, `src/cloud/` | AWS Bedrock — Claude Sonnet 4.5 (both roles) / cohere.embed-multilingual-v3 (1024-dim) |
 | Local single-user host (this PRD) | `PRD.md`, `docs/CLAWD.md` | Claude Code subscription |
 | Azure variant (future option) | `nanoclaw-prd.html` | Azure OpenAI gpt-4o |
 
-The cloud build runs on EC2 t3.xlarge + ECS Fargate, with Cohere Embed v4 as the embedding model (Titan v2 is not GA in `ap-southeast-1`). When this PRD says *"no Bedrock, no AWS env vars"*, it is describing the **host-mode invariant** — not a global policy. The cloud surface is governed by the Kiro AWS spec and uses Bedrock by design.
+The cloud build runs on EC2 r6i.4xlarge + ECS Fargate (2 tasks), with cohere.embed-multilingual-v3 (1024-dim) as the embedding model (Titan is not available in `ap-southeast-1`). When this PRD says *"no Bedrock, no AWS env vars"*, it is describing the **host-mode invariant** — not a global policy. The cloud surface is governed by the Kiro AWS spec and uses Bedrock by design.
 
 **For the live deployment, start with [README.md](README.md) and [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md), not this PRD.**
 

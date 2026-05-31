@@ -13,7 +13,7 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
                     ┌──────────────────────────────────────────────────────────┐
                     │  AWS — ap-southeast-1                                    │
                     │                                                          │
-  WhatsApp Users ──▶│  EC2 t3.xlarge (i-0f9cd20350cfdc1a6)                    │
+  WhatsApp Users ──▶│  EC2 r6i.4xlarge (i-0f9cd20350cfdc1a6)                    │
                     │  ┌────────────────────────────────────────────────────┐ │
                     │  │  Orchestrator container  (Node.js 22, port 3000)   │ │
                     │  │                                                    │ │
@@ -28,11 +28,11 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
                     │  │  └─────────────────┬──────────────────────────┘  │ │
                     │  └────────────────────┼─────────────────────────────┘ │
                     │                       │                               │
-                    │                       │  queue:agent:shared:inbound   │
+                    │                       │  queue:agent:dispatch   │
                     │                       ▼                               │
                     │  ┌──────────────────────────────────────────────────┐ │
                     │  │  ECS Fargate — nanoclaw-cluster                  │ │
-                    │  │  service: nanoclaw-sub-agent (1 task, 1024/2048)│ │
+                    │  │  service: nanoclaw-sub-agent (2 tasks, 1024/2048)│ │
                     │  │  ┌────────────────────────────────────────────┐  │ │
                     │  │  │  Sub-agent (Python 3.11, FastAPI)          │  │ │
                     │  │  │  • RAG pipeline (embed → search → answer)  │  │ │
@@ -44,7 +44,7 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
                     │  ┌──────────────────────────────────────────────────┐ │
                     │  │  Managed services                                │ │
                     │  │                                                  │ │
-                    │  │  ElastiCache Redis  nanoclaw-redis-ec2vpc        │ │
+                    │  │  ElastiCache Redis  nanoclaw-redis-rg        │ │
                     │  │     queues, rate-limit windows, session presence │ │
                     │  │                                                  │ │
                     │  │  OpenSearch Serverless  nanoclaw-documents       │ │
@@ -61,8 +61,8 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
                     │  │                                                  │ │
                     │  │  Bedrock                                         │ │
                     │  │     global.anthropic.claude-sonnet-4-5  (agent)  │ │
-                    │  │     global.anthropic.claude-haiku-4-5   (fallback)│ │
-                    │  │     global.cohere.embed-v4              (1536-d) │ │
+                    │  │     global.anthropic.claude-sonnet-4-5   (both roles)│ │
+                    │  │     global.cohere.embed-multilingual-v3              (1024-d) │ │
                     │  │                                                  │ │
                     │  │  Secrets Manager                                 │ │
                     │  │     nanoclaw/app-config                          │ │
@@ -81,11 +81,11 @@ Clawd is a multi-user WhatsApp AI assistant deployed on AWS. End users chat with
 ```
 1.  User sends WhatsApp message
 2.  Baileys adapter (in orchestrator) receives → router resolves the user
-3.  Router enqueues to Redis (queue:agent:shared:inbound) with user metadata
+3.  Router enqueues to Redis (queue:agent:dispatch) with user metadata
 4.  ECS sub-agent BRPOPs the queue
 5.  Sub-agent processes:
     a.  Load last 30 messages from DynamoDB  (nanoclaw-chat-messages)
-    b.  If RAG triggered: embed query (Cohere v4) → hybrid search OpenSearch (top 3)
+    b.  If RAG triggered: embed query (Cohere Multilingual v3) → hybrid search OpenSearch (top 3)
     c.  Call Bedrock with persona + history + context + user message
         Default model: global.anthropic.claude-sonnet-4-5-20250929-v1:0
     d.  Persist response into DynamoDB
@@ -113,7 +113,7 @@ include them.
     a.  Download file from S3 staging/
     b.  Extract text (PyPDF2 / python-docx / pptx-parser / OCR fallback)
     c.  Chunk: 512 tokens, 50 overlap, RecursiveCharacterTextSplitter
-    d.  Embed chunks: Cohere Embed v4, output_dimension=1536, batch=50
+    d.  Embed chunks: Cohere Embed Multilingual v3, output_dimension=1024, batch=50
     e.  Index into OpenSearch with mandatory userId field
     f.  Move file from staging/ to users/{userId}/documents/
 7.  Sub-agent emits a completion response → user notified via WhatsApp
@@ -129,7 +129,7 @@ explicitly reject CORPORATE to prevent any user from wiping shared corpus.
 
 ```
 1.  User asks a question that the persona classifies as RAG-relevant
-2.  Sub-agent embeds the query with Cohere Embed v4 (1536-dim)
+2.  Sub-agent embeds the query with Cohere Embed Multilingual v3 (1024-dim)
 3.  Hybrid search on OpenSearch:
        70% kNN cosinesimil  +  30% BM25
        MUST clause: { term: { userId } }   ← isolation invariant
@@ -173,14 +173,14 @@ Entry: `src/index.ts`. Lives in a Docker container on EC2 with `--user root`
 ### Sub-agent (Python 3.11 / FastAPI)
 
 Entry: `container/sub-agent/src/main.py`. Runs on **ECS Fargate**
-(`nanoclaw-cluster/nanoclaw-sub-agent`, 1 vCPU / 2 GB / 1 task). Components:
+(`nanoclaw-cluster/nanoclaw-sub-agent`, 1 vCPU / 2 GB / 2 tasks). Components:
 
-- **Queue poll loop** — BRPOPs `queue:agent:shared:inbound`, dispatches by `kind`.
+- **Queue poll loop** — BRPOPs `queue:agent:dispatch`, dispatches by `kind`.
 - **Bedrock client** — `container/sub-agent/src/llm/bedrock.py`. Honours
   `BEDROCK_LLM_MODEL_ID` env (precedence: env > caller arg > `DEFAULT_MODEL_ID`).
 - **Embedding pipeline** — `container/sub-agent/src/embeddings/pipeline.py`.
-  Region-aware selector: in `ap-southeast-1` Cohere v4 is selected because Titan
-  Embed v2 is not GA in this region. Output dimension forced to 1536 for
+  Region-aware selector: in `ap-southeast-1` Cohere Multilingual v3 is selected because Titan
+  Embed v2 is not GA in this region. Output dimension forced to 1024 for
   OpenSearch index parity.
 - **RAG pipeline** — `container/sub-agent/src/rag/`. Hybrid search → chunk
   formatting → Bedrock invocation.
@@ -219,12 +219,12 @@ resources:
 | File | Resources |
 |---|---|
 | `vpc.tf` | VPC, subnets, security groups, NAT gateway |
-| `ec2.tf` | EC2 instance (t3.xlarge), IAM role, instance profile, user-data |
+| `ec2.tf` | EC2 instance (r6i.4xlarge), IAM role, instance profile, user-data |
 | `ecr.tf` | `nanoclaw/orchestrator` + `nanoclaw/agent` registries |
 | `s3.tf` | `nanoclaw-data-709609992277` with lifecycle rules |
 | `dynamodb.tf` | 4 tables (chat-messages, user-preferences, webhook-tokens, system-errors) |
 | `opensearch.tf` | Serverless collection `nanoclaw-documents` (VECTORSEARCH) |
-| `redis.tf` | ElastiCache cluster `nanoclaw-redis-ec2vpc` |
+| `redis.tf` | ElastiCache cluster `nanoclaw-redis-rg` |
 | `secrets.tf` | `nanoclaw/app-config` + `nanoclaw/google-secrets` (placeholder) |
 | `cloudwatch.tf` | Log groups, retention, alarms |
 | `ecs.tf` | `nanoclaw-cluster` + `nanoclaw-sub-agent` service + task def |
@@ -248,13 +248,13 @@ USE_SUBAGENT=1
 WHATSAPP_ENABLED=true
 DATA_BUCKET=nanoclaw-data-709609992277
 CLAWD_CRON_DIGEST=true
-CLAWD_CRON_WIKI=true
+CLAWD_CRON_DIGEST=true
 CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets
 ADMIN_USER / ADMIN_PASS    — for /admin Basic Auth
 ```
 
 The ECS sub-agent task gets `AWS_REGION=ap-southeast-1` so the embedding
-pipeline resolves to Cohere v4 automatically. Model overrides come from the
+pipeline resolves to Cohere Multilingual v3 automatically. Model overrides come from the
 secret keys `llm_model_id` (orchestrator path) and `llm_subagent_model_id`
 (sub-agent path).
 
@@ -269,7 +269,7 @@ CI/CD lives in `.github/workflows/`:
     1. Reuse CI quality gates
     2. Build orchestrator (`Dockerfile.orchestrator`) + agent (`container/sub-agent/Dockerfile`)
     3. Push to ECR with tags `<sha>` and `feature-latest`
-    4. SSM the EC2: pull, tag, stop old container, `docker run` new with `--user root`
+    4. SSM the EC2: BLUE/GREEN — pre-pull as `:next`, smoke-test on `:3001`, swap to `:current`, restart orchestrator
     5. `aws ecs update-service ... --force-new-deployment` rolls the sub-agent
     6. Health-check the public `/health` endpoint
 - `deploy.yml` — production rail (main branch). Same shape, plus 10-min health

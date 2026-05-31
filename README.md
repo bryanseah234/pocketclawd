@@ -14,12 +14,12 @@
 
 Clawd is a personal chief of staff that lives inside WhatsApp. Send it a message, photo, document, or voice note — it remembers, summarises, retrieves, and gets back to you with answers grounded in **your** knowledge, not the public internet.
 
-This repository ships **two coexisting product surfaces** that share most of the codebase:
+This repository ships **one live product surface** (Clawd Cloud on AWS). Two earlier surfaces are retained only as historical/future reference:
 
 | Surface | Primary user | Source of truth | Provider |
 |---|---|---|---|
-| **Clawd Cloud** (this README) | Multi-tenant AWS deployment, WhatsApp-native | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md` | AWS Bedrock (Claude Sonnet 4.5 / Haiku 4.5 / Cohere Embed v4) |
-| Clawd Local (legacy) | Single-user developer build, Postgres + pgvector | `PRD.md`, `docs/CLAWD.md` | Claude Code subscription |
+| **Clawd Cloud** (this README) | Multi-tenant AWS deployment, WhatsApp-native | `.kiro/specs/nanoclaw-aws-deployment/`, `docs/AWS-DEPLOYMENT.md` | AWS Bedrock (Claude Sonnet 4.5 / Haiku 4.5 / Cohere Embed Multilingual v3) |
+| Clawd Local (REMOVED) | Single-user Postgres+pgvector build — **deleted from the codebase** (commit 8eb072f); `PRD.md` kept as history only | `PRD.md` | — |
 | Azure variant | Future option, not deployed | `nanoclaw-prd.html` | Azure OpenAI gpt-4o |
 
 Underneath both surfaces is **NanoClaw v2** — an open-source agent harness that handles message routing, per-session container lifecycle, channel adapters, and skills. See [docs/v1-to-v2-changes.md](docs/v1-to-v2-changes.md) for the harness vocabulary; this README covers the Clawd-on-AWS product.
@@ -43,7 +43,7 @@ The admin dashboard is HTTP Basic-auth protected; the credentials live in your H
 
 ## Architecture (one paragraph)
 
-A single **EC2 t3.xlarge** in `ap-southeast-1` runs the **Node.js orchestrator** as a Docker container. The orchestrator handles WhatsApp pairing (Baileys), the admin UI, message routing, the data gateway, schedulers (digest 07:00 SGT, wiki regen 03:00 SGT), and queue dispatch. Heavy AI work — RAG embedding, document ingestion, agent reasoning — runs in a separate **Python 3.11 sub-agent** on **ECS Fargate** (1 vCPU / 2 GB), which BRPOPs from a Redis queue. State is split across **DynamoDB** (chat history, user prefs, webhook tokens, error sink), **OpenSearch Serverless** (RAG vector search), **S3** (`nanoclaw-data-709609992277` for documents, drafts, WhatsApp session), **ElastiCache Redis** (`nanoclaw-redis-ec2vpc`, message bus), **Secrets Manager** (`nanoclaw/app-config` for runtime config, `nanoclaw/google-secrets` for Google ingestion), and **CloudWatch** for logs and metrics. Images are built and pushed to **ECR** by GitHub Actions (`deploy-feature.yml`) and shipped to EC2 via SSM.
+A single **EC2 r6i.4xlarge** in `ap-southeast-1` runs the **Node.js orchestrator** as a Docker container. The orchestrator handles WhatsApp pairing (Baileys), the admin UI, message routing, the data gateway, schedulers (digest 07:00 SGT, wiki regen 03:00 SGT), and queue dispatch. Heavy AI work — RAG embedding, document ingestion, agent reasoning — runs in a separate **Python 3.11 sub-agent** on **ECS Fargate** (1 vCPU / 2 GB), which BRPOPs from a Redis queue. State is split across **DynamoDB** (chat history, user prefs, webhook tokens, error sink), **OpenSearch Serverless** (RAG vector search), **S3** (`nanoclaw-data-709609992277` for documents, drafts, WhatsApp session), **ElastiCache Redis** (`nanoclaw-redis-rg`, message bus), **Secrets Manager** (`nanoclaw/app-config` for runtime config, `nanoclaw/google-secrets` for Google ingestion), and **CloudWatch** for logs and metrics. Images are built and pushed to **ECR** by GitHub Actions (`deploy-feature.yml`) and shipped to EC2 via SSM.
 
 For the long version see [docs/architecture.md](docs/architecture.md). For deploy procedure see [docs/AWS-DEPLOYMENT.md](docs/AWS-DEPLOYMENT.md). For live resource identifiers see [docs/aws-resource-inventory.md](docs/aws-resource-inventory.md).
 
@@ -54,7 +54,7 @@ WhatsApp / Telegram
   ┌─────────────────────────────────────────────────┐
   │  AWS — ap-southeast-1                           │
   │                                                 │
-  │  EC2 t3.xlarge ─── Orchestrator (Node.js)       │
+  │  EC2 r6i.4xlarge ─── Orchestrator (Node.js)       │
   │     │              + Admin UI + Baileys         │
   │     │              + Data Gateway              │
   │     ▼                                          │
@@ -65,7 +65,7 @@ WhatsApp / Telegram
   │                  + RAG + ingestion         │   │
   │                                            │   │
   │  Bedrock ◀── Claude Sonnet 4.5 / Haiku 4.5 │   │
-  │              Cohere Embed v4 (1536-dim)    │   │
+  │              Cohere Embed Multilingual v3 (1024-dim)    │   │
   │                                            │   │
   │  DynamoDB · OpenSearch · S3 · Secrets · CW │   │
   └─────────────────────────────────────────────┘
@@ -82,7 +82,7 @@ WhatsApp / Telegram
 
 ### Document handling
 - Upload via WhatsApp attachment **or** via the admin dashboard.
-- Pipeline: S3 staging → Data Gateway worker → text extraction (PyPDF2, python-docx, pptx parser, OCR fallback) → 512-token chunks with 50-token overlap → Cohere v4 embeddings (1536-dim) → OpenSearch indexing with mandatory userId filter → file moved to `users/{userId}/documents/`.
+- Pipeline: S3 staging → Data Gateway worker → text extraction (PyPDF2, python-docx, pptx parser, OCR fallback) → 512-token chunks with 50-token overlap → Cohere Multilingual v3 embeddings (1024-dim) → OpenSearch indexing with mandatory userId filter → file moved to `users/{userId}/documents/`.
 - Per-user data isolation: every read enforces userId, every cross-user access is impossible by construction.
 - Corporate-document mode: a special `CORPORATE` sentinel allows shared documents that any user can search but no user can delete.
 
@@ -141,7 +141,7 @@ src/
 container/sub-agent/                  Python 3.11 FastAPI sub-agent (ECS Fargate)
 ├── src/
 │   ├── commands.py                   /list, /delete, /forget, /draft, /ingested, etc.
-│   ├── embeddings/pipeline.py        Region-aware Cohere v4 / Titan v2 selector
+│   ├── embeddings/pipeline.py        Region-aware Cohere Multilingual v3 / Titan v2 selector
 │   ├── llm/                          Bedrock client + Claude wrapper
 │   ├── rag/                          Hybrid search over OpenSearch
 │   ├── consent.py                    PDPA consent flow
@@ -169,7 +169,7 @@ nanoclaw-prd.html                     Original Azure-flavoured PRD (kept as cros
 - Node.js 22 LTS (`nvm install 22`) — Node 26 will fail `better-sqlite3` builds
 - pnpm 10+ (`npm install -g pnpm`)
 - Python 3.11 (sub-agent dev only)
-- Docker Desktop (image builds + `docker compose up -d postgres` for legacy local mode)
+- Docker Desktop (image builds)
 - AWS CLI v2 + access to account `709609992277`, region `ap-southeast-1`
 - Terraform ≥ 1.5 (only for infra changes)
 

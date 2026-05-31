@@ -35,7 +35,7 @@ Three things are called Clawd:
 | `src/modules/wiki-generator.ts` | Clawd | Karpathy-style LLM wiki for Obsidian |
 | `src/modules/clawd.ts` | Clawd | Cron driver — registers digest / wiki / ingest schedules at import |
 | `container/sub-agent/src/commands.py` | Clawd | Slash command handlers |
-| `container/sub-agent/src/embeddings/pipeline.py` | Clawd | Region-aware Cohere v4 / Titan v2 selector |
+| `container/sub-agent/src/embeddings/pipeline.py` | Clawd | Region-aware Cohere Multilingual v3 / Titan v2 selector |
 | `container/sub-agent/src/draft_artifacts.py` | Clawd | .docx / .pptx generators |
 | `container/sub-agent/src/consent.py` | Clawd | PDPA consent + DSAR + right-to-erasure |
 | `src/channels/whatsapp.ts` | NanoClaw skill (`/add-whatsapp`) | Baileys adapter |
@@ -115,7 +115,7 @@ The orchestrator picks up the new value within 5 minutes (cache TTL). Restart fo
 │   src/cloud/admin-dashboard/  /admin Express routes                    │
 └────────────────────────────────────────────────────────────────────────┘
                                       │
-                                queue:agent:shared:inbound (Redis)
+                                queue:agent:dispatch (Redis)
                                       │
                                       ▼
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -124,7 +124,7 @@ The orchestrator picks up the new value within 5 minutes (cache TTL). Restart fo
 │   container/sub-agent/src/main.py         poll loop                    │
 │   container/sub-agent/src/commands.py     /list /delete /draft etc.    │
 │   container/sub-agent/src/llm/bedrock.py  Claude Sonnet 4.5 invoke     │
-│   container/sub-agent/src/embeddings/     Cohere v4 / Titan v2 select  │
+│   container/sub-agent/src/embeddings/     Cohere Multilingual v3 / Titan v2 select  │
 │   container/sub-agent/src/rag/            hybrid OpenSearch retrieval  │
 │   container/sub-agent/src/consent.py      PDPA flow                    │
 │   container/sub-agent/src/draft_artifacts.py  .docx / .pptx renderers  │
@@ -191,7 +191,7 @@ The default model is Bedrock-resident; an Ollama-via-LLaVA path exists in
 
 ## Background schedulers
 
-`src/modules/clawd.ts` registers three crons at import time. They self-register
+`src/modules/clawd.ts` registers two crons at import time (the morning digest is wired through Bedrock Sonnet 4.5 in `src/modules/clawd-wiring.ts`). They self-register
 because the orchestrator's `--restart unless-stopped` Docker policy means
 imports always run on boot. Times are evaluated in
 `Asia/Singapore`:
@@ -199,14 +199,13 @@ imports always run on boot. Times are evaluated in
 | Time | Cron | What it does |
 |---|---|---|
 | 02:00 | cloud ingestion | Sweep linked Google / Microsoft / Apple sources |
-| 03:00 | wiki regen | Rebuild the Obsidian wiki from the user's KB |
 | 07:00 | morning digest | Send the day's digest to opted-in users |
 
 Each cron is fault-isolated — a Google failure must not block the Microsoft
 sweep, etc. Failures log to `nanoclaw-system-errors`.
 
 The crons honour two env vars on the orchestrator: `CLAWD_CRON_DIGEST=true`
-and `CLAWD_CRON_WIKI=true`. Cloud ingestion is gated by the per-user OAuth
+and `CLAWD_CRON_DIGEST=true`. Cloud ingestion is gated by the per-user OAuth
 state in `nanoclaw-user-preferences`.
 
 ---

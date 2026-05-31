@@ -53,7 +53,7 @@ Persona is hot-swappable in Secrets Manager.
 ### F3 — Document upload + RAG
 Users can upload PDF, DOCX, PPTX, TXT, MD, JPG, PNG via WhatsApp attachment or
 the admin dashboard. The system extracts text (OCR fallback for scanned PDFs),
-chunks, embeds via Cohere v4, indexes into OpenSearch, and answers later
+chunks, embeds via Cohere Multilingual v3, indexes into OpenSearch, and answers later
 questions using hybrid (vector + BM25) retrieval. Mandatory `userId` filter
 on every search.
 
@@ -100,7 +100,7 @@ success/failure to CloudWatch. Retained one year.
 - Auto-rollback on production deploys after 10-minute health window.
 
 ### Scalability
-- Vertical scaling path: t3.xlarge → r6i.xlarge → r6i.4xlarge → r6i.8xlarge.
+- Vertical scaling path: r6i.4xlarge → r6i.xlarge → r6i.4xlarge → r6i.8xlarge.
 - Sub-agent horizontally scalable via ECS `desiredCount` once load justifies.
 - DynamoDB on-demand (no provisioned-capacity tuning required at low scale).
 - OpenSearch Serverless minimum 2 OCUs; can swap to self-managed on EC2 to
@@ -118,16 +118,16 @@ success/failure to CloudWatch. Retained one year.
 
 ### Performance
 - Sub-agent task: 1 vCPU / 2 GB on Fargate. Adequate at low concurrency.
-- Redis: cache.t3.micro. Adequate; bump to r6g.large if connection count
+- Redis: cache.r6g.large. Adequate; bump to r6g.large if connection count
   exceeds 1000 sustained.
 - DynamoDB: on-demand, no throttling expected at < 1000 req/s.
 
 ### Cost (starter)
 | Service | ~Monthly |
 |---|---|
-| EC2 t3.xlarge | ~$120 |
+| EC2 r6i.4xlarge | ~$120 |
 | ECS Fargate (1 task, 1 vCPU / 2 GB) | ~$30 |
-| ElastiCache cache.t3.micro | ~$12 |
+| ElastiCache cache.r6g.large | ~$12 |
 | DynamoDB (on-demand, low traffic) | ~$5 |
 | OpenSearch Serverless (2 OCU min) | ~$350 |
 | S3 (< 10 GB) | ~$1 |
@@ -170,9 +170,9 @@ layer (DataGateway invariants) rather than at the **process** layer. This
 trades a small attack-surface increase (a sub-agent crash affects everyone
 queued behind it) for a 10x cost reduction and simpler orchestration.
 
-### Cohere Embed v4 (vs Titan v2)
-Titan Embed v2 is not GA in `ap-southeast-1`. Cohere Embed v4 is, returns
-1536-dim vectors (matching the legacy Titan index), and is forwarded through
+### Cohere Embed Multilingual v3 (vs Titan v2)
+Titan Embed v2 is not GA in `ap-southeast-1`. Cohere Embed Multilingual v3 is, returns
+1024-dim vectors (matching the legacy Titan index), and is forwarded through
 Bedrock with the same auth path. The pipeline picks the right model based on
 the resolved AWS region.
 
