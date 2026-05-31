@@ -384,7 +384,7 @@ All runtime config (model id, table names, endpoints, limits) is read from `nano
 - The original NanoClaw v2 Claude Code subscription path is still functional for local-host runs but is no longer the deployed surface.
 - An **Azure** variant of the same architecture (Cosmos DB, AI Search, gpt-4o, Blob Storage) is documented in `nanoclaw-prd.html` as a future build option — kept intentionally as a parallel reference, not the active target.
 
-The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provider` / `SKIP | no-handler`; re-wiring them through the AWS Bedrock agent container is a follow-on project.
+The morning-digest cron (07:00) is fully wired through Bedrock (Sonnet 4.5) in `src/modules/clawd-wiring.ts` and enabled in prod via `CLAWD_CRON_DIGEST=true`. It scans `nanoclaw-user-preferences` for users with `consentGiven && dailyDigestEnabled`, generates a 3-bullet 24h digest per user, and delivers via the WhatsApp adapter. With 0 opted-in users it correctly no-ops (`users=0`). The former wiki-regen cron was removed with local mode (it depended on the deleted local pgvector WikiGenerator).
 
 ### Skills installed for Clawd
 
@@ -407,8 +407,7 @@ The host-side wiki-regen and morning-digest crons currently log `SKIP | no-provi
 ### Cron jobs
 
 - 02:00 local — cloud ingestion (Google / Microsoft / Apple)
-- 03:00 local — wiki regeneration from the knowledge base (currently SKIP | no-provider)
-- 07:00 local — morning digest (currently SKIP | no-handler)
+- 07:00 local — morning digest via Bedrock Sonnet 4.5 (enabled: CLAWD_CRON_DIGEST=true; no-ops while 0 users opted in)
 
 ### Repo conventions (must follow)
 
