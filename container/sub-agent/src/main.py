@@ -790,7 +790,7 @@ async def poll_queue() -> None:
                 envelope_user = data.get("userId", "")
                 platform_id = payload_dict.get("platformId", "")
                 # Fallback: if userId is missing/empty, derive from platformId
-                if envelope_user and envelope_user not in ("", "shared", "anon"):
+                if envelope_user and envelope_user not in ("", "shared", "anon", "dispatch"):
                     real_user = envelope_user
                 elif platform_id:
                     real_user = str(platform_id).split("@")[0]

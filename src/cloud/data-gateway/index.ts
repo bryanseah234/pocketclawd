@@ -786,6 +786,16 @@ export class DataGateway implements IDataGateway {
 
         });
 
+        // Ensure sourceUrl is keyword-mapped (idempotent). Required for /forget-url.
+        try {
+            await this.openSearchClient.indices.putMapping({
+                index: indexName,
+                body: { properties: { sourceUrl: { type: 'keyword' } } },
+            });
+        } catch {
+            // Non-critical: field may already exist
+        }
+
     }
 
 
