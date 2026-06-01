@@ -58,6 +58,9 @@ export class WhatsAppSessionBackup {
         }));
         uploaded.push(relPath);
       } catch (e) {
+        // Skip files that vanished between listing and reading (Signal pre-key rotation
+        // deletes consumed pre-keys mid-backup — this is expected behaviour, not an error).
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
         errors.push(`${relPath}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }

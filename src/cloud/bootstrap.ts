@@ -327,21 +327,9 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         log.error('Cloud bootstrap: container manager failed (non-critical)', { err });
     }
 
-    // Initialize container manager (per-user Docker containers)
-    try {
-        const { CloudContainerManager } = await import('./container-manager/index.js');
-        const containerManager = new CloudContainerManager({
-            region: 'ap-southeast-1',
-            ecrRegistryUri: config.ecr?.registryUrl ?? '',
-            agentImageRepo: 'nanoclaw/agent',
-            imageTag: 'latest',
-        });
-        await containerManager.initialize();
-        (globalThis as any).__nanoclaw_container_manager = containerManager;
-        log.info('Cloud bootstrap: container manager initialized');
-    } catch (err) {
-        log.error('Cloud bootstrap: container manager failed (non-critical)', { err });
-    }
+    // Note: CloudContainerManager (per-user Docker) is intentionally not initialised here.
+    // In cloud mode, ECS manages sub-agent task lifecycle directly.
+    // The orchestrator on EC2 does not spawn Docker containers — that path is local-mode only.
 
     return _services;
 }

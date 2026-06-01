@@ -353,6 +353,10 @@ class EmbeddingPipeline:
             body_c: dict[str, object] = {
                 "texts": [safe_text],
                 "input_type": input_t,
+                # Pin output_dimension to match the OpenSearch knn_vector index
+                # (created at 1024 dims). Cohere v4 default is 1536; without this
+                # every hybridSearch fails with "invalid dimension: 1024 should be 1536".
+                "output_dimension": VECTOR_DIMENSION,  # 1024
             }
             return body_c
         # Default to Titan Embeddings v2 schema.
