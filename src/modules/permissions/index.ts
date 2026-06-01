@@ -90,7 +90,11 @@ function extractAndUpsertUser(event: InboundEvent): string | null {
   const rawHandle = senderIdField ?? senderField ?? authorUserId;
   if (!rawHandle) return null;
 
-  const userId = rawHandle.includes(':') ? rawHandle : `${event.channelType}:${rawHandle}`;
+  // Normalise channel type to a short prefix for userId keys.
+  // wa: = WhatsApp, tg: = Telegram, all others use the full channelType.
+  const CHANNEL_PREFIX: Record<string, string> = { whatsapp: 'wa', telegram: 'tg' };
+  const prefix = CHANNEL_PREFIX[event.channelType] ?? event.channelType;
+  const userId = rawHandle.includes(':') ? rawHandle : `${prefix}:${rawHandle}`;
   if (!getUser(userId)) {
     upsertUser({
       id: userId,

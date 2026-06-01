@@ -282,9 +282,9 @@ async function main(): Promise<void> {
   // group is wired. Group messages are NOT handled here (Clawd is DM-only).
   if (process.env.DATA_BUCKET) {
     setChannelRequestGate(async (mg, event) => {
-      if (event.channelType !== 'whatsapp') return;
+      if (event.channelType !== 'whatsapp' && event.channelType !== 'telegram') return;
       if (event.message.isGroup) return;
-      const adapter = getChannelAdapter('whatsapp');
+      const adapter = getChannelAdapter(event.channelType);
       if (!adapter) {
         log.warn('Cloud responder skipped — WhatsApp adapter not ready', { mgId: mg.id });
         return;
@@ -560,6 +560,16 @@ async function main(): Promise<void> {
         (wa.onClose as (cb: () => void) => void)(() => { bridge.setWhatsAppDisconnected(); });
       }
       log.info('WhatsApp adapter hooked into admin dashboard bridge');
+    }
+  }
+
+  // 8b. Start Telegram adapter if enabled.
+  if (isCloudMode() && process.env.TELEGRAM_ENABLED === 'true') {
+    const tgAdapter = getChannelAdapter('telegram');
+    if (tgAdapter) {
+      log.info('Telegram adapter registered and enabled');
+    } else {
+      log.warn('TELEGRAM_ENABLED=true but telegram adapter not found');
     }
   }
 

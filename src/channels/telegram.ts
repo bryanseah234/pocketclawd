@@ -1,261 +1,203 @@
 /**
- * Telegram channel adapter (v2) — uses Chat SDK bridge, with a pairing
- * interceptor wrapped around onInbound to verify chat ownership before
- * registration. See telegram-pairing.ts for the why.
+ * Telegram channel adapter — long-poll bot.
+ *
+ * Enabled via TELEGRAM_ENABLED=true + TELEGRAM_BOT_TOKEN=<token>.
+ * Long-poll (getUpdates offset-based) is used; webhook support can be added
+ * later once Caddy/HTTPS (C9) is in place.
+ *
+ * channelType: 'telegram'
+ * platformId:  Telegram chat_id (string)
+ * userId:      'tg:<telegram_user_id>' (set by sender-resolver prefix map)
+ * threadId:    null (Telegram DMs are flat; group thread_id not yet used)
  */
-import { createTelegramAdapter } from '@chat-adapter/telegram';
 
-import { readEnvFile } from '../env.js';
-import { log } from '../log.js';
-import { createMessagingGroup, getMessagingGroupByPlatform, updateMessagingGroup } from '../db/messaging-groups.js';
-import { grantRole, hasAnyOwner } from '../modules/permissions/db/user-roles.js';
-import { upsertUser } from '../modules/permissions/db/users.js';
-import { createChatSdkBridge, type ReplyContext } from './chat-sdk-bridge.js';
-import { sanitizeTelegramLegacyMarkdown } from './telegram-markdown-sanitize.js';
 import { registerChannelAdapter } from './channel-registry.js';
-import type { ChannelAdapter, ChannelSetup, InboundMessage } from './adapter.js';
-import { tryConsume } from './telegram-pairing.js';
+import { log } from '../log.js';
+import type { ChannelAdapter, ChannelSetup, InboundMessage, OutboundMessage } from './adapter.js';
 
-/**
- * Retry a one-shot operation that can fail on transient network errors at
- * cold-start (DNS hiccups, brief upstream outages). Exponential backoff capped
- * at 5 attempts — if the network is truly down we surface it instead of
- * hanging the service indefinitely.
- */
-async function withRetry<T>(fn: () => Promise<T>, label: string, maxAttempts = 5): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (attempt === maxAttempts) break;
-      const delay = Math.min(16000, 1000 * 2 ** (attempt - 1));
-      log.warn('Telegram setup failed, retrying', { label, attempt, delayMs: delay, err });
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
-  throw lastErr;
-}
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? '';
+const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const POLL_TIMEOUT = 30; // long-poll seconds per getUpdates call
+const MAX_CONNECTIONS = 1; // single poller
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractReplyContext(raw: Record<string, any>): ReplyContext | null {
-  if (!raw.reply_to_message) return null;
-  const reply = raw.reply_to_message;
-  return {
-    text: reply.text || reply.caption || '',
-    sender: reply.from?.first_name || reply.from?.username || 'Unknown',
-  };
-}
+// ── Telegram API helpers ──────────────────────────────────────────────────────
 
-/**
- * Telegram API fetch with a 10s timeout. Bare \`fetch\` has no default
- * timeout in Node, so a hung TLS connection or network blackhole would stall
- * the inbound polling loop / pairing flow indefinitely.
- */
-async function tgFetch(url: string, init?: RequestInit, timeoutMs = 10_000): Promise<Response> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...(init ?? {}), signal: ctl.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** Look up the bot username via Telegram getMe. Cached after first call. */
-async function fetchBotUsername(token: string): Promise<string | null> {
-  try {
-    const res = await tgFetch(`https://api.telegram.org/bot${token}/getMe`);
-    const json = (await res.json()) as { ok: boolean; result?: { username?: string } };
-    return json.ok ? (json.result?.username ?? null) : null;
-  } catch (err) {
-    log.warn('Telegram getMe failed', { err });
-    return null;
-  }
-}
-
-function isGroupPlatformId(platformId: string): boolean {
-  // platformId is "telegram:<chatId>". Negative chat IDs are groups/channels.
-  const id = platformId.split(':').pop() ?? '';
-  return id.startsWith('-');
-}
-
-interface InboundFields {
-  text: string;
-  authorUserId: string | null;
-}
-
-function readInboundFields(message: InboundMessage): InboundFields {
-  if (message.kind !== 'chat-sdk' || !message.content || typeof message.content !== 'object') {
-    return { text: '', authorUserId: null };
-  }
-  const c = message.content as { text?: string; author?: { userId?: string } };
-  return { text: c.text ?? '', authorUserId: c.author?.userId ?? null };
-}
-
-/**
- * Build an onInbound interceptor that consumes pairing codes before they
- * reach the router. On match: records the chat + its paired user, promotes
- * the user to owner if the instance has no owner yet, and short-circuits.
- * On miss: forwards to the host.
- */
-/**
- * Send a one-shot confirmation back to the paired chat. Best-effort — failures
- * are logged but never propagated, so a Telegram outage can't undo a successful
- * pairing or trigger the interceptor's fail-open path.
- */
-async function sendPairingConfirmation(token: string, platformId: string): Promise<void> {
-  const chatId = platformId.split(':').slice(1).join(':');
-  if (!chatId) return;
-  try {
-    const res = await tgFetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: 'Pairing success! Head back to the NanoClaw installer to finish setup.',
-      }),
+async function tgCall(method: string, body?: Record<string, unknown>): Promise<unknown> {
+    const res = await fetch(`${TELEGRAM_API}/${method}`, {
+        method: body ? 'POST' : 'GET',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
-      log.warn('Telegram pairing confirmation non-OK', { status: res.status });
+        const text = await res.text().catch(() => '');
+        throw new Error(`Telegram ${method} HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
-  } catch (err) {
-    log.warn('Telegram pairing confirmation failed', { err });
-  }
+    const json = (await res.json()) as { ok: boolean; result?: unknown; description?: string };
+    if (!json.ok) throw new Error(`Telegram ${method} error: ${json.description}`);
+    return json.result;
 }
 
-function createPairingInterceptor(
-  botUsernamePromise: Promise<string | null>,
-  hostOnInbound: ChannelSetup['onInbound'],
-  token: string,
-): ChannelSetup['onInbound'] {
-  return async (platformId, threadId, message) => {
-    try {
-      const botUsername = await botUsernamePromise;
-      if (!botUsername) {
-        hostOnInbound(platformId, threadId, message);
-        return;
-      }
-      const { text, authorUserId } = readInboundFields(message);
-      if (!text) {
-        hostOnInbound(platformId, threadId, message);
-        return;
-      }
+// ── Adapter ───────────────────────────────────────────────────────────────────
 
-      const consumed = await tryConsume({
-        text,
-        botUsername,
-        platformId,
-        isGroup: isGroupPlatformId(platformId),
-        adminUserId: authorUserId,
-      });
-      if (!consumed) {
-        hostOnInbound(platformId, threadId, message);
-        return;
-      }
-      // Pairing matched — record the chat and short-circuit so the
-      // code-bearing message never reaches an agent. Privilege is now a
-      // property of the paired user, not the chat: upsert the user, and if
-      // this instance has no owner yet, promote them to owner.
-      const existing = getMessagingGroupByPlatform('telegram', platformId);
-      if (existing) {
-        updateMessagingGroup(existing.id, {
-          is_group: consumed.consumed!.isGroup ? 1 : 0,
-        });
-      } else {
-        createMessagingGroup({
-          id: `mg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          channel_type: 'telegram',
-          platform_id: platformId,
-          name: consumed.consumed!.name,
-          is_group: consumed.consumed!.isGroup ? 1 : 0,
-          unknown_sender_policy: 'strict',
-          created_at: new Date().toISOString(),
-        });
-      }
+let setupConfig: ChannelSetup | null = null;
+let polling = false;
+let nextOffset = 0;
 
-      const pairedUserId = `telegram:${consumed.consumed!.adminUserId}`;
-      upsertUser({
-        id: pairedUserId,
-        kind: 'telegram',
-        display_name: null,
-        created_at: new Date().toISOString(),
-      });
-
-      let promotedToOwner = false;
-      if (!hasAnyOwner()) {
-        grantRole({
-          user_id: pairedUserId,
-          role: 'owner',
-          agent_group_id: null,
-          granted_by: null,
-          granted_at: new Date().toISOString(),
-        });
-        promotedToOwner = true;
-      }
-
-      log.info('Telegram pairing accepted — chat registered', {
-        platformId,
-        pairedUser: pairedUserId,
-        promotedToOwner,
-        intent: consumed.intent,
-      });
-
-      await sendPairingConfirmation(token, platformId);
-    } catch (err) {
-      log.error('Telegram pairing interceptor error', { err });
-      // Fail open: pass through so a pairing bug doesn't break normal traffic.
-      hostOnInbound(platformId, threadId, message);
-    }
-  };
-}
-
-registerChannelAdapter('telegram', {
-  factory: () => {
-    const env = readEnvFile(['TELEGRAM_BOT_TOKEN']);
-    if (!env.TELEGRAM_BOT_TOKEN) return null;
-    const token = env.TELEGRAM_BOT_TOKEN;
-    const telegramAdapter = createTelegramAdapter({
-      botToken: token,
-      mode: 'polling',
-    });
-    const bridge = createChatSdkBridge({
-      adapter: telegramAdapter,
-      concurrency: 'concurrent',
-      extractReplyContext,
-      supportsThreads: false,
-      transformOutboundText: sanitizeTelegramLegacyMarkdown,
-      maxTextLength: 4000,
-    });
-
-    const botUsernamePromise = fetchBotUsername(token);
-
-    const wrapped: ChannelAdapter = {
-      ...bridge,
-      resolveChannelName: async (platformId: string) => {
-        const chatId = platformId.split(':').slice(1).join(':');
-        if (!chatId) return null;
+async function pollLoop(): Promise<void> {
+    log.info('Telegram long-poll loop started');
+    while (polling) {
         try {
-          const res = await tgFetch(`https://api.telegram.org/bot${token}/getChat`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId }),
-          });
-          const data = (await res.json()) as { ok?: boolean; result?: { title?: string } };
-          return data.ok ? (data.result?.title ?? null) : null;
-        } catch {
-          return null;
+            const updates = (await tgCall('getUpdates', {
+                offset: nextOffset,
+                timeout: POLL_TIMEOUT,
+                allowed_updates: ['message'],
+            })) as TgUpdate[];
+
+            for (const upd of updates) {
+                nextOffset = upd.update_id + 1;
+                if (!upd.message) continue;
+                handleUpdate(upd.message).catch((err) =>
+                    log.error('Telegram message handler error', { err, updateId: upd.update_id }),
+                );
+            }
+        } catch (err) {
+            if (!polling) break; // normal teardown
+            log.warn('Telegram getUpdates error, retrying in 5s', { err });
+            await new Promise((r) => setTimeout(r, 5000));
         }
-      },
-      async setup(hostConfig: ChannelSetup) {
-        const intercepted: ChannelSetup = {
-          ...hostConfig,
-          onInbound: createPairingInterceptor(botUsernamePromise, hostConfig.onInbound, token),
-        };
-        return withRetry(() => bridge.setup(intercepted), 'bridge.setup');
-      },
+    }
+    log.info('Telegram long-poll loop stopped');
+}
+
+async function handleUpdate(msg: TgMessage): Promise<void> {
+    if (!setupConfig) return;
+
+    const chatId = String(msg.chat.id);
+    const senderId = String(msg.from?.id ?? msg.chat.id);
+    const senderName = [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ')
+        || msg.from?.username
+        || chatId;
+
+    // Only handle text messages for now; photo/doc can be added later
+    const text = msg.text ?? msg.caption ?? '';
+    if (!text.trim()) return;
+
+    const inbound: InboundMessage = {
+        id: `tg-${msg.message_id}`,
+        kind: 'chat',
+        isMention: msg.chat.type === 'private', // DMs are always "mentions"
+        isGroup: msg.chat.type !== 'private',
+        content: {
+            text,
+            sender: senderId,
+            senderId,
+            senderName,
+            chatId,
+            isGroup: msg.chat.type !== 'private',
+            fromMe: false,
+        },
+        timestamp: new Date(msg.date * 1000).toISOString(),
     };
-    return wrapped;
-  },
+
+    log.info('Inbound Telegram message', { chatId, senderId, textLen: text.length });
+    setupConfig.onInbound(chatId, null, inbound);
+}
+
+async function sendTelegramMessage(chatId: string, text: string): Promise<string | undefined> {
+    try {
+        const result = (await tgCall('sendMessage', {
+            chat_id: chatId,
+            text,
+            parse_mode: 'HTML', // matches WhatsApp bold/italic conventions
+        })) as { message_id: number };
+        return String(result.message_id);
+    } catch (err) {
+        log.error('Telegram sendMessage failed', { chatId, err });
+        return undefined;
+    }
+}
+
+const adapter: ChannelAdapter = {
+    name: 'telegram',
+    channelType: 'telegram',
+    supportsThreads: false,
+
+    async setup(hostConfig: ChannelSetup): Promise<void> {
+        setupConfig = hostConfig;
+
+        if (!BOT_TOKEN) {
+            log.warn('Telegram adapter: TELEGRAM_BOT_TOKEN not set — adapter inactive');
+            return;
+        }
+
+        // Confirm bot identity
+        try {
+            const me = (await tgCall('getMe')) as { username?: string; first_name?: string };
+            log.info('Telegram bot connected', { username: me.username ?? me.first_name });
+        } catch (err) {
+            log.error('Telegram getMe failed — adapter will not start', { err });
+            return;
+        }
+
+        // Drop any pending webhook so long-poll works cleanly
+        await tgCall('deleteWebhook', { drop_pending_updates: false }).catch(() => {/* best-effort */});
+
+        polling = true;
+        void pollLoop();
+        log.info('Telegram adapter initialized');
+    },
+
+    async deliver(platformId: string, _threadId: string | null, message: OutboundMessage): Promise<string | undefined> {
+        const content = message.content as Record<string, unknown>;
+
+        // ask_question → numbered option list (mirrors WhatsApp format)
+        if (content.type === 'ask_question' && content.options) {
+            const options = (content.options as Array<{ label: string; value?: string }>)
+                .map((o, i) => `  /${i + 1} ${o.label}`)
+                .join('\n');
+            const text = `<b>${content.title ?? 'Question'}</b>\n\n${content.question ?? ''}\n\nReply with:\n${options}`;
+            return sendTelegramMessage(platformId, text);
+        }
+
+        // Plain text — WhatsApp *bold* → Telegram <b>bold</b>
+        const raw = typeof content.text === 'string' ? content.text : JSON.stringify(content);
+        const html = raw.replace(/\*(.*?)\*/g, '<b>$1</b>');
+        return sendTelegramMessage(platformId, html);
+    },
+
+    async teardown(): Promise<void> {
+        polling = false;
+        log.info('Telegram adapter torn down');
+    },
+
+    isConnected(): boolean {
+        return polling && BOT_TOKEN.length > 0;
+    },
+};
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface TgUpdate {
+    update_id: number;
+    message?: TgMessage;
+}
+
+interface TgMessage {
+    message_id: number;
+    date: number;
+    text?: string;
+    caption?: string;
+    from?: { id: number; first_name?: string; last_name?: string; username?: string };
+    chat: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel' };
+}
+
+// ── Registration ──────────────────────────────────────────────────────────────
+
+// Adapter is always registered; it self-disables in setup() when
+// TELEGRAM_ENABLED != 'true' or TELEGRAM_BOT_TOKEN is not set.
+registerChannelAdapter('telegram', {
+    factory: async () => {
+        if (process.env.TELEGRAM_ENABLED !== 'true') return null;
+        return adapter;
+    },
 });

@@ -114,14 +114,30 @@ async function buildBriefingMessage(
 }
 
 async function sendToUser(redis: import('ioredis').Redis, userId: string, message: string): Promise<void> {
+    // userId format: 'wa:<phone>' or 'tg:<chatId>'.
+    // Derive channelType + platformId from the prefix.
+    const [prefix, handle] = userId.split(':', 2);
+    let channelType: string;
+    let platformId: string;
+    if (prefix === 'wa') {
+        channelType = 'whatsapp';
+        platformId = `${handle}@s.whatsapp.net`;
+    } else if (prefix === 'tg') {
+        channelType = 'telegram';
+        platformId = handle;
+    } else {
+        // Legacy bare userId (no prefix) — assume WhatsApp
+        channelType = 'whatsapp';
+        platformId = `${userId}@s.whatsapp.net`;
+    }
     const payload = JSON.stringify({
         id: `briefing-${Date.now()}-${userId}`,
         userId,
         type: 'chat',
         payload: {
             content: message,
-            platformId: `${userId}@s.whatsapp.net`,
-            channelType: 'whatsapp',
+            platformId,
+            channelType,
             threadId: null,
         },
         timestamp: new Date().toISOString(),
