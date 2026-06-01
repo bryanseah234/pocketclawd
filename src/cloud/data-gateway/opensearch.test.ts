@@ -396,7 +396,6 @@ describe('DataGateway OpenSearch operations', () => {
                         },
                     },
                 },
-                refresh: true,
             });
         });
 
@@ -415,7 +414,6 @@ describe('DataGateway OpenSearch operations', () => {
                         },
                     },
                 },
-                refresh: true,
             });
         });
 
