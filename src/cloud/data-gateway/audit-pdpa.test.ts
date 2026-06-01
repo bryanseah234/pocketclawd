@@ -8,11 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ChatMessage, UserPreferences } from './types.js';
 
 // Use vi.hoisted so the mock function is available when vi.mock factories run
-const { mockDynamoSend, mockS3Send, mockOpenSearchSearch, mockOpenSearchDeleteByQuery } = vi.hoisted(() => ({
+const { mockDynamoSend, mockS3Send, mockOpenSearchSearch, mockOpenSearchDeleteByQuery, mockOpenSearchBulk } = vi.hoisted(() => ({
     mockDynamoSend: vi.fn(),
     mockS3Send: vi.fn(),
     mockOpenSearchSearch: vi.fn(),
     mockOpenSearchDeleteByQuery: vi.fn(),
+    mockOpenSearchBulk: vi.fn(),
 }));
 
 vi.mock('@aws-sdk/client-dynamodb', () => ({
