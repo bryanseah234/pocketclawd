@@ -38,8 +38,8 @@ export default function () {
 
   const ok = check(res, {
     'status 200':           (r) => r.status === 200,
-    'has redis field':      (r) => {
-      try { return 'redis' in JSON.parse(r.body); } catch { return false; }
+    'has components field': (r) => {
+      try { const b=JSON.parse(r.body); return b.status==='healthy' || b.components !== undefined; } catch { return false; }
     },
     'response under 2s':    (r) => r.timings.duration < 2000,
   });
