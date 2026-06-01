@@ -111,9 +111,11 @@ vi.mock('@opensearch-project/opensearch', () => ({
         index = mockOpenSearchIndex;
         search = mockOpenSearchSearch;
         deleteByQuery = vi.fn().mockResolvedValue({ body: { deleted: 0 } });
+        bulk = vi.fn().mockResolvedValue({ body: { errors: false, items: [] } });
         indices = {
             exists: vi.fn().mockResolvedValue({ body: true }),
             create: vi.fn().mockResolvedValue({ body: { acknowledged: true } }),
+            putMapping: vi.fn().mockResolvedValue({ body: { acknowledged: true } }),
         };
         constructor() { }
     },

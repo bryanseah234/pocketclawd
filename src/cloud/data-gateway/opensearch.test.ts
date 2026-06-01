@@ -12,6 +12,7 @@ import type { DataGatewayConfig, DocumentChunk } from './types.js';
 const mockIndex = vi.fn().mockResolvedValue({ body: { result: 'created' } });
 const mockSearch = vi.fn();
 const mockDeleteByQuery = vi.fn().mockResolvedValue({ body: { deleted: 1 } });
+const mockBulk = vi.fn().mockResolvedValue({ body: { errors: false, items: [] } });
 const mockIndicesExists = vi.fn().mockResolvedValue({ body: true });
 const mockIndicesCreate = vi.fn().mockResolvedValue({ body: { acknowledged: true } });
 
@@ -57,9 +58,11 @@ vi.mock('@opensearch-project/opensearch', () => ({
             index: mockIndex,
             search: mockSearch,
             deleteByQuery: mockDeleteByQuery,
+            bulk: mockBulk,
             indices: {
                 exists: mockIndicesExists,
                 create: mockIndicesCreate,
+                putMapping: vi.fn().mockResolvedValue({ body: { acknowledged: true } }),
             },
         };
     }),
@@ -384,47 +387,57 @@ describe('DataGateway OpenSearch operations', () => {
     });
 
     describe('deleteUserDocuments', () => {
-        it('deletes all documents for a userId', async () => {
-            await gateway.deleteUserDocuments('user-abc');
-
-            expect(mockDeleteByQuery).toHaveBeenCalledWith({
-                index: 'documents',
-                body: {
-                    query: {
-                        bool: {
-                            filter: [{ term: { userId: 'user-abc' } }],
-                        },
-                    },
-                },
-            });
+        beforeEach(() => {
+            // Return two matching docs so bulk-delete is exercised
+            mockSearch.mockResolvedValue({ hits: { hits: [{ _id: 'doc-1' }, { _id: 'doc-2' }] } });
+            mockBulk.mockResolvedValue({ body: { errors: false, items: [] } });
         });
 
-        it('deletes documents filtered by filename when provided', async () => {
+        it('searches by userId filter and bulk-deletes found docs', async () => {
+            await gateway.deleteUserDocuments('user-abc');
+
+            expect(mockSearch).toHaveBeenCalledWith(expect.objectContaining({
+                index: 'documents',
+                body: expect.objectContaining({
+                    query: { bool: { filter: [{ term: { userId: 'user-abc' } }] } },
+                }),
+            }));
+            expect(mockBulk).toHaveBeenCalledWith(expect.objectContaining({
+                body: [
+                    { delete: { _index: 'documents', _id: 'doc-1' } },
+                    { delete: { _index: 'documents', _id: 'doc-2' } },
+                ],
+            }));
+        });
+
+        it('includes filename filter when provided', async () => {
             await gateway.deleteUserDocuments('user-abc', 'report.pdf');
 
-            expect(mockDeleteByQuery).toHaveBeenCalledWith({
-                index: 'documents',
-                body: {
-                    query: {
-                        bool: {
-                            filter: [
-                                { term: { userId: 'user-abc' } },
-                                { term: { filename: 'report.pdf' } },
-                            ],
-                        },
-                    },
-                },
-            });
+            expect(mockSearch).toHaveBeenCalledWith(expect.objectContaining({
+                body: expect.objectContaining({
+                    query: { bool: { filter: [
+                        { term: { userId: 'user-abc' } },
+                        { term: { filename: 'report.pdf' } },
+                    ] } },
+                }),
+            }));
+        });
+
+        it('skips bulk call when no docs found', async () => {
+            mockSearch.mockResolvedValueOnce({ hits: { hits: [] } });
+            mockBulk.mockClear();
+            await gateway.deleteUserDocuments('user-abc');
+            expect(mockBulk).not.toHaveBeenCalled();
         });
 
         it('rejects empty userId', async () => {
             await expect(gateway.deleteUserDocuments('')).rejects.toThrow('userId is required');
-            expect(mockDeleteByQuery).not.toHaveBeenCalled();
+            expect(mockBulk).not.toHaveBeenCalled();
         });
 
         it('rejects whitespace-only userId', async () => {
             await expect(gateway.deleteUserDocuments('  ')).rejects.toThrow('userId is required');
-            expect(mockDeleteByQuery).not.toHaveBeenCalled();
+            expect(mockBulk).not.toHaveBeenCalled();
         });
     });
 });

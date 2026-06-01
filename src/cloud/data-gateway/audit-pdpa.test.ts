@@ -50,6 +50,12 @@ vi.mock('@opensearch-project/opensearch', () => ({
     Client: class MockOpenSearchClient {
         search = mockOpenSearchSearch;
         deleteByQuery = mockOpenSearchDeleteByQuery;
+        bulk = mockOpenSearchBulk;
+        indices = {
+            exists: vi.fn().mockResolvedValue({ body: true }),
+            create: vi.fn().mockResolvedValue({ body: { acknowledged: true } }),
+            putMapping: vi.fn().mockResolvedValue({ body: { acknowledged: true } }),
+        };
     },
 }));
 
@@ -301,8 +307,9 @@ describe('DataGateway Audit & PDPA compliance', () => {
                 },
             });
 
-            // deleteUserDocuments (deleteByQuery)
-            mockOpenSearchDeleteByQuery.mockResolvedValueOnce({});
+            // deleteUserDocuments: search returns 1 doc, bulk deletes it
+            mockOpenSearchSearch.mockResolvedValueOnce({ hits: { hits: [{ _id: 'doc-1' }] } });
+            mockOpenSearchBulk.mockResolvedValueOnce({ body: { errors: false, items: [] } });
 
             // S3 listFiles
             mockS3Send.mockResolvedValueOnce({
@@ -334,8 +341,7 @@ describe('DataGateway Audit & PDPA compliance', () => {
             mockDynamoSend.mockResolvedValueOnce({ Item: undefined });
             // No OpenSearch documents
             mockOpenSearchSearch.mockResolvedValueOnce({ body: { hits: { hits: [] } } });
-            // deleteUserDocuments
-            mockOpenSearchDeleteByQuery.mockResolvedValueOnce({});
+            // deleteUserDocuments: no docs found, bulk not called
             // No S3 files
             mockS3Send.mockResolvedValueOnce({ Contents: undefined, IsTruncated: false });
 
@@ -354,8 +360,7 @@ describe('DataGateway Audit & PDPA compliance', () => {
             mockDynamoSend.mockResolvedValueOnce({ Item: undefined });
             // No OpenSearch documents
             mockOpenSearchSearch.mockResolvedValueOnce({ body: { hits: { hits: [] } } });
-            // deleteUserDocuments
-            mockOpenSearchDeleteByQuery.mockResolvedValueOnce({});
+            // deleteUserDocuments: no docs found, bulk not called
             // No S3 files
             mockS3Send.mockResolvedValueOnce({ Contents: undefined, IsTruncated: false });
 
