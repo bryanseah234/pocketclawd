@@ -1234,7 +1234,7 @@ export class DataGateway implements IDataGateway {
             index: indexName, size: 1000,
             body: { query: { bool: { filter } }, _source: false },
         });
-        const hits1 = ((sr1.body as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
+        const hits1 = ((sr1 as unknown as { body?: { hits?: { hits?: Array<{ _id: string }> } }; hits?: { hits?: Array<{ _id: string }> } })?.body?.hits?.hits ?? (sr1 as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
         if (hits1.length > 0) {
             await this.openSearchClient.bulk({ body: hits1.flatMap((h: { _id: string }) =>
                 [{ delete: { _index: indexName, _id: h._id } }]) });
@@ -1408,7 +1408,7 @@ export class DataGateway implements IDataGateway {
             index: indexName, size: 1000,
             body: { query: { bool: { filter: [{ term: { userId } }, { term: { sourceUrl: url } }] } }, _source: false },
         });
-        const hits2 = ((sr2.body as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
+        const hits2 = ((sr2 as unknown as { body?: { hits?: { hits?: Array<{ _id: string }> } }; hits?: { hits?: Array<{ _id: string }> } })?.body?.hits?.hits ?? (sr2 as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
         if (hits2.length === 0) return 0;
         await this.openSearchClient.bulk({ body: hits2.flatMap((h: { _id: string }) =>
             [{ delete: { _index: indexName, _id: h._id } }]) });
