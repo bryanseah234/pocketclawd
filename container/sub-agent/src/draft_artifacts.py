@@ -26,7 +26,7 @@ def _sanitize_topic(topic: str, max_len: int = 60) -> str:
 
 def make_filename(doc_type: str, topic: str) -> str:
     """Build a deterministic filename for a given draft."""
-    ext = {"slides": "pptx"}.get(doc_type, "docx")
+    ext = {"slides": "pptx", "research": "pdf"}.get(doc_type, "docx")
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     safe = _sanitize_topic(topic)
     return f"{doc_type}-{safe}-{ts}.{ext}"
@@ -120,6 +120,66 @@ def _split_slides(body_md: str) -> list[tuple[str, list[str]]]:
     return slides
 
 
+
+def render_pdf(topic: str, body_md: str) -> bytes:
+    """
+    Render a research report to PDF using reportlab.
+
+    Simple two-pass: title heading, then body paragraphs. Markdown headings
+    become bold/larger; bullets become indented lines. No images.
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.enums import TA_LEFT
+    except ImportError as exc:
+        raise RuntimeError("reportlab is not installed") from exc
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2.5*cm, bottomMargin=2*cm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("rtitle", parent=styles["Title"], fontSize=18, spaceAfter=12)
+    h1_style    = ParagraphStyle("rh1",    parent=styles["Heading1"], fontSize=14, spaceAfter=6)
+    h2_style    = ParagraphStyle("rh2",    parent=styles["Heading2"], fontSize=12, spaceAfter=4)
+    body_style  = ParagraphStyle("rbody",  parent=styles["Normal"],   fontSize=10, spaceAfter=4, leading=14)
+    bullet_style= ParagraphStyle("rbullet",parent=styles["Normal"],   fontSize=10, leftIndent=18, spaceAfter=3, leading=13)
+    meta_style  = ParagraphStyle("rmeta",  parent=styles["Normal"],   fontSize=8,  textColor=(0.4,0.4,0.4), spaceAfter=12)
+
+    story = [
+        Paragraph(topic.strip() or "Research Report", title_style),
+        Paragraph(
+            f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+            meta_style,
+        ),
+        Spacer(1, 0.3*cm),
+    ]
+
+    for raw_line in body_md.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            story.append(Spacer(1, 0.2*cm))
+            continue
+        # Escape XML special chars for reportlab
+        safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        if line.startswith("### "):
+            story.append(Paragraph(safe[4:], h2_style))
+        elif line.startswith("## "):
+            story.append(Paragraph(safe[3:], h2_style))
+        elif line.startswith("# "):
+            story.append(Paragraph(safe[2:], h1_style))
+        elif line.lstrip().startswith(("- ", "* ")):
+            story.append(Paragraph(f"• {safe.lstrip()[2:]}", bullet_style))
+        else:
+            story.append(Paragraph(safe, body_style))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
 def render_pptx(topic: str, body_md: str) -> bytes:
     """Render a slide deck from the markdown outline."""
     try:
@@ -177,6 +237,13 @@ def render_artifact(doc_type: str, topic: str, body_md: str) -> tuple[bytes, str
         except Exception as exc:
             logger.error("PPTX render failed for topic=%s: %s", topic, exc)
             raise
+    if doc_type == "research":
+        try:
+            data = render_pdf(topic, body_md)
+            return data, "application/pdf"
+        except Exception as exc:
+            # reportlab not available → fall back to docx silently
+            logger.warning("PDF render failed, falling back to docx: %s", exc)
     # Default: word doc
     data = render_docx(doc_type, topic, body_md)
     return data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

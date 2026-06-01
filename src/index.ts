@@ -573,9 +573,8 @@ async function main(): Promise<void> {
     }
   }
 
-  // 9. Cloud mode: daily briefing scheduler — wired once DataGateway exposes invokeLlm
-  // TODO: wire when DataGateway.invokeLlm() is available.
-  // For now matches the pre-existing behaviour: SKIP | no-handler logged at cron time.
+  // 9. Cloud mode: daily briefing scheduler.
+  // Runs at 07:00 SGT (23:00 UTC) for users with Google/Microsoft tokens.
   if (isCloudMode()) {
     // Morning briefing: 07:00 SGT = 23:00 UTC previous day
     void (async () => {

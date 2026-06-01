@@ -1,25 +1,39 @@
 ---
 name: slides
-description: Generate a .pptx deck from a topic with knowledge-base context (NOT YET WIRED).
+description: Generate a .pptx slide deck from a topic with knowledge-base context.
 ---
 
 # /slides — Slide Deck Generator
 
-## Status
+Generates a structured `.pptx` PowerPoint deck and delivers a
+**presigned S3 download link** (valid 1 hour).
 
-**Not yet wired.** Same blocker as `/minutes` and `/research` — large-binary file generation (.pptx) needs a host-side rendering pipeline triggered by a `system` action. The in-container agent doesn't ship pptxgenjs and shouldn't.
+## Usage
+
+```
+/draft slides <topic>
+```
+
+Example: `/draft slides 2025 product roadmap`
 
 ## What to do when the user types `/slides <topic>`
 
-1. Call `kb_recall(query=<topic>, k=20)` to gather context.
-2. Synthesize the deck outline inline in chat:
-   - Title slide
-   - Agenda (3-5 sections)
-   - 3-10 content slides (each: title + 3-6 bullets + speaker notes)
-   - Summary / takeaways
-3. Format the outline cleanly (Markdown headings + nested bullets).
-4. Tell the user the .pptx export is parked and you've replied with the outline for now.
+1. Route to the draft command:
+   - `handle_draft(redis, user_id, "slides <topic>")`
+2. The pipeline will:
+   - Generate a slide outline via Bedrock
+   - Render to `.pptx` via `python-pptx`
+   - Upload to S3 and return a presigned URL
+3. Reply with the outline inline **and** the download link.
 
-## Forward link
+## Slide structure
 
-Tracked in: the follow-on `.omo/plans/clawd-agent-side-docx-pipeline.md` (shared with `/minutes` and `/research`).
+- Title slide (topic + date)
+- Agenda (3-5 sections)
+- 3-10 content slides (title + 3-6 bullets)
+- Summary / takeaways
+
+## Fallback
+
+If artifact upload fails, return the outline in chat and tell the user the
+.pptx download is temporarily unavailable.
