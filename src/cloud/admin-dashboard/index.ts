@@ -1196,7 +1196,7 @@ export async function handleAdminRequest(
 
                 userId = userId.trim();
                 if (!userId) { sendJson(res, { error: 'userId required' }, 400); return true; }
-                if (!text && !fileBytes) { sendJson(res, { error: 'text or file required' }, 400); return true; }
+                if (text === undefined && !fileBytes) { sendJson(res, { error: 'text or file required' }, 400); return true; }
 
                 const messageId = 'admin-test-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
                 const platformId = userId + '@admin-test';
