@@ -22,7 +22,7 @@ It remembers. It surfaces what you forgot. It drafts the thing you didn't have t
 
 Warm, calm, capable. Like a brilliant assistant who's also a good friend — never stuffy, never breathless. Plain English. No jargon. No "unleash the power of AI." Honest about what it knows and doesn't know.
 
-The persona is structured into seven tiers (identity, onboarding, response style, guardrails, confidence, coding, escalation) — see `docs/CLAWD.md` for the full taxonomy. Tier values live in `nanoclaw/app-config:systemPromptTemplate` in AWS Secrets Manager and can be hot-swapped without redeploy.
+The persona is defined in `container/sub-agent/src/persona/system_prompt_template.json` (11 sections: identity, voice, formatting, memory, capabilities, knowledgeBase, photos, guardrails, confidence, interactionStyle, namingDiscipline — plus annotated examples). Clawd is a warm personal life assistant, not a technical specialist. Changes take effect on the next container deploy.
 
 ## Visual identity
 

@@ -22,13 +22,13 @@ deployment.
 |---|---|
 | ✅ DONE | EC2 r6i.4xlarge running, port 3000 live, container healthy |
 | ✅ DONE | NanoClaw orchestrator as Docker container (`--restart unless-stopped`) |
-| ✅ DONE | Sub-agent on ECS Fargate (1 task, 1 vCPU / 2 GB) |
+| ✅ DONE | Sub-agent on ECS Fargate (2 tasks, 1 vCPU / 2 GB each) |
 | ✅ DONE | Baileys WhatsApp integration in orchestrator (paired `+65 8473 1565`) |
 | ✅ DONE | Admin dashboard with QR code (`src/cloud/admin-dashboard/` + `src/static/admin.html`) |
 | ✅ DONE | DynamoDB tables (4: chat-messages, user-preferences, webhook-tokens, system-errors) |
 | ✅ DONE | OpenSearch Serverless collection `nanoclaw-documents` |
 | ✅ DONE | ElastiCache Redis (`nanoclaw-redis-rg`) for message queue |
-| ✅ DONE | Bedrock LLM — Sonnet 4.5 (sub-agent) + Haiku 4.5 (orchestrator) via inference profiles |
+| ✅ DONE | Bedrock LLM — Sonnet 4.5 (both orchestrator and sub-agent) via inference profiles |
 | ✅ DONE | Bedrock embeddings — Cohere Embed Multilingual v3 (Titan v2 not GA in apse1; pipeline auto-resolves by region) |
 | ✅ DONE | S3 document storage (`nanoclaw-data-709609992277`) |
 | ✅ DONE | Secrets Manager config (`nanoclaw/app-config`, `nanoclaw/google-secrets`) |
@@ -52,7 +52,7 @@ Phase A is **complete**.
 | ✅ DONE | Photo pipeline (vision → description → KB) |
 | ✅ DONE | 5-second debouncer for chatty users |
 | ✅ DONE | Cron — 02:00 SGT cloud ingestion sweep |
-| ✅ DONE | Cron — 03:00 SGT Obsidian wiki regen |
+| ~~REMOVED~~ | Cron — 03:00 SGT Obsidian wiki regen — **removed with local mode** (wiki provider deleted) |
 | ✅ DONE | Cron — 07:00 SGT morning digest (per-user opt-in) |
 | ✅ DONE | Google ingestion (Gmail + Drive + Calendar via `/auth google`) |
 | 🟡 PARTIAL | Microsoft ingestion — adapter scaffolded, OAuth pending |
@@ -80,11 +80,11 @@ Google ingestion is fully wired and will activate as soon as
 | ✅ DONE | Pulse-strip dashboard (24h/7d Bedrock spend, msg volume, ECS health, queue depth) |
 | ✅ DONE | Health endpoint with backing-service checks |
 | ❌ TODO | HTTPS via Caddy (runbook ready at `docs/runbooks/caddy-tls-setup.md`; not yet applied) |
-| ❌ TODO | Lock SG ingress (22 + 3000) to admin IP set |
+| ❌ TODO | Lock SG ingress (:3000 and :443) to admin IP set (port :22 is already closed — SSM-only) |
 | ❌ TODO | External penetration test (scheduled Q3 2026) |
-| ❌ TODO | k6 load test target — 50 concurrent users — before GA |
+| ✅ DONE | k6 load test — 50 VUs, 2 min — `tests/load/k6-load-c12.js` wired into CI |
 
-Phase C is **most-but-not-all done**; the four open items are tracked as
+Phase C is **mostly done** (9/12). Open items tracked as
 hardening backlog ahead of GA.
 
 ---
@@ -100,7 +100,7 @@ These weren't in the PRD but emerged during the build and are live:
   literals) so [impeccable](https://github.com/anthropic-experimental/impeccable)
   lives natively
 - **Pulse strip** with SSE-driven live tiles
-- **Cohere Embed Multilingual v3 fallback** — pipeline picks Cohere Multilingual v3 in regions where
+- **Cohere Embed Multilingual v3 (primary embedding model)** — pipeline picks Cohere Multilingual v3 in regions where
   Titan v2 is unavailable, output forced to 1024-dim to keep the index parity
 - **DataGateway worker** — `nanoclaw:uploads:pending` queue + draft artefact
   upload action, keeping the data-isolation invariant on every S3 write

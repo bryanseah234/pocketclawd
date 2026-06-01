@@ -140,6 +140,8 @@ jobs:
           sudo apt-get update && sudo apt-get install -y k6
       - name: Run k6 smoke test
         run: k6 run tests/load/k6-smoke.js --env TARGET_URL=http://3.0.132.150:3000
+      - name: Run k6 C-12 load test (50 VUs, 2 min)
+        run: k6 run tests/load/k6-load-c12.js --env BASE_URL=http://3.0.132.150:3000 --env ADMIN_USER=admin --env ADMIN_PASS=${{ secrets.ADMIN_PASS }}
         timeout-minutes: 2
 
   security-scan:
