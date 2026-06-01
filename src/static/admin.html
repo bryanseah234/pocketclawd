@@ -1606,7 +1606,7 @@
                 <tbody>
                     <tr><td><code>/</code></td><td>Landing page</td></tr>
                     <tr><td><code>/admin</code></td><td>Admin dashboard (this UI)</td></tr>
-                    <tr><td><code>/healthz</code></td><td>Health probe (200 = orchestrator alive)</td></tr>
+                    <tr><td><code>/health</code></td><td>Health check — redis, dynamo, opensearch, uptime</td></tr>
                     <tr><td><code>/whatsapp/qr</code></td><td>WhatsApp pairing QR (when needed)</td></tr>
                 </tbody>
             </table>
@@ -1620,7 +1620,8 @@
                     <tr><td><code>GET /admin/api/data/users/:id</code></td><td>User detail</td></tr>
                     <tr><td><code>POST /admin/api/data/users/reset-all</code></td><td>Wipe all user data</td></tr>
                     <tr><td><code>GET /admin/api/architecture/state</code></td><td>System topology</td></tr>
-                    <tr><td><code>POST /admin/api/test/send</code></td><td>Test chat send</td></tr>
+                    <tr><td><code>GET /admin/api/test/users</code></td><td>List 4 test users</td></tr>
+                    <tr><td><code>POST /admin/api/test/send</code></td><td>Inject message as test user</td></tr>
                     <tr><td><code>POST /admin/api/logout</code></td><td>Sign out</td></tr>
                 </tbody>
             </table>

@@ -86,7 +86,14 @@ function getSettingsHandler(): ReturnType<typeof createSettingsRoutes> {
 // ── Session cookie ──
 // Generated once per process. Sent as HttpOnly cookie on successful Basic Auth login.
 // EventSource and subsequent fetch calls use the cookie automatically — no headers needed.
-const SESSION_TOKEN = crypto.randomBytes(32).toString('hex');
+// SESSION_TOKEN is derived deterministically from ADMIN_PASS so it survives
+// container restarts without invalidating the browser cookie on every deploy.
+// Falls back to a random value when no password is configured (dev mode).
+const SESSION_TOKEN = (() => {
+    const pass = process.env.ADMIN_PASS || '';
+    if (!pass) return crypto.randomBytes(32).toString('hex');
+    return crypto.createHmac('sha256', pass).update('nanoclaw-session-v1').digest('hex');
+})();
 const SESSION_COOKIE_NAME = 'nanoclaw_admin_session';
 // CSRF (A2): double-submit cookie pattern. The CSRF cookie is readable by JS
 // (NOT HttpOnly) so the admin UI can read it and echo it as the X-CSRF-Token
@@ -94,7 +101,11 @@ const SESSION_COOKIE_NAME = 'nanoclaw_admin_session';
 // the header value — if they match, the request originated from a same-origin
 // page (which is the only context where JS can read this cookie).
 // SameSite=Strict already blocks classic CSRF, this is defense-in-depth.
-const CSRF_TOKEN = crypto.randomBytes(32).toString('hex');
+const CSRF_TOKEN = (() => {
+    const pass = process.env.ADMIN_PASS || '';
+    if (!pass) return crypto.randomBytes(32).toString('hex');
+    return crypto.createHmac('sha256', pass).update('nanoclaw-csrf-v1').digest('hex');
+})();
 const CSRF_COOKIE_NAME = 'nanoclaw_admin_csrf';
 const CSRF_HEADER_NAME = 'x-csrf-token';
 // Methods that require CSRF protection (i.e., state-mutating).
