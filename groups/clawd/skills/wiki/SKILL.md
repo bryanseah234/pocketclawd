@@ -1,24 +1,27 @@
 ---
 name: wiki
-description: Generate or regenerate an Obsidian wiki entry for an entity (NOT YET WIRED).
+description: Summarise what Clawd knows about a topic from the knowledge base.
 ---
 
-# /wiki — regenerate wiki entry
+# /wiki — knowledge base summary
 
-## Status
-
-**Not yet wired.** The wiki generator (`src/modules/wiki-generator.ts`) reads from the knowledge base and writes Markdown to `${VAULT_PATH}/wiki/`. It runs on the host as a 03:00 local cron.
-
-Today the cron is a no-op stub: the audit log shows `wiki-regen | SKIP | no-provider`. Re-wiring it requires a host-side handler that calls `WikiGenerator.generateEntry(...)` directly (no provider needed — wiki generation is purely a transform of pgvector data into Markdown). That's a separate plan.
-
-You — the in-container agent — cannot drive wiki regeneration. There is no MCP tool for it; it would need `kb_recall` over the entity, then a Markdown write to a host-mounted vault path, which is host-side work.
+Produces a structured summary of everything Clawd knows about a topic,
+drawn from the local knowledge base via `kb_recall`.
 
 ## What to do when the user types `/wiki <topic>`
 
-1. Acknowledge the wiki-regen cron is currently parked.
-2. Offer to summarise what you know about the topic by calling `kb_recall(query=<topic>, k=10)` and replying with a chat-formatted summary.
-3. Note that the formal wiki entry at `vault/wiki/<topic>.md` won't be regenerated until the cron handler is restored.
+1. Call `kb_recall(query=<topic>, k=15)` to gather sources.
+2. If fewer than 3 sources found: reply "Not enough in my knowledge base on
+   \"<topic>\" yet — try ingesting more via /ingest." and stop.
+3. Synthesise a wiki-style summary in chat:
+   - **Overview** (1-2 paragraphs from the strongest sources)
+   - **Key facts** (bulleted, each cited with the source)
+   - **People / orgs mentioned** (if any appear in the recall)
+   - **Timeline** (if dates are present)
+4. End with "Sources: N items from [source types]."
 
-## Forward link
+## Must-not-do
 
-Tracked in: `.omo/plans/clawd-knowledge-rearch.md` (P5 audit log) and the follow-on `.omo/plans/clawd-wiki-cron-rewire.md` (to be written).
+- Do not write to any file or path — there is no mounted vault in cloud mode.
+- Do not call web search.
+- Never invent facts not in the recall result.

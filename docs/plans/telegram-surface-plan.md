@@ -1,6 +1,7 @@
 # Plan - Add Telegram as a Second Messaging Surface (cloud Clawd)
 
-> STATUS: PLAN ONLY - not implemented. Decisions needed from Bryan before any code.
+> STATUS: DONE. Telegram adapter live on prod (`src/channels/telegram.ts`). Long-poll
+> active; swap to webhook when Caddy (C9) is deployed.
 > Goal: Telegram with the SAME feature set as WhatsApp (chat, photos, documents,
 > memory, onboarding, digest), sharing the same per-user data/memory.
 

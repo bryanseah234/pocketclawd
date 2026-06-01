@@ -93,9 +93,6 @@ hardening backlog ahead of GA.
 
 These weren't in the PRD but emerged during the build and are live:
 
-- **Premium-stationery design system** — oatmeal/espresso/mustard, Playfair
-  Display + Inter, applied uniformly to landing + admin
-  (`src/static/landing.html`, `src/static/admin.html`, `DESIGN.md`)
 - **Static HTML/CSS/JS** for landing + admin (vs server-rendered template
   literals) so [impeccable](https://github.com/anthropic-experimental/impeccable)
   lives natively

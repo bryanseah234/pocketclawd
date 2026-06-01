@@ -57,7 +57,7 @@ async function runMorningDigest(): Promise<void> {
   // is added by clawd-wiring.ts (Bedrock + DynamoDB); this keeps the cron
   // contract live and audited.
   if (!digestCallback) {
-    await audit('CRON | morning-digest SKIP | no-handler');
+    // No digest handler registered — cloud mode uses morning-briefing.ts scheduler directly.
     return;
   }
   try {

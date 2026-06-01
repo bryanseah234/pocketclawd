@@ -1,6 +1,8 @@
 # Plan - Reconcile Clawd Persona (generalist, not technical specialist)
 
-> STATUS: PLAN ONLY. Contains a LIVE-PROD finding that needs Bryan's go before any change.
+> STATUS: DONE. Finding resolved: sub-agent reads persona from JSON file in container image
+> (`src/persona/system_prompt_template.json`), NOT Secrets Manager. `docs/CLAWD.md` rewritten
+> to match the correct generalist persona.
 
 ## THE KEY FINDING (this is bigger than a doc fix)
 
