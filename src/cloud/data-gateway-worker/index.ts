@@ -1009,7 +1009,11 @@ async function handleDeleteIngestedUrl(
 
     } catch (err) {
 
-        log.error('delete_ingested_url failed', { userId, url, err });
+        const errMeta = (err as { meta?: { statusCode?: number; body?: unknown } }).meta;
+        log.error('delete_ingested_url failed', { userId, url,
+            errMsg: (err as Error).message,
+            statusCode: errMeta?.statusCode,
+            body: JSON.stringify(errMeta?.body).slice(0,500) });
 
         if (requestId) {
 
