@@ -178,6 +178,8 @@ jobs:
             -e CLAWD_CRON_DIGEST=true \
             -e CLAWD_CRON_WIKI=true \
             -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets \
+            -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
+            --env-file /etc/nanoclaw/orchestrator.env \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "\$(which docker)":/usr/local/bin/docker:ro \
             -v /opt/nanoclaw-data:/app/data \
