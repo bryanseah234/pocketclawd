@@ -46,8 +46,9 @@ DEFAULT_MODEL_ID = _resolve_default_model_id()
 VECTOR_DIMENSION = 1024
 DEFAULT_BATCH_SIZE = 50
 
-# Retry configuration: exponential backoff 1s, 2s, 4s, 8s, 16s
-MAX_RETRIES = 5
+# Retry configuration: exponential backoff 1s, 2s, 4s (3 attempts max)
+# Total worst-case: 1+2+4 = 7s — fits within 45s admin-test BRPOP window
+MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.0
 
 # Chunking defaults
@@ -328,6 +329,10 @@ class EmbeddingPipeline:
                     MAX_RETRIES,
                     str(e),
                 )
+                # ValidationException = bad request (wrong params/model) — don't retry
+                if "ValidationException" in type(e).__name__ or "ValidationException" in str(e):
+                    logger.error("Bedrock ValidationException — not retrying: %s", str(e))
+                    raise
 
                 if attempt < MAX_RETRIES - 1:
                     backoff = BACKOFF_BASE_SECONDS * (2**attempt)
@@ -353,10 +358,8 @@ class EmbeddingPipeline:
             body_c: dict[str, object] = {
                 "texts": [safe_text],
                 "input_type": input_t,
-                # Pin output_dimension to match the OpenSearch knn_vector index
-                # (created at 1024 dims). Cohere v4 default is 1536; without this
-                # every hybridSearch fails with "invalid dimension: 1024 should be 1536".
-                "output_dimension": VECTOR_DIMENSION,  # 1024
+                # NOTE: cohere.embed-v4:0 on Bedrock outputs 1024 dims by default.
+                # output_dimension param is NOT supported by the Bedrock API - do not add it.
             }
             return body_c
         # Default to Titan Embeddings v2 schema.
