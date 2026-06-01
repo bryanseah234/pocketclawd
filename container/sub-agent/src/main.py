@@ -28,6 +28,54 @@ from .reminders import parse_remind_command, list_reminders, cancel_reminder, re
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Debug-mode error reporting
+# ---------------------------------------------------------------------------
+import hashlib as _hashlib
+
+_DEBUG_MODE = os.environ.get("CLAWD_DEBUG", "").lower() in ("1", "true", "yes")
+
+
+def _error_ref(exc: Exception, message_id: str) -> str:
+    """Generate a short error reference code for user reporting."""
+    raw = f"{type(exc).__name__}:{message_id}"
+    return _hashlib.sha1(raw.encode()).hexdigest()[:8].upper()
+
+
+def _user_error_message(exc: Exception, message_id: str, context: str = "chat") -> str:
+    """
+    Return the message sent to the user when something fails.
+    - Normal mode : friendly one-liner
+    - Debug mode  : error type + ref code so user can report to admin
+    """
+    if not _DEBUG_MODE:
+        if context == "timeout":
+            return "Sorry, that took too long on my end. Can you try again? 🙏"
+        return "Hmm, something went wrong on my end. Try again in a moment? 🙏"
+
+    ref = _error_ref(exc, message_id)
+    err_type = type(exc).__name__
+    # Short human hint by exception class
+    hints = {
+        "ClientError": "AWS service error (Bedrock / DynamoDB / S3)",
+        "TimeoutError": "Request timed out — service may be slow",
+        "asyncio.TimeoutError": "Processing timed out (45s limit hit)",
+        "ValidationException": "Model rejected the request (content or format)",
+        "ThrottlingException": "Rate limit hit — try again in a moment",
+        "ServiceUnavailableException": "AWS Bedrock temporarily unavailable",
+        "ResponseError": "OpenSearch query failed",
+        "JSONDecodeError": "Unexpected response format from a service",
+        "httpx.ConnectError": "Could not reach external service (network)",
+        "httpx.ReadTimeout": "External service timed out",
+    }
+    hint = hints.get(err_type, err_type)
+    return (
+        "⚠️ *Error* `[" + ref + "]`\n"
+        "_" + hint + "_\n\n"
+        "Screenshot this and send to admin with ref `" + ref + "`."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
 
@@ -795,7 +843,7 @@ async def poll_queue() -> None:
                     response = AgentResponse(
                         message_id=message.message_id,
                         user_id=message.user_id,
-                        content="Sorry, that took too long on my end. Can you try again? 🙏",
+                        content=_user_error_message(asyncio.TimeoutError(), message.message_id, "timeout"),
                         timestamp=datetime.now(timezone.utc).isoformat(),
                         metadata={"source": "sub-agent", "type": "error"},
                     )
@@ -818,7 +866,7 @@ async def poll_queue() -> None:
                     response = AgentResponse(
                         message_id=message.message_id,
                         user_id=message.user_id,
-                        content="Hmm something went wrong on my end. Try again in a moment? 🙏",
+                        content=_user_error_message(proc_err, message.message_id, "chat"),
                         timestamp=datetime.now(timezone.utc).isoformat(),
                         metadata={"source": "sub-agent", "type": "error"},
                     )
