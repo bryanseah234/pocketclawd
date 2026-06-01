@@ -159,6 +159,35 @@ const adapter: ChannelAdapter = {
             return sendTelegramMessage(platformId, text);
         }
 
+        // Image delivery (from generate_image tool)
+        if (message.kind === 'image' && typeof content.url === 'string') {
+            try {
+                await tgCall('sendPhoto', {
+                    chat_id: platformId,
+                    photo: content.url as string,
+                    caption: (content.caption as string) || '',
+                });
+            } catch (err) {
+                log.error('Failed to send Telegram photo', { platformId, err });
+                await sendTelegramMessage(platformId, `Here's your image: ${content.url as string}`);
+            }
+            return;
+        }
+
+        // Audio delivery (from text_to_speech tool)
+        if (message.kind === 'audio' && typeof content.url === 'string') {
+            try {
+                await tgCall('sendAudio', {
+                    chat_id: platformId,
+                    audio: content.url as string,
+                });
+            } catch (err) {
+                log.error('Failed to send Telegram audio', { platformId, err });
+                await sendTelegramMessage(platformId, `Here's your audio: ${content.url as string}`);
+            }
+            return;
+        }
+
         // Plain text — WhatsApp *bold* → Telegram <b>bold</b>
         const raw = typeof content.text === 'string' ? content.text : JSON.stringify(content);
         const html = raw.replace(/\*(.*?)\*/g, '<b>$1</b>');
