@@ -562,7 +562,6 @@ function parseMultipart(
 ): Record<string, { text?: string; data?: Buffer; filename?: string; contentType?: string }> {
     const result: Record<string, { text?: string; data?: Buffer; filename?: string; contentType?: string }> = {};
     const sep = Buffer.from('--' + boundary);
-    const end = Buffer.from('--' + boundary + '--');
     let pos = 0;
     while (pos < raw.length) {
         const sepIdx = raw.indexOf(sep, pos);
