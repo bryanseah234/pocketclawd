@@ -1274,24 +1274,14 @@ export async function handleAdminRequest(
                 await services.redis.expire('queue:agent:shared:inbound', 3600);
 
                 // ── Wait for sub-agent response ───────────────────────────────
+                // FIX: use services.redis directly (already connected, TLS-aware).
+                // The previous approach created a new ioredis client using
+                // services.config?.redis which is undefined at runtime — that client
+                // silently connected to localhost:6379 (wrong host) and BRPOP never fired,
+                // causing every test/send to return 504 after 45s.
                 const responseKey = 'admin:test:response:' + messageId;
-                const { Redis: IORedisCtor } = await import('ioredis');
-                const redisCfg = services.config?.redis ?? null;
-                const blockingClient = new IORedisCtor({
-                    host: redisCfg?.host,
-                    port: redisCfg?.port,
-                    password: redisCfg?.password,
-                    tls: redisCfg?.tls ? {} : undefined,
-                    lazyConnect: true,
-                    maxRetriesPerRequest: 3,
-                });
                 let result: [string, string] | null = null;
-                try {
-                    await blockingClient.connect();
-                    result = await blockingClient.brpop(responseKey, 45) as [string, string] | null;
-                } finally {
-                    try { await blockingClient.quit(); } catch { /* ignore */ }
-                }
+                result = await (services.redis as import('ioredis').Redis).brpop(responseKey, 45) as [string, string] | null;
                 if (!result) {
                     sendJson(res, { messageId, status: 'timeout', note: 'no response within 45s; check ECS sub-agent logs' }, 504);
                     return true;
