@@ -1,50 +1,44 @@
 ---
 name: auth
-description: Start OAuth / device-code flow for a cloud provider (google / microsoft / apple).
+description: Connect Google or Microsoft so Clawd can include your calendar and email in morning briefings.
 ---
 
-# /auth — start cloud auth flow
-
-Usage:
+# /connect — link a cloud account
 
 ```
-/auth google
-/auth microsoft
-/auth apple
-/auth status
+/connect google
+/connect microsoft
+/disconnect google
+/disconnect microsoft
 ```
 
-Action:
+## `/connect google`
 
-### `/auth google`
+Sends you a link. Open it, approve Gmail + Calendar access, and Clawd confirms
+here once connected. Tokens are stored encrypted in Redis — never shared.
 
-1. Verify `~/.clawd/secrets/google_credentials.json` exists. If not, instruct the user to:
-   - Visit https://console.cloud.google.com → create project "Clawd"
-   - Enable Gmail API, Calendar API, People API
-   - Create OAuth 2.0 client → Desktop app → download `credentials.json`
-   - Place it at `~/.clawd/secrets/google_credentials.json`
-2. Run the setup script that loads the credentials, opens the browser for consent, and saves the token to `~/.clawd/secrets/google_token.json`.
+Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to be set on the server
+(one-time admin setup). If the link returns "Google OAuth not configured", ask
+the admin to add those env vars.
 
-### `/auth microsoft`
+## `/connect microsoft`
 
-1. Verify `MS_CLIENT_ID` env var is set. If not, instruct user to:
-   - Register an app at https://portal.azure.com → App registrations
-   - Add API permissions: `Mail.Read`, `Calendars.Read`, `Contacts.Read`
-   - Add `MS_CLIENT_ID=<value>` to `.env`
-2. Trigger the device-code flow → display the URL + code → save token to `~/.clawd/secrets/ms_token.json`.
+Same flow — sends a link to the Microsoft login consent page. Approves
+`Calendars.Read`, `Mail.Read`, `User.Read`.
 
-### `/auth apple`
+Requires `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` on the server.
 
-Apple has no OAuth. Instruct user to:
+## `/disconnect <service>`
 
-1. Visit https://appleid.apple.com → Security → App-Specific Passwords → generate
-2. Add to `.env`: `APPLE_ID_EMAIL=...` + `APPLE_APP_PASSWORD=...`
-3. Re-run `/ingest` to verify connectivity.
+Removes stored tokens for that service. The next morning briefing will skip it.
 
-### `/auth status`
+## `/connect status`  (or `/auth status`)
 
-Show which providers have valid tokens (file present + non-expired):
+Shows which integrations are active for your account:
+- `google: ✅` — tokens present in Redis
+- `microsoft: ✅` — tokens present in Redis
 
-- `google: ✅ / ❌`
-- `microsoft: ✅ / ❌`
-- `apple: ✅ / ❌`
+## Apple / iCloud
+
+Not supported. Apple does not offer a standard OAuth API for third-party access
+to iCloud Mail or Calendar. No iCloud ingestion is planned.

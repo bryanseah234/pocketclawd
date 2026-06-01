@@ -92,6 +92,54 @@ async function fetchGmailUnread(accessToken: string): Promise<string[]> {
     return subjects;
 }
 
+async function refreshMicrosoftToken(tokens: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const refreshToken = tokens.refresh_token as string;
+    if (!refreshToken) return tokens;
+    const r = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            refresh_token: refreshToken,
+            client_id: process.env.MICROSOFT_CLIENT_ID || '',
+            client_secret: process.env.MICROSOFT_CLIENT_SECRET || '',
+            grant_type: 'refresh_token',
+            scope: 'offline_access Calendars.Read Mail.Read User.Read',
+        }).toString(),
+    });
+    if (!r.ok) return tokens;
+    const fresh = await r.json() as Record<string, unknown>;
+    return { ...tokens, ...fresh, refresh_token: refreshToken };
+}
+
+async function fetchMicrosoftCalendar(accessToken: string): Promise<string[]> {
+    const now = new Date();
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    const url = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${now.toISOString()}&endDateTime=${end.toISOString()}&$select=subject,start&$top=10&$orderby=start/dateTime`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!r.ok) return [];
+    const data = await r.json() as { value?: Array<{ subject?: string; start?: { dateTime?: string } }> };
+    return (data.value ?? []).map(e => {
+        const time = e.start?.dateTime
+            ? new Date(e.start.dateTime).toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Singapore' })
+            : '';
+        return time ? `${time} — ${e.subject ?? '(no title)'}` : (e.subject ?? '(no title)');
+    });
+}
+
+async function fetchOutlookUnread(accessToken: string): Promise<string[]> {
+    const r = await fetch(
+        'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$filter=isRead eq false&$select=subject,from&$top=5&$orderby=receivedDateTime desc',
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!r.ok) return [];
+    const data = await r.json() as { value?: Array<{ subject?: string; from?: { emailAddress?: { name?: string } } }> };
+    return (data.value ?? []).map(m => {
+        const sender = m.from?.emailAddress?.name ?? '';
+        return sender ? `${sender}: ${m.subject ?? '(no subject)'}` : (m.subject ?? '(no subject)');
+    });
+}
+
+
 async function buildBriefingMessage(
     userName: string,
     calEvents: string[],
@@ -199,6 +247,19 @@ async function runBriefing(): Promise<void> {
                         }
                     } catch (err) {
                         log.warn('Morning briefing: Google fetch failed', { userId, err });
+                    }
+                }
+                if (tokens.microsoft) {
+                    try {
+                        const refreshed = await refreshMicrosoftToken(tokens.microsoft);
+                        await redis.set(`oauth:tokens:${userId}:microsoft`, JSON.stringify(refreshed));
+                        const accessToken = refreshed.access_token as string;
+                        if (accessToken) {
+                            if (calEvents.length === 0) calEvents = await fetchMicrosoftCalendar(accessToken);
+                            if (unreadEmails.length === 0) unreadEmails = await fetchOutlookUnread(accessToken);
+                        }
+                    } catch (err) {
+                        log.warn('Morning briefing: Microsoft fetch failed', { userId, err });
                     }
                 }
 

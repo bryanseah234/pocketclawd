@@ -55,15 +55,16 @@ Phase A is **complete**.
 | ~~REMOVED~~ | Cron — 03:00 SGT Obsidian wiki regen — **removed with local mode** (wiki provider deleted) |
 | ✅ DONE | Cron — 07:00 SGT morning digest (per-user opt-in) |
 | ✅ DONE | Google ingestion (Gmail + Drive + Calendar via `/auth google`) |
-| 🟡 PARTIAL | Microsoft ingestion — adapter scaffolded, OAuth pending |
-| 🟡 PARTIAL | Apple ingestion — adapter scaffolded, mTLS pending |
+| 🟡 PARTIAL | Microsoft ingestion — OAuth + token store wired; `fetchMicrosoftCalendar` / `fetchOutlookUnread` not yet implemented in morning-briefing.ts |
+| ❌ NOT BUILT | Apple ingestion — no iCloud API available; removed from scope |
 | ✅ DONE | Draft artefacts — `.docx` + `.pptx` with 1-hour pre-signed S3 URLs |
 | ✅ DONE | PDPA consent + DSAR + right-to-erasure |
 
 Phase B is **substantially complete**; Microsoft and Apple ingestion are
-scaffolded but await OAuth / mTLS credentials from their respective consoles.
+scaffolded; Apple ingestion is out of scope (no iCloud OAuth API).
 Google ingestion is fully wired and will activate as soon as
-`nanoclaw/google-secrets` carries real tokens.
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set in the EC2 env.
+Microsoft OAuth is wired; calendar/email fetch functions are the remaining gap.
 
 ---
 

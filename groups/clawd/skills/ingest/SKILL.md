@@ -1,35 +1,34 @@
 ---
 name: ingest
-description: Status of the cloud-ingestion pipeline (Gmail / Outlook / iCloud).
+description: Status of the cloud-ingestion pipeline (Gmail / Outlook). Runs automatically at 02:00 SGT.
 ---
 
 # /ingest — cloud ingestion status
-
-Usage:
 
 ```
 /ingest
 ```
 
-## Status
+## What ingestion does
 
-**Host-only.** Cloud ingestion runs on the host as a 02:00 local cron (see `src/modules/ingestion/scheduler.ts`). Each ingester (Google × 3, Microsoft × 3, Apple × 3) runs in parallel with fault isolation, writes results into the host-side knowledge base, and records per-source counts in the audit log.
+At 02:00 SGT every day the orchestrator fetches new content from every user's
+connected accounts and indexes it into the knowledge base:
 
-You — the in-container agent — **cannot trigger ingestion directly**. There is no MCP tool for it (yet); the scheduler's `runAll()` is host-side TypeScript with no transport into the container.
+- **Google** — Gmail unread + Calendar events (for users who ran `/connect google`)
+- **Microsoft** — Outlook unread + Calendar events (for users who ran `/connect microsoft`)
+
+Results are stored in OpenSearch under each user's isolated partition and become
+available to `kb_recall` immediately.
 
 ## What to do when the user types `/ingest`
 
-1. Acknowledge: ingestion runs automatically at 02:00 local each day; manual triggers happen on the host.
-2. Offer to check the audit log via `/status` — that surfaces the most recent ingestion's per-source counts and timestamp.
-3. If the user actually wants to fire an ingestion off-schedule, tell them the host-side incantation (it's not a chat-driven action):
+1. Tell them ingestion runs automatically at 02:00 SGT. Manual triggers are
+   not exposed via chat.
+2. Offer to check recent activity: "I can look up what was indexed last — want me to
+   search your knowledge base for something specific?"
+3. If they want to check connection status: suggest `/connect status`.
 
-```
-# On the host:
-pnpm exec tsx scripts/run-ingestion.ts
-```
+## What is NOT supported
 
-(Or wait for the 02:00 cron.)
-
-## Why no MCP tool
-
-The kb_* MCP tools cover read/write of the knowledge base itself. Ingestion is a pipeline of cloud-API adapters that need OAuth tokens, network access, and host-side filesystem cache — none of which the container should have. A future plan may expose `kb_run_ingestion(source?)` if the friction warrants it; today the cron + audit-log inspection is the supported path.
+- **Apple / iCloud** — no iCloud API support, not planned.
+- In-chat manual trigger — ingestion is host-side only, no MCP tool for it.

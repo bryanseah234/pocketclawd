@@ -54,7 +54,6 @@ Compute from the env file:
 |---|---|---|
 | Google (Gmail / GCal / GContacts) | `~/.clawd/secrets/google_token.json` exists OR `CLAWD_SECRETS_DIR/google_token.json` exists | else |
 | Microsoft (Outlook x3) | `MS_CLIENT_ID` is set AND non-empty | else |
-| Apple (iCloud x3) | `APPLE_ID_EMAIL` AND `APPLE_APP_PASSWORD` set | else |
 | GitHub (PRs / commits / issues) | `GITHUB_PAT` set | else |
 | Slack | `SLACK_USER_TOKEN` set | else |
 
@@ -74,7 +73,6 @@ Produce a compact message that fits in one Telegram bubble (≤2000 chars). Use 
 🕐 Last ingest: 2026-05-21 22:15 (47 min ago)
 🔝 Top entities: GitHub, gmail, Clawd, README, mail
 
-Live: Google ✅ ×3 · iCloud ✅ ×3 · GitHub ✅ ×3
 Parked: Outlook ⏸ ×3 · Slack ⏸ ×1
 ```
 
@@ -87,7 +85,6 @@ Clawd status
 - Last ingest: 22:15 (47 min ago)
 - Top entities: GitHub, gmail, Clawd, README, mail
 
-Live: Google x3, iCloud x3, GitHub x3
 Parked: Outlook x3, Slack x1
 ```
 
