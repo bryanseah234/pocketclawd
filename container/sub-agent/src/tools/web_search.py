@@ -2,9 +2,10 @@
 Web search -- multi-source, keyless, no API keys required.
 
 Source priority:
-  1. DuckDuckGo HTML scrape       -- reliable, no rate limit for reasonable use
-  2. Brave Search API (keyless)   -- public endpoint, not blocked from AWS
-  3. DDG Instant Answer API       -- good for factual/entity queries
+  1. DuckDuckGo HTML scrape (POST) -- reliable, no rate limit for reasonable use
+  2. Brave Search HTML scrape      -- secondary source, works from AWS EC2
+     (Note: SearXNG all instances block AWS IPs at network layer — 403/429)
+  3. DDG Instant Answer API        -- fallback for factual/entity queries
 
 After getting URLs, optionally auto-fetch the top result via Jina Reader
 for richer context (controlled by fetch_top_result param).
