@@ -400,6 +400,16 @@ const mockOpenSearchDeleteByQuery = vi.fn().mockImplementation((params: { body: 
 });
 
 
+// Bulk mock: simulates bulk-delete by removing docs from openSearchDocs
+const mockOpenSearchBulk = vi.fn().mockImplementation((params: { body: Array<{ delete?: { _index: string; _id: string } }> }) => {
+    const deleteOps = params.body.filter((op) => op.delete).map((op) => op.delete!._id);
+    for (const [uid, docs] of openSearchDocs) {
+        openSearchDocs.set(uid, docs.filter((d) => !(deleteOps.includes((d as {id?:string}).id ?? ''))));
+    }
+    return Promise.resolve({ body: { errors: false, items: [] } });
+});
+
+
 
 
 
