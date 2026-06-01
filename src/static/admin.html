@@ -1291,7 +1291,7 @@
             <div class="card card-full">
                 <div class="card-header">
                     <span class="card-title">Ingestion Sources</span>
-                    <span style="color:var(--text-muted);font-size:0.8rem;">Configure in Settings → Ingestion</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">Users connect via <code>/connect google</code> · <code>/connect microsoft</code> · <code>/connect apple</code> in chat</span>
                 </div>
                 <div id="ingestion-sources" style="padding:8px 16px 16px;">
                     <div style="color:var(--text-muted);font-size:0.85rem;">Loading sources…</div>
@@ -1466,12 +1466,12 @@
 <!-- Test Chat Tab -->
 <div class="tab-panel" id="tab-testchat" role="tabpanel" aria-labelledby="tab-btn-testchat">
     <div style="margin-bottom:20px;">
-        <h2 style="font-family:var(--font-display);font-weight:600;font-size:1.6rem;margin:0;">Real-World Test Chat</h2>
-        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">Send a message into the live sub-agent stack as if you were a WhatsApp user. Bypasses WhatsApp delivery — replies surface here.</p>
+        <h2 class="card-title" style="font-size:1.4rem;">Real-World Test Chat</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">Send a message into the live sub-agent stack as if you were a WhatsApp user. Bypasses WhatsApp/Telegram delivery — replies surface here. Use <code>wa:</code> or <code>tg:</code> prefix.</p>
     </div>
     <div class="card" style="padding:20px;">
-        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:6px;">User ID (phone number, no @s.whatsapp.net needed)</label>
-        <input id="testchat-userid" type="text" placeholder="e.g. 6592348112" value="6592348112" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);margin-bottom:16px;">
+        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:6px;">User ID (wa:&lt;phone&gt; or tg:&lt;chat_id&gt;)</label>
+        <input id="testchat-userid" type="text" placeholder="e.g. wa:6591234567 or tg:123456789" value="" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);margin-bottom:16px;">
         <div id="testchat-log" class="testchat-log"></div>
         <div style="display:flex;gap:8px;margin-top:14px;">
             <input id="testchat-input" type="text" placeholder="Type a message…" style="flex:1;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);">
@@ -1483,8 +1483,8 @@
 <!-- Help Tab -->
 <div class="tab-panel" id="tab-help" role="tabpanel" aria-labelledby="tab-btn-help">
     <div style="margin-bottom:20px;">
-        <h2 style="font-family:var(--font-display);font-weight:600;font-size:1.6rem;margin:0;">Help &amp; Reference</h2>
-        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">URL paths exposed by the orchestrator and slash commands available to WhatsApp users.</p>
+        <h2 class="card-title" style="font-size:1.4rem;">Help &amp; Reference</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">URL paths exposed by the orchestrator and slash commands available to WhatsApp + Telegram users.</p>
     </div>
     <div class="grid-cards-3">
         <div class="card" style="padding:20px;">

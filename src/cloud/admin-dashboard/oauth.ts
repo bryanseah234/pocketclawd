@@ -48,14 +48,25 @@ async function notifyUser(userId: string, msg: string): Promise<void> {
     try {
         const redis = await getRedis();
         if (!redis) return;
+        // Derive channelType + platformId from userId prefix (wa: / tg: / legacy bare)
+        let channelType: string;
+        let platformId: string;
+        if (userId.startsWith('tg:')) {
+            channelType = 'telegram';
+            platformId = userId.slice(3); // raw chat_id
+        } else {
+            channelType = 'whatsapp';
+            const phone = userId.startsWith('wa:') ? userId.slice(3) : userId;
+            platformId = `${phone}@s.whatsapp.net`;
+        }
         const payload = JSON.stringify({
             id: `oauth-notify-${Date.now()}`,
             userId,
             type: 'chat',
             payload: {
                 content: msg,
-                platformId: `${userId}@s.whatsapp.net`,
-                channelType: 'whatsapp',
+                platformId,
+                channelType,
                 threadId: null,
             },
             timestamp: new Date().toISOString(),
