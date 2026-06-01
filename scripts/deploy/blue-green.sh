@@ -75,6 +75,7 @@ docker run -d --name nanoclaw-orchestrator-green \
   -p "${ORCH_PORT_GREEN}:3000" \
   -e WHATSAPP_ENABLED=false \
   -e NANOCLAW_ENV=cloud \
+  -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
   --env-file /etc/nanoclaw/orchestrator.env \
   "$IMG"
 
@@ -119,6 +120,7 @@ docker run -d --name nanoclaw-orchestrator-blue \
   -p "${ORCH_PORT_BLUE}:3000" \
   -e WHATSAPP_ENABLED=true \
   -e NANOCLAW_ENV=cloud \
+  -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
   --env-file /etc/nanoclaw/orchestrator.env \
   "$IMG"
 
