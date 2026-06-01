@@ -233,7 +233,7 @@ async function processNextRequest(services: CloudServices): Promise<boolean> {
 
             case 'delete_file':
 
-                await handleDeleteFile(services, userId, request);
+                await handleDeleteFile(services, userId, requestId, request);
 
                 break;
 
@@ -519,21 +519,42 @@ async function handleDeleteFile(
 
     userId: string,
 
+    requestId: string | undefined,
+
     request: Record<string, unknown>,
 
 ): Promise<void> {
 
-    const key = request.key as string;
+    // /delete <filename> sends 'filename'; legacy callers may send 'key'
+    const filename = (request.filename as string) || (request.key as string) || '';
+
+    const sendReply = async (ok: boolean, msg: string) => {
+        if (!requestId) return;
+        const responseKey = `queue:agent:${userId}:dg_response:${requestId}`;
+        await services.redis.lpush(responseKey, JSON.stringify({ success: ok, message: msg, error: ok ? undefined : msg }));
+        await services.redis.expire(responseKey, 60);
+    };
+
+    if (!filename) {
+        await sendReply(false, 'filename is required');
+        return;
+    }
+
+    // Check whether the file exists before trying to delete
+    const files = await services.dataGateway.listFiles(userId, '');
+    const match = files.find((f: { key?: string; name?: string }) =>
+        f.key?.endsWith(filename) || f.name === filename);
+
+    if (!match) {
+        await sendReply(false, `No file named '${filename}' found in your documents.`);
+        log.info('delete_file: not found', { userId, filename });
+        return;
+    }
 
     const bucket = (request.bucket as string) || '';
-
-    if (!key) return;
-
-
-
-    await services.dataGateway.deleteFile(userId, bucket, key);
-
-    log.info('Deleted file', { userId, key });
+    await services.dataGateway.deleteFile(userId, bucket, match.key || filename);
+    log.info('Deleted file', { userId, filename });
+    await sendReply(true, `'${filename}' deleted successfully.`);
 
 }
 

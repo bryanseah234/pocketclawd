@@ -58,7 +58,8 @@ async def handle_delete_document(redis: Redis, user_id: str, filename: str) -> s
     if resp is None:
         return "⚠️ Could not complete deletion (timeout). Please try again."
     if not resp.get("success"):
-        return f"⚠️ Error deleting '{filename}': {resp.get('error', 'unknown error')}"
+        msg = resp.get('message') or resp.get('error') or 'unknown error'
+        return f"⚠️ {msg}"
     return f"✅ '{filename}' has been deleted."
 
 
