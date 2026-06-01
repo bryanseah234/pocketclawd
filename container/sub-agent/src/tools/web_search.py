@@ -3,9 +3,8 @@ Web search -- multi-source, keyless, no API keys required.
 
 Source priority:
   1. DuckDuckGo HTML scrape       -- reliable, no rate limit for reasonable use
-  2. SearXNG public instances     -- open-source metasearch (rotates instances)
-  3. Brave Search API (keyless)   -- public endpoint, good results
-  4. DDG Instant Answer API       -- good for factual/entity queries
+  2. Brave Search API (keyless)   -- public endpoint, not blocked from AWS
+  3. DDG Instant Answer API       -- good for factual/entity queries
 
 After getting URLs, optionally auto-fetch the top result via Jina Reader
 for richer context (controlled by fetch_top_result param).
@@ -50,14 +49,8 @@ WEB_SEARCH_TOOL = {
     }
 }
 
-# SearXNG public instances (try in order)
-_SEARXNG_INSTANCES = [
-    "https://searx.be",
-    "https://search.inetol.net",
-    "https://search.privacyguides.net",
-    "https://paulgo.io",
-    "https://searx.tiekoetter.com",
-]
+# DDG JSON API endpoint (fallback after HTML scrape)
+_DDG_JSON_URL = "https://api.duckduckgo.com/"
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -77,7 +70,7 @@ async def search_web(query: str, num_results: int = 5) -> str:
         headers={"User-Agent": _UA},
     ) as client:
 
-        # Run DDG HTML + SearXNG concurrently for speed
+        # Run DDG HTML + Brave concurrently for speed
         results = await _search_concurrent(client, query, encoded, num_results)
 
         if results:
@@ -95,7 +88,7 @@ async def _search_concurrent(
     """Run multiple search sources concurrently, return first non-empty result."""
     tasks = [
         _ddg_html(client, encoded, n),
-        _searxng(client, encoded, n),
+        _brave_search(client, encoded, n),
     ]
     # Fire all, return first good result
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
@@ -171,28 +164,38 @@ async def _ddg_html(client: httpx.AsyncClient, encoded: str, n: int) -> list[dic
         return []
 
 
-async def _searxng(client: httpx.AsyncClient, encoded: str, n: int) -> list[dict]:
-    """SearXNG metasearch -- rotates through public instances."""
-    for instance in _SEARXNG_INSTANCES:
-        try:
-            url = f"{instance}/search?q={encoded}&format=json&language=en&safesearch=0&categories=general"
-            resp = await client.get(url, timeout=7.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                items = data.get("results", [])[:n]
-                if items:
-                    return [
-                        {
-                            "title": r.get("title", ""),
-                            "url": r.get("url", ""),
-                            "snippet": r.get("content", r.get("snippet", ""))[:250],
-                        }
-                        for r in items
-                        if r.get("url")
-                    ]
-        except Exception as e:
-            logger.debug("SearXNG %s failed: %s", instance, e)
-    return []
+async def _brave_search(client: httpx.AsyncClient, encoded: str, n: int) -> list[dict]:
+    """Brave Search API -- public endpoint, no API key required for basic use."""
+    try:
+        resp = await client.get(
+            "https://search.brave.com/search",
+            params={"q": urllib.parse.unquote_plus(encoded), "source": "web"},
+            headers={
+                "User-Agent": _UA,
+                "Accept": "text/html,application/xhtml+xml",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=8.0,
+        )
+        if resp.status_code != 200:
+            return []
+        # Parse Brave HTML results (similar structure to DDG)
+        results = []
+        title_pat = re.compile(r'<a[^>]+class="[^"]*result-header[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
+        snippet_pat = re.compile(r'class="[^"]*snippet-description[^"]*"[^>]*>(.*?)</p>', re.DOTALL)
+        titles = title_pat.findall(resp.text)
+        snippets = snippet_pat.findall(resp.text)
+        for i, (url, title_html) in enumerate(titles[:n]):
+            title = html_module.unescape(re.sub(r"<[^>]+>", "", title_html)).strip()
+            snippet = ""
+            if i < len(snippets):
+                snippet = html_module.unescape(re.sub(r"<[^>]+>", "", snippets[i])).strip()
+            if title and url and url.startswith("http"):
+                results.append({"title": title, "url": url, "snippet": snippet})
+        return results
+    except Exception as e:
+        logger.debug("Brave search failed: %s", e)
+        return []
 
 
 async def _ddg_instant(client: httpx.AsyncClient, encoded: str) -> list[dict]:

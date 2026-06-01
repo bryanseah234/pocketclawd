@@ -7,7 +7,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 RSS_FEEDS = {
-    "cna": ("CNA", "https://www.channelnewsasia.com/rss/8395884"),
+    "cna": ("CNA", "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml"),
     "bbc": ("BBC", "https://feeds.bbci.co.uk/news/rss.xml"),
     "st": ("Straits Times", "https://www.straitstimes.com/news/singapore/rss.xml"),
 }

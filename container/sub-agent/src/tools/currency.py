@@ -24,33 +24,36 @@ async def convert_currency(amount: float, from_currency: str, to_currency: str) 
     fc = from_currency.upper()
     tc = to_currency.upper()
     async with httpx.AsyncClient(timeout=6.0) as client:
-        data = None
-        # Try frankfurter.app first
+        # Primary: open.er-api.com (free, no key, reliable from AWS)
         try:
             resp = await client.get(
-                "https://api.frankfurter.app/latest",
-                params={"from": fc, "to": tc, "amount": amount}, timeout=6.0
+                f"https://open.er-api.com/v6/latest/{fc}", timeout=6.0
             )
             if resp.status_code == 200:
-                data = resp.json()
-        except Exception:
-            pass
-
-        # Fallback: exchangerate-api.io (free, no key)
-        if data is None or "rates" not in data:
-            try:
-                resp2 = await client.get(
-                    f"https://open.er-api.com/v6/latest/{fc}", timeout=6.0
-                )
-                if resp2.status_code == 200:
-                    er = resp2.json()
+                er = resp.json()
+                if er.get("result") == "success":
                     rate = er.get("rates", {}).get(tc)
                     if rate:
                         converted = amount * rate
-                        return f"{amount:,.2f} {fc} = *{converted:,.2f} {tc}* (live rate)"
-            except Exception:
-                pass
-            return f"Could not get rate for {fc} -> {tc}."
-        converted = data["rates"].get(tc, "?")
-        date = data.get("date", "today")
-        return f"{amount:,.2f} {fc} = *{converted:,.2f} {tc}* (rate from {date})"
+                        date = er.get("time_last_update_utc", "")[:16]
+                        return f"{amount:,.2f} {fc} = *{converted:,.2f} {tc}* (rate: {date})"
+        except Exception:
+            pass
+
+        # Fallback: frankfurter.dev (newer endpoint, replaces frankfurter.app)
+        try:
+            resp2 = await client.get(
+                "https://api.frankfurter.dev/v1/latest",
+                params={"base": fc, "symbols": tc}, timeout=6.0
+            )
+            if resp2.status_code == 200:
+                data = resp2.json()
+                converted = data.get("rates", {}).get(tc)
+                if converted:
+                    date = data.get("date", "today")
+                    result = amount * converted
+                    return f"{amount:,.2f} {fc} = *{result:,.2f} {tc}* (rate from {date})"
+        except Exception:
+            pass
+
+        return f"Could not get rate for {fc} -> {tc}."
