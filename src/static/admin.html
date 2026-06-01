@@ -1009,33 +1009,153 @@
         .arch-role-pill.user { background: oklch(0.25 0.06 250); color: oklch(0.80 0.08 250); }
         .arch-role-pill.assistant { background: oklch(0.22 0.06 270); color: oklch(0.78 0.10 270); }
         .arch-role-pill.system { background: oklch(0.22 0.04 180); color: oklch(0.72 0.08 180); }
-/* Test chat */
-        .testchat-log {
-            min-height: 260px;
-            max-height: 480px;
-            overflow-y: auto;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 14px;
+/* Test chat — 4-panel grid */
+        .testchat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            height: calc(100vh - 220px);
+            min-height: 480px;
+        }
+        @media (max-width: 900px) {
+            .testchat-grid { grid-template-columns: 1fr; height: auto; }
+        }
+        .testchat-panel {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-elev);
+            overflow: hidden;
+            min-height: 360px;
+        }
+        .testchat-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        .testchat-panel-header .dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .testchat-panel-header .uid-label {
+            opacity: 0.55;
+            font-size: 0.72rem;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .testchat-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            scroll-behavior: smooth;
         }
         .testchat-msg {
-            max-width: 76%;
-            padding: 9px 14px;
-            border-radius: 12px;
-            font-size: 0.88rem;
-            line-height: 1.4;
+            max-width: 82%;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            line-height: 1.5;
             white-space: pre-wrap;
-            word-wrap: break-word;
+            word-break: break-word;
         }
-        .testchat-msg.user { align-self: flex-end; background: var(--accent); color: var(--bg); }
-        .testchat-msg.bot { align-self: flex-start; background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); }
-        .testchat-msg.error { align-self: stretch; background: rgba(161,52,52,0.12); color: #d77; border: 1px solid #8b2e2e; }
-        .table.small td, .table.small th { padding: 8px 12px; font-size: 0.82rem; }
-        .table.small code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 0.78rem; color: var(--accent); }
+        .testchat-msg.user {
+            align-self: flex-end;
+            background: var(--accent);
+            color: var(--bg);
+        }
+        .testchat-msg.bot {
+            align-self: flex-start;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+        }
+        .testchat-msg.error {
+            align-self: stretch;
+            background: rgba(161,52,52,0.18);
+            border: 1px solid rgba(220,60,60,0.35);
+            color: #f87171;
+            font-size: 0.78rem;
+        }
+        .testchat-msg.system {
+            align-self: center;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            background: transparent;
+            padding: 2px 8px;
+        }
+        .testchat-msg .msg-meta {
+            font-size: 0.66rem;
+            opacity: 0.45;
+            margin-top: 3px;
+        }
+        .testchat-msg img.thumb {
+            display: block;
+            max-width: 180px;
+            max-height: 140px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            object-fit: cover;
+        }
+        .testchat-input-row {
+            display: flex;
+            gap: 6px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--border);
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .testchat-input-row input[type=text] {
+            flex: 1;
+            padding: 9px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.83rem;
+        }
+        .testchat-input-row input[type=text]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .testchat-attach-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-muted);
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: border-color 0.15s, color 0.15s;
+            flex-shrink: 0;
+        }
+        .testchat-attach-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .testchat-attach-btn.has-file { border-color: var(--accent); color: var(--accent); }
+        .testchat-send-btn {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 8px;
+            padding: 9px 16px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: opacity 0.15s;
+        }
+        .testchat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .testchat-send-btn:hover:not(:disabled) { opacity: 0.85; }
         /* Standardize all cards: same padding, same border, same radius */
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
         /* Settings tabs - coherent padding */
@@ -1465,21 +1585,14 @@
 
 <!-- Test Chat Tab -->
 <div class="tab-panel" id="tab-testchat" role="tabpanel" aria-labelledby="tab-btn-testchat">
-    <div style="margin-bottom:20px;">
-        <h2 class="card-title" style="font-size:1.4rem;">Real-World Test Chat</h2>
-        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">Send a message into the live sub-agent stack as if you were a WhatsApp user. Bypasses WhatsApp/Telegram delivery — replies surface here. Use <code>wa:</code> or <code>tg:</code> prefix.</p>
+    <div style="margin-bottom:16px;display:flex;align-items:baseline;gap:12px;">
+        <h2 class="card-title" style="font-size:1.4rem;margin:0;">Test Users</h2>
+        <span style="color:var(--text-muted);font-size:0.82rem;">Messages route through the live sub-agent stack. Replies surface here. Files and images supported.</span>
     </div>
-    <div class="card" style="padding:20px;">
-        <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:6px;">User ID (wa:&lt;phone&gt; or tg:&lt;chat_id&gt;)</label>
-        <input id="testchat-userid" type="text" placeholder="e.g. wa:6591234567 or tg:123456789" value="" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);margin-bottom:16px;">
-        <div id="testchat-log" class="testchat-log"></div>
-        <div style="display:flex;gap:8px;margin-top:14px;">
-            <input id="testchat-input" type="text" placeholder="Type a message…" style="flex:1;padding:12px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);">
-            <button id="testchat-send" class="btn-primary" type="button">Send</button>
-        </div>
+    <div class="testchat-grid" id="testchat-grid">
+        <!-- Panels injected by initTestChat() -->
     </div>
 </div>
-
 <!-- Help Tab -->
 <div class="tab-panel" id="tab-help" role="tabpanel" aria-labelledby="tab-btn-help">
     <div style="margin-bottom:20px;">
@@ -2944,59 +3057,222 @@
         }
 
         // ---------------- Test Chat tab ----------------
+        
+        // ── TEST USERS CONFIG ──────────────────────────────────────────────
+        const TEST_USERS = [
+            { id: 'test_alpha',   label: 'Alpha',   color: '#4f8ef7' },
+            { id: 'test_beta',    label: 'Beta',    color: '#34c77b' },
+            { id: 'test_charlie', label: 'Charlie', color: '#a855f7' },
+            { id: 'test_delta',   label: 'Delta',   color: '#f97316' },
+        ];
+
         function initTestChat() {
-            const send = document.getElementById('testchat-send');
-            const input = document.getElementById('testchat-input');
-            if (send && !send.dataset.bound) {
-                send.dataset.bound = '1';
-                send.addEventListener('click', sendTestChat);
-                input.addEventListener('keydown', e => { if (e.key === 'Enter') sendTestChat(); });
-            }
+            const grid = document.getElementById('testchat-grid');
+            if (!grid || grid.dataset.built) return;
+            grid.dataset.built = '1';
+            TEST_USERS.forEach(u => grid.appendChild(buildPanel(u)));
         }
-        async function sendTestChat() {
-            const userId = (document.getElementById('testchat-userid').value || '').trim();
-            const text = (document.getElementById('testchat-input').value || '').trim();
-            if (!userId || !text) return;
-            const log = document.getElementById('testchat-log');
-            appendTestMsg('user', text);
-            document.getElementById('testchat-input').value = '';
-            const sendBtn = document.getElementById('testchat-send');
-            sendBtn.disabled = true; sendBtn.textContent = 'Waiting…';
-            try {
-                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
-                const r = await fetch('/admin/api/test/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ userId, text }),
-                });
-                const data = await r.json();
-                if (!r.ok) {
-                    appendTestMsg('error', `[${r.status}] ${data.error || data.note || 'unknown error'}`);
-                } else if (data.status === 'timeout') {
-                    appendTestMsg('error', 'Sub-agent did not respond within 45s. Check ECS logs.');
-                } else {
-                    let body = data.response;
-                    if (body && typeof body === 'object') {
-                        body = body.text || body.content || JSON.stringify(body);
-                    }
-                    appendTestMsg('bot', String(body || '(empty response)'));
-                }
-            } catch (e) {
-                appendTestMsg('error', 'Request failed: ' + (e.message || String(e)));
-            } finally {
-                sendBtn.disabled = false; sendBtn.textContent = 'Send';
-            }
+
+        function buildPanel(u) {
+            // wrapper
+            const panel = document.createElement('div');
+            panel.className = 'testchat-panel';
+            panel.id = 'panel-' + u.id;
+
+            // header
+            const hdr = document.createElement('div');
+            hdr.className = 'testchat-panel-header';
+            hdr.innerHTML = `<span class="dot" style="background:${u.color}"></span>
+                <span style="color:${u.color}">${u.label}</span>
+                <span class="uid-label">${u.id}</span>
+                <span style="flex:1"></span>
+                <button onclick="clearPanel('${u.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;" title="Clear log">✕ clear</button>`;
+            panel.appendChild(hdr);
+
+            // log
+            const log = document.createElement('div');
+            log.className = 'testchat-log';
+            log.id = 'log-' + u.id;
+            panel.appendChild(log);
+
+            // input row
+            const row = document.createElement('div');
+            row.className = 'testchat-input-row';
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx';
+            fileInput.style.display = 'none';
+            fileInput.id = 'file-' + u.id;
+            row.appendChild(fileInput);
+
+            const attachBtn = document.createElement('button');
+            attachBtn.className = 'testchat-attach-btn';
+            attachBtn.title = 'Attach file or image';
+            attachBtn.textContent = '📎';
+            attachBtn.onclick = () => fileInput.click();
+            row.appendChild(attachBtn);
+
+            fileInput.addEventListener('change', () => {
+                attachBtn.classList.toggle('has-file', fileInput.files.length > 0);
+                attachBtn.title = fileInput.files.length > 0
+                    ? fileInput.files[0].name
+                    : 'Attach file or image';
+            });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Message ' + u.label + '…';
+            input.id = 'input-' + u.id;
+            input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendMsg(u.id); });
+            row.appendChild(input);
+
+            const btn = document.createElement('button');
+            btn.className = 'testchat-send-btn';
+            btn.id = 'send-' + u.id;
+            btn.textContent = '▶';
+            btn.onclick = () => sendMsg(u.id);
+            row.appendChild(btn);
+
+            panel.appendChild(row);
+            return panel;
         }
-        function appendTestMsg(kind, text) {
-            const log = document.getElementById('testchat-log');
+
+        function clearPanel(uid) {
+            const log = document.getElementById('log-' + uid);
+            if (log) log.innerHTML = '';
+        }
+
+        function appendMsg(uid, kind, content, meta) {
+            const log = document.getElementById('log-' + uid);
             if (!log) return;
             const div = document.createElement('div');
             div.className = 'testchat-msg ' + kind;
-            div.textContent = text;
+
+            // Image preview for user-sent images
+            if (kind === 'user' && meta && meta.imageDataUrl) {
+                const img = document.createElement('img');
+                img.className = 'thumb';
+                img.src = meta.imageDataUrl;
+                div.appendChild(img);
+            }
+
+            const txt = document.createElement('div');
+            txt.textContent = content;
+            div.appendChild(txt);
+
+            if (meta && meta.ts) {
+                const m = document.createElement('div');
+                m.className = 'msg-meta';
+                m.textContent = meta.ts;
+                div.appendChild(m);
+            }
+
             log.appendChild(div);
             log.scrollTop = log.scrollHeight;
         }
+
+        async function sendMsg(uid) {
+            const input   = document.getElementById('input-' + uid);
+            const sendBtn = document.getElementById('send-' + uid);
+            const fileEl  = document.getElementById('file-' + uid);
+            const attachBtn = fileEl ? fileEl.previousElementSibling : null;
+
+            const text = (input ? input.value : '').trim();
+            const file = fileEl && fileEl.files.length > 0 ? fileEl.files[0] : null;
+
+            if (!text && !file) return;
+
+            const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Show user bubble
+            if (file) {
+                const isImage = file.type.startsWith('image/');
+                const label = text ? `${text}\n📎 ${file.name}` : `📎 ${file.name}`;
+                const meta = {};
+                if (isImage) {
+                    meta.imageDataUrl = await readAsDataUrl(file);
+                }
+                meta.ts = ts;
+                appendMsg(uid, 'user', label, meta);
+            } else {
+                appendMsg(uid, 'user', text, { ts });
+            }
+
+            if (input) input.value = '';
+            if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '…'; }
+
+            try {
+                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                let payload;
+                let fetchOpts;
+
+                if (file) {
+                    // Multipart form — send text + file together
+                    const fd = new FormData();
+                    fd.append('userId', uid);
+                    if (text) fd.append('text', text);
+                    fd.append('file', file);
+                    fetchOpts = {
+                        method: 'POST',
+                        headers: { 'X-CSRF-Token': csrf },
+                        credentials: 'same-origin',
+                        body: fd,
+                    };
+                } else {
+                    payload = JSON.stringify({ userId: uid, text });
+                    fetchOpts = {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                        credentials: 'same-origin',
+                        body: payload,
+                    };
+                }
+
+                const r = await fetch('/admin/api/test/send', fetchOpts);
+                const data = await r.json();
+
+                if (!r.ok) {
+                    appendMsg(uid, 'error', `[${r.status}] ${data.error || data.note || 'unknown error'}`, { ts });
+                } else if (data.status === 'timeout') {
+                    appendMsg(uid, 'error', 'No response within 45s — check ECS logs.', { ts });
+                } else {
+                    let body = data.response;
+                    if (body && typeof body === 'object') {
+                        body = body.text || body.content || JSON.stringify(body, null, 2);
+                    }
+                    appendMsg(uid, 'bot', String(body || '(empty response)'), { ts });
+                }
+            } catch (e) {
+                appendMsg(uid, 'error', 'Request failed: ' + (e.message || String(e)), { ts });
+            } finally {
+                if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '▶'; }
+                // Clear file after send
+                if (fileEl) { fileEl.value = ''; }
+                if (attachBtn) {
+                    attachBtn.classList.remove('has-file');
+                    attachBtn.title = 'Attach file or image';
+                }
+            }
+        }
+
+        function readAsDataUrl(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsDataURL(file);
+            });
+        }
+
+        function readAsArrayBuffer(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsArrayBuffer(file);
+            });
+        }\
 
         // ---------------- Reset all (Users tab) ----------------
         async function resetAllUsers() {

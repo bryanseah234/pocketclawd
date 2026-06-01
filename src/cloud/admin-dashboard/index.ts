@@ -541,6 +541,55 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
     });
 }
 
+/**
+ * Minimal multipart/form-data parser.
+ * Returns a map of field-name → { text?, data?, filename?, contentType? }.
+ */
+function parseMultipart(
+    raw: Buffer,
+    boundary: string,
+): Record<string, { text?: string; data?: Buffer; filename?: string; contentType?: string }> {
+    const result: Record<string, { text?: string; data?: Buffer; filename?: string; contentType?: string }> = {};
+    const sep = Buffer.from('--' + boundary);
+    const end = Buffer.from('--' + boundary + '--');
+    let pos = 0;
+    while (pos < raw.length) {
+        const sepIdx = raw.indexOf(sep, pos);
+        if (sepIdx < 0) break;
+        pos = sepIdx + sep.length;
+        if (raw.slice(pos, pos + 2).toString() === '--') break; // end boundary
+        // skip CRLF after boundary
+        if (raw[pos] === 0x0d && raw[pos + 1] === 0x0a) pos += 2;
+        // parse headers
+        const headerEnd = raw.indexOf(Buffer.from('\r\n\r\n'), pos);
+        if (headerEnd < 0) break;
+        const headerStr = raw.slice(pos, headerEnd).toString('utf8');
+        pos = headerEnd + 4;
+        // find next boundary
+        const nextSep = raw.indexOf(sep, pos);
+        const partEnd = nextSep < 0 ? raw.length : nextSep - 2; // -2 for preceding CRLF
+        const partData = raw.slice(pos, partEnd);
+        pos = nextSep < 0 ? raw.length : nextSep;
+
+        // extract field name + optional filename + content-type
+        const cdMatch = headerStr.match(/Content-Disposition[^\r\n]*name="([^"]+)"/i);
+        const fnMatch = headerStr.match(/filename="([^"]+)"/i);
+        const ctMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/i);
+        if (!cdMatch) continue;
+        const fieldName = cdMatch[1];
+        const filename = fnMatch ? fnMatch[1] : undefined;
+        const ct = ctMatch ? ctMatch[1].trim() : undefined;
+
+        if (filename || (ct && !ct.includes('text/plain'))) {
+            result[fieldName] = { data: partData, filename, contentType: ct };
+        } else {
+            result[fieldName] = { text: partData.toString('utf8') };
+        }
+    }
+    return result;
+}
+
+
 function cfgFromServices(services: { dataGateway: { cfg: { dynamoDb: { chatMessagesTable?: string } } } }, _kind: string): string {
     const t = services.dataGateway.cfg.dynamoDb.chatMessagesTable ?? '';
     return t ? '4 tables (' + t + ' active)' : '4 tables';
@@ -1079,57 +1128,150 @@ export async function handleAdminRequest(
             return true;
         }
 
-        // POST /admin/api/test/send - admin sends a test message as a user (real-world test).
-        // Pushes to the real sub-agent inbound queue with channelType='admin-test'
-        // so the response-poll bridge captures and stores the reply for the admin
-        // console instead of forwarding it to WhatsApp.
-        // Body: { userId: string, text: string }
+        // GET /admin/api/test/users — fixed test user list (for CLI automation)
+        if (path === '/admin/api/test/users' && method === 'GET') {
+            sendJson(res, {
+                users: [
+                    { id: 'test_alpha',   label: 'Alpha',   color: '#4f8ef7' },
+                    { id: 'test_beta',    label: 'Beta',    color: '#34c77b' },
+                    { id: 'test_charlie', label: 'Charlie', color: '#a855f7' },
+                    { id: 'test_delta',   label: 'Delta',   color: '#f97316' },
+                ],
+            });
+            return true;
+        }
+
+        // POST /admin/api/test/send — inject a message into the live sub-agent stack.
+        // Accepts JSON  { userId, text }
+        //   or multipart { userId, text?, file }  (when attaching a file/image).
+        // Pushes to queue:agent:shared:inbound with channelType='admin-test'.
+        // File path: uploads bytes to S3, then either:
+        //   image/* → kind='image' envelope with presigned URL
+        //   other   → kind='document_upload' via nanoclaw:uploads:pending + chat ack
+        // Response is surfaced via admin:test:response:{messageId} (BRPOP, 45s).
         if (path === '/admin/api/test/send' && method === 'POST') {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
-                const body = await readJsonBody(req);
-                const userIdRaw = String(body?.userId ?? '').trim();
-                const text = String(body?.text ?? '').trim();
-                if (!userIdRaw || !text) { sendJson(res, { error: 'userId and text required' }, 400); return true; }
-                // Normalize: use bare phone (no @s.whatsapp.net) so chat-messages keys match.
-                const userId = userIdRaw.replace(/@s\.whatsapp\.net$/, '');
+                const contentType = req.headers['content-type'] ?? '';
+                let userId = '';
+                let text = '';
+                let fileBytes: Buffer | null = null;
+                let fileName = '';
+                let fileMime = '';
+
+                if (contentType.includes('multipart/form-data')) {
+                    // ── Parse multipart form ─────────────────────────────────
+                    const boundary = contentType.split('boundary=')[1]?.trim();
+                    if (!boundary) { sendJson(res, { error: 'missing multipart boundary' }, 400); return true; }
+                    const raw = await new Promise<Buffer>((resolve, reject) => {
+                        const chunks: Buffer[] = [];
+                        req.on('data', (c: Buffer) => chunks.push(c));
+                        req.on('end', () => resolve(Buffer.concat(chunks)));
+                        req.on('error', reject);
+                    });
+                    const parts = parseMultipart(raw, boundary);
+                    userId = parts['userId'] ? parts['userId'].text ?? '' : '';
+                    text   = parts['text']   ? parts['text'].text ?? ''   : '';
+                    if (parts['file']) {
+                        fileBytes = parts['file'].data ?? null;
+                        fileName  = parts['file'].filename ?? 'upload';
+                        fileMime  = parts['file'].contentType ?? 'application/octet-stream';
+                    }
+                } else {
+                    const body = await readJsonBody(req);
+                    userId = String(body?.userId ?? '').trim();
+                    text   = String(body?.text   ?? '').trim();
+                }
+
+                userId = userId.trim();
+                if (!userId) { sendJson(res, { error: 'userId required' }, 400); return true; }
+                if (!text && !fileBytes) { sendJson(res, { error: 'text or file required' }, 400); return true; }
+
                 const messageId = 'admin-test-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-                // Sub-agent runs with AGENT_USER_ID=shared and dispatches by
-                // payload.platformId. Queue is queue:agent:shared:inbound and
-                // payload envelope is { id, userId, type, payload:{...}, timestamp }.
-                const platformId = userId + '@s.whatsapp.net';
+                const platformId = userId + '@admin-test';
+
+                // ── File upload to S3 ────────────────────────────────────────
+                let fileS3Key = '';
+                let filePresignedUrl = '';
+                if (fileBytes && fileBytes.length > 0) {
+                    const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+                    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
+                    const cfg = services.config;
+                    const bucket = cfg?.s3?.dataBucket ?? process.env['DATA_BUCKET'] ?? '';
+                    if (!bucket) { sendJson(res, { error: 'S3 bucket not configured' }, 503); return true; }
+                    const s3 = new S3Client({ region: process.env['AWS_REGION'] ?? 'ap-southeast-1' });
+                    const safeFile = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    fileS3Key = `media/admin-test/${userId}/${Date.now()}-${safeFile}`;
+                    await s3.send(new PutObjectCommand({
+                        Bucket: bucket,
+                        Key: fileS3Key,
+                        Body: fileBytes,
+                        ContentType: fileMime,
+                    }));
+                    const getCmd = new (await import('@aws-sdk/client-s3')).GetObjectCommand({ Bucket: bucket, Key: fileS3Key });
+                    filePresignedUrl = await getSignedUrl(s3 as unknown as Parameters<typeof getSignedUrl>[0], getCmd, { expiresIn: 3600 });
+                }
+
+                // ── Build envelope ───────────────────────────────────────────
+                const isImage = fileMime.startsWith('image/');
+                let envelopeType = 'chat';
+                const payloadBase: Record<string, unknown> = {
+                    channelType: 'admin-test',
+                    platformId,
+                    threadId: platformId,
+                    source: 'admin-dashboard-test',
+                    adminTestMessageId: messageId,
+                };
+
+                if (fileBytes && isImage) {
+                    // Image message — sub-agent vision pipeline
+                    payloadBase['kind'] = 'image';
+                    payloadBase['content'] = text || '';
+                    payloadBase['url'] = filePresignedUrl;
+                    payloadBase['filename'] = fileName;
+                } else if (fileBytes && !isImage) {
+                    // Document upload — push to uploads:pending queue, send chat ack
+                    const uploadId = 'admin-upload-' + messageId;
+                    const cfg = services.config;
+                    const bucket = cfg?.s3?.dataBucket ?? process.env['DATA_BUCKET'] ?? '';
+                    await services.redis.lpush('nanoclaw:uploads:pending', JSON.stringify({
+                        uploadId,
+                        filename: fileName,
+                        contentType: fileMime,
+                        s3Key: fileS3Key,
+                        bucket,
+                        userId,
+                        timestamp: new Date().toISOString(),
+                    }));
+                    payloadBase['kind'] = 'user_message';
+                    payloadBase['content'] = text || `📥 Processing "${fileName}" — ask me about it in ~30s.`;
+                    envelopeType = 'chat';
+                } else {
+                    payloadBase['kind'] = 'user_message';
+                    payloadBase['content'] = text;
+                }
+
                 const envelope = {
                     id: messageId,
                     userId: 'shared',
-                    type: 'chat',
-                    payload: {
-                        content: text,
-                        channelType: 'admin-test',
-                        platformId,
-                        threadId: platformId,
-                        kind: 'user_message',
-                        source: 'admin-dashboard-test',
-                        adminTestMessageId: messageId,
-                    },
+                    type: envelopeType,
+                    payload: payloadBase,
                     timestamp: new Date().toISOString(),
                 };
+
                 await services.redis.lpush('queue:agent:shared:inbound', JSON.stringify(envelope));
                 await services.redis.expire('queue:agent:shared:inbound', 3600);
-                // Wait for response-poll bridge to surface the reply.
-                // CRITICAL: use a dedicated blocking Redis connection so the BRPOP
-                // doesn't hold up other commands (e.g. orch response-handler lpush)
-                // on the shared services.redis client. Without this, the BRPOP
-                // blocks the connection and the response lpush queues behind it,
-                // taking ~45s to surface.
+
+                // ── Wait for sub-agent response ───────────────────────────────
                 const responseKey = 'admin:test:response:' + messageId;
                 const { Redis: IORedisCtor } = await import('ioredis');
-                const cfg = services.config?.redis ?? null;
+                const redisCfg = services.config?.redis ?? null;
                 const blockingClient = new IORedisCtor({
-                    host: cfg?.host,
-                    port: cfg?.port,
-                    password: cfg?.password,
-                    tls: cfg?.tls ? {} : undefined,
+                    host: redisCfg?.host,
+                    port: redisCfg?.port,
+                    password: redisCfg?.password,
+                    tls: redisCfg?.tls ? {} : undefined,
                     lazyConnect: true,
                     maxRetriesPerRequest: 3,
                 });
@@ -1144,9 +1286,8 @@ export async function handleAdminRequest(
                     sendJson(res, { messageId, status: 'timeout', note: 'no response within 45s; check ECS sub-agent logs' }, 504);
                     return true;
                 }
-                const raw3 = result[1];
-                let parsed: unknown = raw3;
-                try { parsed = JSON.parse(raw3); } catch { /* keep raw */ }
+                let parsed: unknown = result[1];
+                try { parsed = JSON.parse(result[1]); } catch { /* keep raw */ }
                 sendJson(res, { messageId, status: 'ok', response: parsed });
             } catch (err) {
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
