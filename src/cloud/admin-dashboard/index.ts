@@ -1154,7 +1154,7 @@ export async function handleAdminRequest(
         // POST /admin/api/test/send — inject a message into the live sub-agent stack.
         // Accepts JSON  { userId, text }
         //   or multipart { userId, text?, file }  (when attaching a file/image).
-        // Pushes to queue:agent:shared:inbound with channelType='admin-test'.
+        // Pushes to queue:agent:dispatch (DISPATCH_SENTINEL key) with channelType='admin-test'.
         // File path: uploads bytes to S3, then either:
         //   image/* → kind='image' envelope with presigned URL
         //   other   → kind='document_upload' via nanoclaw:uploads:pending + chat ack
@@ -1264,14 +1264,14 @@ export async function handleAdminRequest(
 
                 const envelope = {
                     id: messageId,
-                    userId: 'shared',
+                    userId: 'dispatch', // DISPATCH_SENTINEL — routes to queue:agent:dispatch which ECS sub-agent polls
                     type: envelopeType,
                     payload: payloadBase,
                     timestamp: new Date().toISOString(),
                 };
 
-                await services.redis.lpush('queue:agent:shared:inbound', JSON.stringify(envelope));
-                await services.redis.expire('queue:agent:shared:inbound', 3600);
+                await services.redis.lpush('queue:agent:dispatch', JSON.stringify(envelope));
+                await services.redis.expire('queue:agent:dispatch', 3600);
 
                 // ── Wait for sub-agent response ───────────────────────────────
                 // Use a duplicated connection for BRPOP: ioredis cannot share a
