@@ -29,6 +29,10 @@
 #   ORCH_PORT_BLUE=3000  ORCH_PORT_GREEN=3001
 #   TG_ARN=<target group arn>   INSTANCE_ID=<for ALB (de)register>
 #   HEALTH_TIMEOUT=120
+#
+# Host file (required for Telegram + future channel tokens):
+#   /etc/nanoclaw/orchestrator.env  — sourced via --env-file on every docker run
+#   Minimum contents: TELEGRAM_ENABLED=true, TELEGRAM_BOT_TOKEN=<token>
 # -----------------------------------------------------------------------------
 set -euo pipefail
 
