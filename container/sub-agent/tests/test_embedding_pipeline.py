@@ -313,4 +313,4 @@ class TestEmbeddingPipeline:
                 await self.pipeline.embed_text("Test failure")
 
         # Should have tried MAX_RETRIES times
-        assert self.mock_client.invoke_model.call_count == 5
+        assert self.mock_client.invoke_model.call_count == 3
