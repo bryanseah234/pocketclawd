@@ -143,7 +143,6 @@ jobs:
       - name: Run k6 C-12 load test (50 VUs, 2 min)
         timeout-minutes: 6
         run: k6 run tests/load/k6-load-c12.js --env BASE_URL=http://3.0.132.150:3000
-        timeout-minutes: 2
 
   security-scan:
     name: Security Scan
