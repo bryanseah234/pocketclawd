@@ -1228,26 +1228,17 @@ export class DataGateway implements IDataGateway {
 
 
 
-        await this.openSearchClient.deleteByQuery({
-
-            index: indexName,
-
-            body: {
-
-                query: {
-
-                    bool: {
-
-                        filter,
-
-                    },
-
-                },
-
-            },
-
-
+        // AOSS Serverless does not support _delete_by_query.
+        // Workaround: search for matching _ids then bulk-delete.
+        const sr1 = await this.openSearchClient.search({
+            index: indexName, size: 1000,
+            body: { query: { bool: { filter } }, _source: false },
         });
+        const hits1 = ((sr1.body as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
+        if (hits1.length > 0) {
+            await this.openSearchClient.bulk({ body: hits1.flatMap((h: { _id: string }) =>
+                [{ delete: { _index: indexName, _id: h._id } }]) });
+        }
 
     }
 
@@ -1411,37 +1402,17 @@ export class DataGateway implements IDataGateway {
 
         const indexName = this.config.openSearch.indexName;
 
-        const result = await this.openSearchClient.deleteByQuery({
-
-            index: indexName,
-
-            body: {
-
-                query: {
-
-                    bool: {
-
-                        filter: [
-
-                            { term: { userId } },
-
-                            { term: { sourceUrl: url } },
-
-                        ],
-
-                    },
-
-                },
-
-            },
-
-
+        // AOSS Serverless does not support _delete_by_query.
+        // Workaround: search for matching _ids then bulk-delete.
+        const sr2 = await this.openSearchClient.search({
+            index: indexName, size: 1000,
+            body: { query: { bool: { filter: [{ term: { userId } }, { term: { sourceUrl: url } }] } }, _source: false },
         });
-
-        const r = result as { body?: { deleted?: number }; deleted?: number };
-
-        return r.body?.deleted ?? r.deleted ?? 0;
-
+        const hits2 = ((sr2.body as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
+        if (hits2.length === 0) return 0;
+        await this.openSearchClient.bulk({ body: hits2.flatMap((h: { _id: string }) =>
+            [{ delete: { _index: indexName, _id: h._id } }]) });
+        return hits2.length;
     }
 
 
