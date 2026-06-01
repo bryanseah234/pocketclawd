@@ -143,11 +143,15 @@ class BedrockClaude:
         messages: list[dict[str, Any]] = []
 
         # Add conversation history (last 100 messages max)
+        # Skip blank-content messages — Bedrock Converse rejects empty text fields.
         if history:
             for msg in history[-100:]:
+                content = (msg.get("content") or "").strip()
+                if not content:
+                    continue
                 messages.append({
                     "role": msg["role"],
-                    "content": [{"text": msg["content"]}],
+                    "content": [{"text": content}],
                 })
 
         # Build the current user message with optional RAG context

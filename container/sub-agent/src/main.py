@@ -158,7 +158,8 @@ async def connect_redis(settings: Settings) -> aioredis.Redis:
         ssl=settings.redis.ssl,
         decode_responses=True,
         socket_connect_timeout=5,
-        socket_timeout=10,
+        socket_timeout=30,  # must exceed queue_poll_timeout (5s) plus network slack
+        retry_on_timeout=True,
     )
     await client.ping()
     return client
