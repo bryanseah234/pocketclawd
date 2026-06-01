@@ -66,6 +66,7 @@ jobs:
           tags: |
             ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:${{ steps.meta.outputs.tag }}
             ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:feature-latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build & push agent
@@ -77,6 +78,7 @@ jobs:
           tags: |
             ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:${{ steps.meta.outputs.tag }}
             ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:feature-latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
