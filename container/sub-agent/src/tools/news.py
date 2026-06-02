@@ -7,6 +7,11 @@ Reuters / AP / CNBC block AWS IPs — not included.
 import html as html_module
 import re
 import xml.etree.ElementTree as ET
+try:
+    from lxml import etree as _lxml_etree
+    _LXML = True
+except ImportError:
+    _LXML = False
 import httpx
 import logging
 
@@ -100,7 +105,14 @@ async def get_news(topic: str = "", source: str = "cna", limit: int = 5) -> str:
                 headers={"User-Agent": _ua},
             )
             resp.raise_for_status()
-            root = ET.fromstring(resp.text)
+            if _LXML:
+                # lxml recovery mode handles malformed XML (bare &, invalid tokens)
+                _parser = _lxml_etree.XMLParser(recover=True, encoding="utf-8")
+                _lxml_root = _lxml_etree.fromstring(resp.content, _parser)
+                # Convert to stdlib ET for uniform downstream processing
+                root = ET.fromstring(_lxml_etree.tostring(_lxml_root, encoding="unicode"))
+            else:
+                root = ET.fromstring(resp.text)
         except Exception as e:
             logger.warning("RSS fetch failed for %s: %s", feed_name, e)
             return f"Could not fetch {feed_name} headlines right now — try again shortly."
