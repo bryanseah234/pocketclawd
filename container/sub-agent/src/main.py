@@ -406,6 +406,38 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
         logger.info("PERF rag_total=%.2fs user=%s", _time.monotonic() - _t2, message.user_id)
         logger.info("PERF total=%.2fs user=%s", _time.monotonic() - _t0, message.user_id)
 
+        # Intercept hallucinated IMAGE_URL markers (e.g. pollinations.ai URLs)
+        # Claude sometimes fabricates image URLs in the IMAGE_URL:...:IMAGE_URL format.
+        # Detect non-S3 URLs and replace by calling generate_image directly.
+        import re as _re_img
+        _img_match = _re_img.search(r"IMAGE_URL:(.+?):IMAGE_URL", response_text)
+        if _img_match:
+            _extracted_url = _img_match.group(1)
+            _is_our_s3 = (
+                ".s3." in _extracted_url
+                and "amazonaws.com" in _extracted_url
+                and "media/generated" in _extracted_url
+            )
+            if not _is_our_s3:
+                # Hallucinated URL -- extract prompt from pollinations URL if possible,
+                # otherwise use the message content as the prompt
+                import urllib.parse as _up
+                if "pollinations.ai/prompt/" in _extracted_url:
+                    _prompt_raw = _extracted_url.split("/prompt/", 1)[-1].split("?")[0]
+                    _prompt = _up.unquote_plus(_prompt_raw)[:512]
+                else:
+                    _prompt = message.content[:512]
+                logger.warning("Hallucinated IMAGE_URL detected, calling generate_image. url=%s",
+                               _extracted_url[:80])
+                try:
+                    from src.tools.image_gen import generate_image as _gen_img
+                    _real_url = await _gen_img(prompt=_prompt)
+                    response_text = _real_url  # IMAGE_URL:<s3-url>:IMAGE_URL
+                    logger.info("Replaced hallucinated image with real S3 image")
+                except Exception as _img_err:
+                    logger.error("generate_image fallback failed: %s", _img_err)
+                    response_text = "Sorry, image generation failed. Please try again."
+
         # Store assistant response fire-and-forget
         asyncio.ensure_future(_store_chat_message(message.user_id, "assistant", response_text))
 
