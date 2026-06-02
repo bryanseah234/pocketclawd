@@ -1212,7 +1212,16 @@ export async function handleAdminRequest(
                     if (!bucket) { sendJson(res, { error: 'S3 bucket not configured' }, 503); return true; }
                     const s3 = new S3Client({ region: process.env['AWS_REGION'] ?? 'ap-southeast-1' });
                     const safeFile = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-                    fileS3Key = `media/admin-test/${userId}/${Date.now()}-${safeFile}`;
+                    // Documents must land under {userId}/documents/{filename} so the
+                    // upload-worker's s3Key passthrough (startsWith `${userId}/`) holds
+                    // and the indexer can GetObject the exact key. Previously documents
+                    // went to media/admin-test/... and the worker rewrote the key WITHOUT
+                    // copying the object -> indexer NoSuchKey -> upload never indexed.
+                    // Images keep the media/admin-test path (delivered via presigned URL).
+                    const isImageFile = fileMime.startsWith('image/');
+                    fileS3Key = isImageFile
+                        ? `media/admin-test/${userId}/${Date.now()}-${safeFile}`
+                        : `${userId}/documents/${safeFile}`;
                     await s3.send(new PutObjectCommand({
                         Bucket: bucket,
                         Key: fileS3Key,
