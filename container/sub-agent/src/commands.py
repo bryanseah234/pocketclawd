@@ -225,10 +225,29 @@ async def handle_profile(redis: Redis, user_id: str, arg: str) -> str:
     else:
         return "Only `depth` and `domain` can be edited via /profile."
 
-    ctx = await probe_user_preferences(redis, user_id)
+    # Read current values from Redis profile cache first (avoids DGW race
+    # when two SET commands run back-to-back before the first write commits).
+    cache_key_read = f"cache:profile:{user_id}"
+    cached_profile: dict = {}
+    try:
+        _cached_raw = await redis.get(cache_key_read)
+        if _cached_raw:
+            cached_profile = json.loads(_cached_raw)
+    except Exception:
+        pass
+
+    if cached_profile:
+        # Use cached values — avoids re-reading stale DGW state
+        existing_depth  = cached_profile.get("technical_depth")
+        existing_domain = cached_profile.get("primary_domain")
+    else:
+        ctx = await probe_user_preferences(redis, user_id)
+        existing_depth  = ctx.technical_depth
+        existing_domain = ctx.primary_domain
+
     payload_prefs = {
-        "technical_depth": update.get("technical_depth", ctx.technical_depth),
-        "primary_domain": update.get("primary_domain", ctx.primary_domain),
+        "technical_depth": update.get("technical_depth", existing_depth),
+        "primary_domain": update.get("primary_domain", existing_domain),
         "discoveryCompleted": True,
     }
 
@@ -247,7 +266,7 @@ async def handle_profile(redis: Redis, user_id: str, arg: str) -> str:
 
     # Cache confirmed values so the SHOW path reads them immediately
     # without racing the async DGW queue write (TTL=120s).
-    cache_key = f"cache:profile:{user_id}"
+    cache_key = cache_key_read  # already defined above
     try:
         await redis.setex(cache_key, 120, json.dumps({
             "technical_depth": payload_prefs.get("technical_depth"),
