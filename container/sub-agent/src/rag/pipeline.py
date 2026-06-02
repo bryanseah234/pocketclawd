@@ -55,6 +55,7 @@ class RAGPipeline:
         history: list[dict[str, str]] | None = None,
         chat_history: list[dict[str, str]] | None = None,
         user_profile: dict | None = None,
+        image_bytes_list: list[tuple[bytes, str]] | None = None,
     ) -> str:
         """
         Execute the full RAG pipeline with parallel embed+search.
@@ -92,6 +93,7 @@ class RAGPipeline:
             rag_context=rag_context if search_results else None,
             temperature=0.2 if search_results else 0.5,
             user_profile=user_profile,
+            image_bytes_list=image_bytes_list,
         )
         logger.info("PERF llm=%.2fs", _time.monotonic() - _tl)
 
