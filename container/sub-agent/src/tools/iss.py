@@ -4,7 +4,7 @@ import httpx
 ISS_TOOL = {
     "toolSpec": {
         "name": "get_iss_location",
-        "description": "Get the current location of the International Space Station.",
+        "description": "Get the current location of the International Space Station (ISS). ONLY call this when the user explicitly asks about the ISS, space station location, or where the ISS is.",
         "inputSchema": {"json": {"type": "object", "properties": {}}},
     }
 }

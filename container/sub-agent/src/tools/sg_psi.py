@@ -4,7 +4,7 @@ import httpx
 SG_PSI_TOOL = {
     "toolSpec": {
         "name": "get_sg_psi",
-        "description": "Get Singapore PSI (Pollutant Standards Index) and PM2.5 levels. Use for haze queries.",
+        "description": "Get Singapore PSI (Pollutant Standards Index) and PM2.5 haze levels. ONLY call this when the user explicitly asks about PSI, haze, air quality, or smoke in Singapore.",
         "inputSchema": {"json": {"type": "object", "properties": {}}},
     }
 }
