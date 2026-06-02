@@ -968,7 +968,14 @@ export class DataGateway implements IDataGateway {
 
                                         vector,
 
-                                        k: topK,
+                                        // AOSS/NMSLIB applies the userId filter as a POST-filter:
+                                        // kNN first finds the k globally-nearest vectors, THEN drops
+                                        // those failing the filter. With a small k (==topK) and many
+                                        // other-user/CORPORATE chunks crowding the neighbourhood, a
+                                        // user's own chunks get evicted before filtering -> hits=0.
+                                        // Widen the candidate pool so the post-filter has enough
+                                        // per-user vectors to return. size still caps results at topK.
+                                        k: Math.max(topK * 40, 200),
 
                                     },
 
