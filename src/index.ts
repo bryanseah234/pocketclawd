@@ -466,7 +466,9 @@ async function main(): Promise<void> {
         let content: string;
         let resolvedKind = kind;
         // Non-anchored: marker may appear anywhere in the response text.
-        const imgMatch = rawContent.match(/IMAGE_URL:(.+?):IMAGE_URL/);
+        // Also catch IMAGE_GENERATING:...:IMAGE_GENERATING (Claude hallucination variant)
+        const imgMatch = rawContent.match(/IMAGE_URL:(.+?):IMAGE_URL/) ||
+          rawContent.match(/IMAGE_GENERATING:(.+?):IMAGE_GENERATING/);
         const audioMatch = rawContent.match(/AUDIO_URL:(.+?):AUDIO_URL/);
         const docMatch = rawContent.match(/DOC_URL:(.+?):DOC_URL/);
         if (imgMatch) {
