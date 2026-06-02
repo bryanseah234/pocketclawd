@@ -398,10 +398,12 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
 
         # Step 2: RAG pipeline (embed + search + LLM)
         _t2 = _time.monotonic()
+        _imgs = message.metadata.get("_image_bytes_list", [])
         response_text = await pipeline.query(
             user_message=message.content,
             chat_history=chat_history,
             user_profile=user_profile,
+            image_bytes_list=_imgs if _imgs else None,
         )
         logger.info("PERF rag_total=%.2fs user=%s", _time.monotonic() - _t2, message.user_id)
         logger.info("PERF total=%.2fs user=%s", _time.monotonic() - _t0, message.user_id)
@@ -870,10 +872,42 @@ async def poll_queue() -> None:
                     "envelopeUserId": envelope_user,
                     **payload_dict,
                 }
+                # Parse content: may be JSON string {text, attachments} or plain text
+                _raw_content = payload_dict.get("content", data.get("content", "")) or ""
+                _content_text = _raw_content
+                _image_attachments: list[dict] = []
+                if _raw_content.startswith("{"):
+                    try:
+                        _parsed = json.loads(_raw_content)
+                        _content_text = _parsed.get("text", "") or ""
+                        _atts = _parsed.get("attachments", []) or []
+                        _image_attachments = [a for a in _atts if isinstance(a, dict) and a.get("type") == "image"]
+                    except (json.JSONDecodeError, KeyError):
+                        pass  # treat as plain text
+                # Fetch image bytes from S3 for each image attachment
+                _image_bytes_list: list[tuple[bytes, str]] = []
+                if _image_attachments:
+                    import boto3 as _boto3
+                    _s3c = _boto3.client("s3", region_name=os.environ.get("AWS_REGION","ap-southeast-1"))
+                    _bucket = os.environ.get("DATA_BUCKET","")
+                    for _att in _image_attachments:
+                        try:
+                            _msg_id = data.get("id", "x")
+                            _s3key = f"users/{real_user or envelope_user}/staging/wa-{_msg_id}/{_att['name']}"
+                            _obj = _s3c.get_object(Bucket=_bucket, Key=_s3key)
+                            _img_bytes = _obj["Body"].read()
+                            _ext = os.path.splitext(_att["name"])[1].lower()
+                            _mime = {".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",".webp":"image/webp",".gif":"image/gif"}.get(_ext,"image/jpeg")
+                            _image_bytes_list.append((_img_bytes, _mime))
+                            logger.info("Fetched image attachment from S3 key=%s", _s3key)
+                        except Exception as _img_fetch_err:
+                            logger.warning("Could not fetch image attachment %s: %s", _att.get("name"), _img_fetch_err)
+                # Store image bytes on merged_meta so process_message can pass to LLM
+                merged_meta["_image_bytes_list"] = _image_bytes_list
                 message = InboundMessage(
                     message_id=data.get("id", ""),
                     user_id=real_user or envelope_user,
-                    content=payload_dict.get("content", data.get("content", "")),
+                    content=_content_text,
                     timestamp=data.get("timestamp", ""),
                     metadata=merged_meta,
                 )
