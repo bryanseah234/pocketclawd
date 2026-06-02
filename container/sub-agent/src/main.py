@@ -326,7 +326,12 @@ async def process_message(message: InboundMessage) -> AgentResponse:
 
         # Slash command handling
         from src.commands import handle_command
-        command_response = await handle_command(state.redis, message.user_id, message.content)
+        _ch_type = message.metadata.get("channelType", "whatsapp")
+        _plat_id = message.metadata.get("platformId", "")
+        command_response = await handle_command(
+            state.redis, message.user_id, message.content,
+            channel_type=_ch_type, platform_id=_plat_id,
+        )
         if command_response is not None:
             return AgentResponse(
                 message_id=message.message_id,
