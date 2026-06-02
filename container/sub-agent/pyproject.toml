@@ -21,6 +21,8 @@ dependencies = [
     "trafilatura>=1.12",
     "reportlab>=4.2",
     "lxml>=5.0",
+    "openpyxl>=3.1",
+    "pillow-heif>=0.18",
 ]
 
 [project.optional-dependencies]

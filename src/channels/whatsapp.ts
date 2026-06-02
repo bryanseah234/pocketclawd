@@ -848,7 +848,12 @@ registerChannelAdapter('whatsapp', {
 
                   const region = process.env.AWS_REGION || 'ap-southeast-1';
                   const s3 = new S3Client({ region });
-                  const userId = sender.split('@')[0]; // phone number as userId
+                  // CANONICAL userId -- MUST match router senderResolver
+                  // (extractAndUpsertUser): chat sets content.sender=full JID
+                  // -> `wa:<jid>`, which the RAG pipeline filters AOSS on. If the
+                  // upload indexed under a different userId the user could never
+                  // retrieve their own document.
+                  const userId = sender.includes(':') ? sender : `wa:${sender}`;
 
                   for (const att of attachments) {
                     if (att.type !== 'document' && att.type !== 'image') continue;
@@ -881,6 +886,15 @@ registerChannelAdapter('whatsapp', {
                       '.jpg': 'image/jpeg',
                       '.jpeg': 'image/jpeg',
                       '.png': 'image/png',
+                      '.webp': 'image/webp',
+                      '.heic': 'image/heic',
+                      '.heif': 'image/heif',
+                      '.gif': 'image/gif',
+                      '.tiff': 'image/tiff',
+                      '.tif': 'image/tiff',
+                      '.bmp': 'image/bmp',
+                      '.html': 'text/html',
+                      '.htm': 'text/html',
                     };
                     const contentType = mimeMap[ext] || 'application/octet-stream';
 
@@ -891,6 +905,10 @@ registerChannelAdapter('whatsapp', {
                       s3Key,
                       bucket,
                       userId,
+                      // Routing fields so the indexer notifies the user on
+                      // completion/failure and clears nanoclaw:indexing:<userId>.
+                      channelType: 'whatsapp',
+                      platformId: sender,
                       timestamp: new Date().toISOString(),
                     }));
 

@@ -401,6 +401,17 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
         except Exception as url_err:
             logger.warning("URL silent-ingest scheduling failed: %s", url_err)
 
+        # Wave 3: is a document still being indexed for this user? If so the
+        # answer may be blind to it; surface a soft notice after the answer so
+        # the user knows to retry rather than trusting a possibly-incomplete
+        # reply. Flag set by upload-worker, cleared by the indexer on
+        # completion/failure (key: nanoclaw:indexing:<userId>).
+        _indexing_in_progress = False
+        try:
+            _indexing_in_progress = bool(await state.redis.get(f"nanoclaw:indexing:{message.user_id}"))
+        except Exception:
+            _indexing_in_progress = False
+
         # Step 2: RAG pipeline (embed + search + LLM)
         _t2 = _time.monotonic()
         _imgs = message.metadata.get("_image_bytes_list", [])
@@ -410,6 +421,12 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
             user_profile=user_profile,
             image_bytes_list=_imgs if _imgs else None,
         )
+        if _indexing_in_progress and response_text:
+            response_text = (
+                response_text
+                + "\n\n_(I'm still indexing a file you just sent -- if this "
+                + "didn't use it, ask me again in a few seconds.)_"
+            )
         logger.info("PERF rag_total=%.2fs user=%s", _time.monotonic() - _t2, message.user_id)
         logger.info("PERF total=%.2fs user=%s", _time.monotonic() - _t0, message.user_id)
 

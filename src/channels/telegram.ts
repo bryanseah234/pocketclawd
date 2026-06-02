@@ -37,6 +37,16 @@ async function tgCall(method: string, body?: Record<string, unknown>): Promise<u
     return json.result;
 }
 
+async function tgDownloadFile(fileId: string): Promise<Buffer> {
+    // Two-step: getFile -> file_path, then download from the file endpoint.
+    const fileInfo = (await tgCall('getFile', { file_id: fileId })) as { file_path?: string };
+    if (!fileInfo.file_path) throw new Error('Telegram getFile returned no file_path');
+    const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileInfo.file_path}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Telegram file download HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+}
+
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 let setupConfig: ChannelSetup | null = null;
@@ -78,8 +88,83 @@ async function handleUpdate(msg: TgMessage): Promise<void> {
         || msg.from?.username
         || chatId;
 
-    // Only handle text messages for now; photo/doc can be added later
     const text = msg.text ?? msg.caption ?? '';
+
+    // Wave 2: inbound file handling. Telegram photos/documents were previously
+    // dropped here ("text only"). Download them, push to the S3 staging +
+    // indexing pipeline (same path WhatsApp uses), and ack the user. The
+    // caption (if any) still flows on to the agent as a normal chat message.
+    const hasPhoto = Array.isArray(msg.photo) && msg.photo.length > 0;
+    const hasDoc = !!msg.document;
+    if ((hasPhoto || hasDoc) && process.env.NANOCLAW_ENV === 'cloud') {
+        void (async () => {
+            try {
+                const { getCloudServices } = await import('../cloud/bootstrap.js');
+                const services = getCloudServices();
+                if (!services) return;
+                const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+                const bucket = process.env.DATA_BUCKET;
+                if (!bucket) return;
+                const region = process.env.AWS_REGION || 'ap-southeast-1';
+                const s3 = new S3Client({ region });
+
+                // CANONICAL userId — MUST match the router senderResolver for
+                // Telegram (`tg:<senderId>`) so the uploaded doc indexes under
+                // the same id the chat/RAG pipeline filters on.
+                const userId = `tg:${senderId}`;
+
+                // Resolve the file to download + a filename + content type.
+                let fileId: string;
+                let filename: string;
+                let contentType: string;
+                if (hasDoc) {
+                    fileId = msg.document!.file_id;
+                    filename = msg.document!.file_name || `tg-doc-${msg.message_id}`;
+                    contentType = msg.document!.mime_type || 'application/octet-stream';
+                } else {
+                    // Largest photo size is the last entry.
+                    const largest = msg.photo![msg.photo!.length - 1];
+                    fileId = largest.file_id;
+                    filename = `tg-photo-${msg.message_id}.jpg`;
+                    contentType = 'image/jpeg';
+                }
+
+                const fileBuffer = await tgDownloadFile(fileId);
+                const uploadId = `tg-${msg.message_id}`;
+                const s3Key = `users/${userId}/staging/${uploadId}/${filename}`;
+
+                await s3.send(new PutObjectCommand({
+                    Bucket: bucket,
+                    Key: s3Key,
+                    Body: fileBuffer,
+                    Metadata: { uploadId, originalFilename: filename, userId },
+                    Tagging: 'lifecycle=staging-24h',
+                }));
+
+                await services.redis.lpush('nanoclaw:uploads:pending', JSON.stringify({
+                    uploadId,
+                    filename,
+                    contentType,
+                    s3Key,
+                    bucket,
+                    userId,
+                    channelType: 'telegram',
+                    platformId: chatId,
+                    timestamp: new Date().toISOString(),
+                }));
+
+                log.info('Telegram file uploaded to S3 for indexing', { uploadId, filename, userId, s3Key });
+                await sendTelegramMessage(chatId, `\u{1F4E5} Got "${filename}" \u2014 indexing it now. Ask me about it in ~30s.`);
+            } catch (err) {
+                log.error('Failed to handle Telegram inbound file', { err });
+            }
+        })();
+    }
+
+    // If there is no text/caption AND no file, nothing to forward.
+    if (!text.trim() && !hasPhoto && !hasDoc) return;
+    // A bare file with no caption: the upload pipeline handles it; don't also
+    // forward an empty chat message to the agent.
     if (!text.trim()) return;
 
     const inbound: InboundMessage = {
@@ -227,11 +312,29 @@ interface TgUpdate {
     message?: TgMessage;
 }
 
+interface TgPhotoSize {
+    file_id: string;
+    file_unique_id: string;
+    width: number;
+    height: number;
+    file_size?: number;
+}
+
+interface TgDocument {
+    file_id: string;
+    file_unique_id: string;
+    file_name?: string;
+    mime_type?: string;
+    file_size?: number;
+}
+
 interface TgMessage {
     message_id: number;
     date: number;
     text?: string;
     caption?: string;
+    photo?: TgPhotoSize[];
+    document?: TgDocument;
     from?: { id: number; first_name?: string; last_name?: string; username?: string };
     chat: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel' };
 }

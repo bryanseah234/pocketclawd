@@ -17,6 +17,7 @@ RUN apt-get update && \
         tesseract-ocr-eng \
         poppler-utils \
         libmagic1 \
+        libheif1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -29,6 +30,8 @@ RUN pip install --no-cache-dir . && \
         python-docx \
         openpyxl \
         python-pptx \
+        pillow-heif \
+        beautifulsoup4 \
         tiktoken \
         boto3 \
         Pillow
@@ -46,6 +49,7 @@ RUN apt-get update && \
         tesseract-ocr-eng \
         poppler-utils \
         libmagic1 \
+        libheif1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

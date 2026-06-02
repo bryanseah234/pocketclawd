@@ -11,8 +11,12 @@ import { log } from '../log.js';
 import type { CloudServices } from './bootstrap.js';
 
 
-const DG_QUEUE = 'queue:orchestrator:data_gateway';
-const UPLOADS_PREFIX = 'uploads/';
+// Wave 5: scan the prefixes where user/corporate files actually live.
+// Old code scanned 'uploads/' which holds nothing -- the safety net found
+// nothing and did nothing, forever. User docs land under users/<userId>/...
+// (staging/ then documents/), corporate docs under corporate/<uploadId>/...
+const INDEXING_QUEUE = 'queue:orchestrator:indexing';
+const SCAN_PREFIXES = ['users/', 'corporate/'];
 const SEEN_TTL = 60 * 60 * 24 * 7; // 7-day sentinel in Redis
 
 export async function runS3ReindexJob(services: CloudServices): Promise<void> {
@@ -25,11 +29,12 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
         const region = process.env.AWS_REGION || 'ap-southeast-1';
         const s3 = new S3Client({ region });
 
+        for (const prefix of SCAN_PREFIXES) {
         let continuationToken: string | undefined;
         do {
             const page = await s3.send(new ListObjectsV2Command({
                 Bucket: bucket,
-                Prefix: UPLOADS_PREFIX,
+                Prefix: prefix,
                 ContinuationToken: continuationToken,
                 MaxKeys: 1000,
             }));
@@ -43,11 +48,22 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
                 const seenKey = `s3reindex:seen:${key}`;
                 if (await services.redis.get(seenKey)) { skipped++; continue; }
 
-                // Parse userId from uploads/<userId>/<filename>
-                const parts = key.slice(UPLOADS_PREFIX.length).split('/');
-                if (parts.length < 2) { skipped++; continue; }
-                const userId = parts[0];
-                const filename = parts.slice(1).join('/');
+                // Resolve userId + filename per prefix layout:
+                //   users/<userId>/(staging/<uploadId>|documents)/<filename>
+                //   corporate/<uploadId>/<filename>  -> userId = 'CORPORATE'
+                const rest = key.slice(prefix.length).split('/');
+                let userId: string;
+                let filename: string;
+                if (prefix === 'corporate/') {
+                    if (rest.length < 2) { skipped++; continue; }
+                    userId = 'CORPORATE';
+                    filename = rest.slice(1).join('/');
+                } else {
+                    // users/<userId>/.../<filename>
+                    if (rest.length < 2) { skipped++; continue; }
+                    userId = rest[0];
+                    filename = rest[rest.length - 1];
+                }
                 if (!userId || !filename) { skipped++; continue; }
 
                 // Check OpenSearch count for this key
@@ -70,16 +86,24 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
                     // Can't check — queue it anyway (idempotent on OS side)
                 }
 
-                // Push to DG worker queue
+                // Push straight to the indexer queue (same shape the
+                // upload-worker uses) so re-index goes through one code path.
                 const payload = JSON.stringify({
-                    action: 'index_s3_object',
+                    id: `s3reindex-${Date.now()}`,
                     userId,
-                    s3Key: key,
-                    filename,
-                    bucket,
-                    queuedAt: new Date().toISOString(),
+                    type: 'index_file',
+                    payload: {
+                        s3Key: key, filename,
+                        bucket,
+                        corporate: userId === 'CORPORATE',
+                        origin: 'upload_worker',
+                        realUserId: userId,
+                        channelType: null,
+                        platformId: null,
+                    },
+                    timestamp: new Date().toISOString(),
                 });
-                await services.redis.lpush(DG_QUEUE, payload);
+                await services.redis.lpush(INDEXING_QUEUE, payload);
                 await services.redis.setex(seenKey, SEEN_TTL, '1');
                 queued++;
                 log.info('Queued for indexing', { userId, key });
@@ -87,6 +111,7 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
 
             continuationToken = page.NextContinuationToken;
         } while (continuationToken);
+        }
 
         log.info('S3 reindex scan complete', { scanned, queued, skipped });
     } catch (err) {

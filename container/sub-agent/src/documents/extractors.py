@@ -29,6 +29,24 @@ try:  # pragma: no cover
     import pytesseract  # type: ignore
 except Exception:  # pragma: no cover
     pytesseract = None  # type: ignore
+try:  # pragma: no cover
+    from openpyxl import load_workbook  # type: ignore
+except Exception:  # pragma: no cover
+    load_workbook = None  # type: ignore
+try:  # pragma: no cover
+    from pptx import Presentation  # type: ignore
+except Exception:  # pragma: no cover
+    Presentation = None  # type: ignore
+try:  # pragma: no cover
+    from bs4 import BeautifulSoup  # type: ignore
+except Exception:  # pragma: no cover
+    BeautifulSoup = None  # type: ignore
+# Register HEIC/HEIF support with Pillow so iPhone photos open transparently.
+try:  # pragma: no cover
+    import pillow_heif  # type: ignore
+    pillow_heif.register_heif_opener()
+except Exception:  # pragma: no cover
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +199,60 @@ def extract_image(content: bytes) -> str:
     return describe_image(content)
 
 
+def extract_xlsx(content: bytes) -> str:
+    """Extract text from an XLSX workbook (all sheets, header-aware rows)."""
+    if load_workbook is None:
+        raise ValueError("openpyxl not available for XLSX extraction")
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    out: list[str] = []
+    for ws in wb.worksheets:
+        out.append(f"# Sheet: {ws.title}")
+        for row in ws.iter_rows(values_only=True):
+            cells = [str(c) for c in row if c is not None and str(c).strip()]
+            if cells:
+                out.append(" | ".join(cells))
+    try:
+        wb.close()
+    except Exception:
+        pass
+    return "\n".join(out)
+
+
+def extract_pptx(content: bytes) -> str:
+    """Extract text from a PPTX deck (all slides, all text frames + notes)."""
+    if Presentation is None:
+        raise ValueError("python-pptx not available for PPTX extraction")
+    prs = Presentation(io.BytesIO(content))
+    out: list[str] = []
+    for idx, slide in enumerate(prs.slides, start=1):
+        out.append(f"# Slide {idx}")
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                for para in shape.text_frame.paragraphs:
+                    txt = "".join(run.text for run in para.runs).strip()
+                    if txt:
+                        out.append(txt)
+        notes = getattr(slide, "notes_slide", None)
+        if notes is not None and getattr(notes, "notes_text_frame", None) is not None:
+            note_txt = notes.notes_text_frame.text.strip()
+            if note_txt:
+                out.append(f"(notes) {note_txt}")
+    return "\n".join(out)
+
+
+def extract_html(content: bytes) -> str:
+    """Extract readable text from an HTML file, stripping scripts/styles."""
+    text = content.decode("utf-8", errors="replace")
+    if BeautifulSoup is None:
+        # Fallback: crude tag strip
+        import re
+        return re.sub(r"<[^>]+>", " ", text)
+    soup = BeautifulSoup(text, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    return soup.get_text(separator="\n", strip=True)
+
+
 def extract_text(content: bytes, content_type: str) -> str:
     """
     Route text extraction to the appropriate extractor based on content type.
@@ -216,14 +288,31 @@ def _get_extractor(content_type: str) -> Callable[[bytes], str] | None:
     mapping: dict[str, Callable[[bytes], str]] = {
         "application/pdf": extract_pdf,
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": extract_docx,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": extract_xlsx,
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": extract_pptx,
         "text/csv": extract_csv,
         "text/plain": extract_txt,
+        "text/markdown": extract_txt,
+        "text/html": extract_html,
+        "application/xhtml+xml": extract_html,
         "image/png": extract_image,
         "image/jpeg": extract_image,
         "image/jpg": extract_image,
         "image/tiff": extract_image,
         "image/bmp": extract_image,
         "image/gif": extract_image,
+        "image/webp": extract_image,
+        "image/heic": extract_image,
+        "image/heif": extract_image,
     }
 
     return mapping.get(ct)
+
+
+def is_supported(content_type: str) -> bool:
+    """True if a usable extractor exists for this MIME type.
+
+    Used by the indexer to fail gracefully (friendly user message) instead of
+    raising ValueError on an unsupported upload.
+    """
+    return _get_extractor(content_type) is not None

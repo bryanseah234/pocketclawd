@@ -82,6 +82,13 @@ interface PendingUpload {
 
     corporate?: boolean;
 
+    /** Channel the upload arrived on (whatsapp|telegram). Used to notify
+     * the user when indexing completes/fails. Absent for admin/corporate. */
+    channelType?: string;
+
+    /** Platform address to deliver the completion/failure notice to. */
+    platformId?: string;
+
 }
 
 
@@ -316,43 +323,38 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
 
         // DataGateway Worker (enforced in data-gateway-worker/index.ts).
 
-        await services.messageQueue.enqueueForAgent('shared', {
+        // Wave 3: set an indexing-in-progress flag so the chat pipeline can tell
+        // the user "still indexing, ask again in ~30s" instead of answering blind.
+        // Only for real per-user uploads (not corporate/admin).
+        if (!isCorporate && userId && userId !== 'admin' && userId !== 'CORPORATE') {
+            try {
+                await services.redis.set(`nanoclaw:indexing:${userId}`, '1', 'EX', 90);
+            } catch (flagErr) {
+                log.warn('Upload worker: failed to set indexing flag', { userId, flagErr });
+            }
+        }
 
+        // Wave 5: dispatch to the DEDICATED indexer queue, not the sub-agent chat
+        // queue, so document extraction/embedding never blocks a user conversation.
+        await services.redis.lpush('queue:orchestrator:indexing', JSON.stringify({
             id: `upload-${upload.uploadId}`,
-
-            userId: 'shared',
-
-            type: 'document_upload',
-
+            userId,
+            type: 'index_file',
             payload: {
-
                 uploadId: upload.uploadId,
-
                 filename: upload.filename,
-
                 contentType: upload.contentType,
-
                 s3Key,
-
                 bucket: upload.bucket,
-
                 timestamp: upload.timestamp,
-
                 corporate: isCorporate,
-
-                // Propagate origin so the downstream data-gateway-worker call carries it.
-
                 origin: 'upload_worker',
-
-
-
                 realUserId: userId,
-
+                channelType: upload.channelType,
+                platformId: upload.platformId,
             },
-
             timestamp: new Date().toISOString(),
-
-        });
+        }));
 
 
 
@@ -386,7 +388,28 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
 
         });
 
-
+        // Wave 4: tell the user their upload failed instead of silently DLQ'ing.
+        // Clear the indexing flag too so the chat pipeline stops saying "indexing".
+        try {
+            const failUser = upload.userId || config.defaultUserId;
+            if (failUser) await services.redis.del(`nanoclaw:indexing:${failUser}`);
+            if (upload.channelType && upload.platformId) {
+                await services.redis.lpush('queue:orchestrator:responses', JSON.stringify({
+                    id: `upload-fail-${upload.uploadId}`,
+                    userId: failUser,
+                    type: 'chat',
+                    payload: {
+                        content: `Sorry, I could not index "${upload.filename}". Please try sending it again. \u{1F647}`,
+                        channelType: upload.channelType,
+                        platformId: upload.platformId,
+                        threadId: null,
+                    },
+                    timestamp: new Date().toISOString(),
+                }));
+            }
+        } catch (notifyErr) {
+            log.warn('Upload worker: failed to notify user of upload failure', { notifyErr });
+        }
 
         // Move to DLQ for retry
 

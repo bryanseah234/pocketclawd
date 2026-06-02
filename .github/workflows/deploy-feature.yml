@@ -269,6 +269,29 @@ jobs:
           done
           echo "Rollout still in progress after 5min — letting it continue async."
 
+      - name: Force ECS indexer redeployment (Wave 5)
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          # The dedicated indexer service shares the agent image. Force a new
+          # deployment so it picks up the new image too. Tolerate the service
+          # not existing yet (created by `terraform apply` of indexer.tf) so a
+          # code-only deploy never fails on a not-yet-provisioned service.
+          if aws ecs describe-services --cluster nanoclaw-cluster \
+               --services nanoclaw-indexer --region ${{ env.AWS_REGION }} \
+               --query "services[0].status" --output text 2>/dev/null | grep -q ACTIVE; then
+            echo "Forcing nanoclaw-indexer ECS redeployment..."
+            aws ecs update-service \
+              --cluster nanoclaw-cluster \
+              --service nanoclaw-indexer \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }} \
+              --query "service.deployments[0].{Id:id,Status:status,RolloutState:rolloutState}" \
+              --output table
+          else
+            echo "nanoclaw-indexer service not provisioned yet (run terraform apply) — skipping."
+          fi
+
       - name: External health check
         run: |
           for i in $(seq 1 8); do

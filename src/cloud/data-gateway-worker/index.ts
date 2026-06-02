@@ -1143,14 +1143,38 @@ async function handleIndexS3Object(
     const s3Key = String(request.s3Key || '');
     const filename = String(request.filename || (s3Key.split('/').pop() ?? 'file'));
     if (!s3Key) { log.warn('index_s3_object: missing s3Key', { userId }); return; }
+    // Wave 5: route re-index work to the dedicated indexer queue (was the
+    // sub-agent shared inbound, which blocked chat and used the wrong shape).
+    const ext = (filename.split('.').pop() || '').toLowerCase();
+    const mimeByExt: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        csv: 'text/csv', txt: 'text/plain', md: 'text/plain',
+        html: 'text/html', htm: 'text/html',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+        webp: 'image/webp', heic: 'image/heic', heif: 'image/heif',
+        gif: 'image/gif', tiff: 'image/tiff', tif: 'image/tiff', bmp: 'image/bmp',
+    };
+    const contentType = mimeByExt[ext] || 'application/octet-stream';
+    const isCorporate = userId === 'CORPORATE';
     const payload = JSON.stringify({
         id: `s3reindex-${Date.now()}`,
         userId,
-        type: 'upload_complete',
-        payload: { s3Key, filename, bucket: services.config.s3.dataBucket, source: 's3-reindex' },
+        type: 'index_file',
+        payload: {
+            s3Key, filename, contentType,
+            bucket: services.config.s3.dataBucket,
+            corporate: isCorporate,
+            origin: 'upload_worker',
+            realUserId: userId,
+            channelType: null,
+            platformId: null,
+        },
         timestamp: new Date().toISOString(),
     });
-    await services.redis.lpush('queue:agent:shared:inbound', payload);
+    await services.redis.lpush('queue:orchestrator:indexing', payload);
     log.info('S3 object queued for re-indexing', { userId, s3Key });
 }
 
