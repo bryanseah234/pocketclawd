@@ -173,6 +173,11 @@ async def ingest_urls_silently(
                 url, len(chunks), user_id,
             )
             ingested += 1
+            # Clear the no_docs RAG cache so the next query can find this URL
+            try:
+                await redis.delete(f"cache:no_docs:{user_id}")
+            except Exception:
+                pass
         except Exception as e:  # noqa: BLE001 — never break the chat flow
             logger.error("URL silent-ingest failed for %s: %s", url, e)
 
