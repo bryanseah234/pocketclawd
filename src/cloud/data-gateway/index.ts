@@ -1300,7 +1300,9 @@ export class DataGateway implements IDataGateway {
 
                     by_url: {
 
-                        terms: { field: 'sourceUrl', size: Math.max(1, Math.min(limit, 100)) },
+                        // sourceUrl is a text field with a keyword sub-field; aggregations
+                        // require the keyword sub-field (text fielddata is disabled in AOSS).
+                        terms: { field: 'sourceUrl.keyword', size: Math.max(1, Math.min(limit, 100)) },
 
                         aggs: {
 
@@ -1406,7 +1408,7 @@ export class DataGateway implements IDataGateway {
         // Workaround: search for matching _ids then bulk-delete.
         const sr2 = await this.openSearchClient.search({
             index: indexName, size: 1000,
-            body: { query: { bool: { filter: [{ term: { userId } }, { term: { sourceUrl: url } }] } }, _source: false },
+            body: { query: { bool: { filter: [{ term: { userId } }, { term: { 'sourceUrl.keyword': url } }] } }, _source: false },
         });
         const hits2 = ((sr2 as unknown as { body?: { hits?: { hits?: Array<{ _id: string }> } }; hits?: { hits?: Array<{ _id: string }> } })?.body?.hits?.hits ?? (sr2 as unknown as { hits?: { hits?: Array<{ _id: string }> } })?.hits?.hits ?? []);
         if (hits2.length === 0) return 0;

@@ -278,11 +278,14 @@ async def process_message(message: InboundMessage) -> AgentResponse:
         if msg_type != "document_upload" and state.redis is not None:
             from src.persona import discovery_skill
             disc_state = await discovery_skill.load_state(state.redis, message.user_id)
-            # Allow escape slash commands during onboarding
-            _is_escape_cmd = message.content.lstrip().startswith('/') and any(
-                message.content.lstrip().lower().startswith(cmd)
-                for cmd in ('/forget', '/help', '/privacy', '/about', '/connect', '/disconnect', '/integrations')
-            )
+            # Allow escape slash commands during onboarding. Any explicit slash
+            # command is a clear, deliberate intent and must bypass the discovery
+            # wizard -- a user typing /remind or /profile mid-onboarding wants that
+            # command run, not to answer the onboarding question. (Previously only a
+            # hardcoded subset escaped, so /profile, /remind, /reminders, /list,
+            # /delete, /ingested, /forget-url, /draft, /remindclear were swallowed
+            # and returned the "reply with 1/2/3/4" prompt.)
+            _is_escape_cmd = message.content.lstrip().startswith('/')
             if disc_state is not None and not discovery_skill.is_complete(disc_state) and not _is_escape_cmd:
                 # User is mid-onboarding
                 complete, reply_msg, disc_state = await discovery_skill.handle_response(
