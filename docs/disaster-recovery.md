@@ -1,259 +1,118 @@
-# Clawd / NanoClaw — Disaster Recovery Runbook
+# Disaster Recovery
 
-## RTO / RPO targets
+## ECS sub-agent total failure
 
-| Target | Value |
-|---|---|
-| RTO (Recovery Time Objective) | 30 minutes |
-| RPO (Recovery Point Objective) | 5 minutes — DynamoDB PITR + S3 versioning. Redis is best-effort (in-flight messages may be lost during a failover). |
-
----
-
-## Component map
-
-| Component | AWS service | Identifier |
-|---|---|---|
-| Orchestrator | EC2 r6i.4xlarge | `i-0f9cd20350cfdc1a6` |
-| Sub-agent | ECS Fargate | `nanoclaw-cluster/nanoclaw-sub-agent` |
-| Chat storage | DynamoDB | `nanoclaw-chat-messages` |
-| User preferences | DynamoDB | `nanoclaw-user-preferences` |
-| Webhook tokens | DynamoDB | `nanoclaw-webhook-tokens` |
-| System errors | DynamoDB | `nanoclaw-system-errors` |
-| Object storage | S3 | `nanoclaw-data-709609992277` |
-| Vector search | OpenSearch Serverless | `nanoclaw-documents` (`66ik2p21jw225em9uj25`) |
-| Message queue | ElastiCache Redis | `nanoclaw-redis-rg.sipa0z.0001.apse1.cache.amazonaws.com:6379` |
-| Secrets | Secrets Manager | `nanoclaw/app-config`, `nanoclaw/google-secrets` |
-| LLM | Bedrock | `global.anthropic.claude-sonnet-4-5-...` (orchestrator + sub-agent), `cohere.embed-multilingual-v3` (embedding, 1024-dim) |
-| Container registry | ECR | `nanoclaw/orchestrator`, `nanoclaw/agent` |
-
----
-
-## Failure scenarios
-
-### 1. Orchestrator container crash
-
-Symptoms: `/health` endpoint returns 500 or refuses connections; admin
-dashboard unreachable; WhatsApp messages not being acknowledged.
+Symptoms: no responses from WhatsApp / Telegram. ECS shows 0 running tasks.
 
 ```bash
-# Check status (via SSM if reachable, else EC2 Instance Connect)
-aws ssm send-command --instance-ids i-0f9cd20350cfdc1a6 \
-  --document-name AWS-RunShellScript --region ap-southeast-1 \
-  --parameters 'commands=["docker ps -a | grep nanoclaw && docker logs nanoclaw-orchestrator --tail 50"]'
+# Check service state
+aws ecs describe-services   --cluster nanoclaw-cluster --services nanoclaw-sub-agent   --profile clawd-prod --region ap-southeast-1   --query 'services[0].{running:runningCount,pending:pendingCount,events:events[0:3]}'
 
-# Restart
-aws ssm send-command --instance-ids i-0f9cd20350cfdc1a6 \
-  --document-name AWS-RunShellScript --region ap-southeast-1 \
-  --parameters 'commands=["docker restart nanoclaw-orchestrator"]'
+# Check logs for crash reason
+aws logs tail /ecs/nanoclaw-sub-agent   --profile clawd-prod --region ap-southeast-1 --since 30m
 
-# If image corrupt — pull fresh from ECR and redeploy
-aws ssm send-command --instance-ids i-0f9cd20350cfdc1a6 \
-  --document-name AWS-RunShellScript --region ap-southeast-1 \
-  --parameters 'commands=[
-    "aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com",
-    "docker pull 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw-orchestrator:current",
-    "docker stop nanoclaw-orchestrator && docker rm nanoclaw-orchestrator",
-    "docker run -d --name nanoclaw-orchestrator --restart unless-stopped --user root --network host -v /var/run/docker.sock:/var/run/docker.sock -v /opt/nanoclaw-data:/app/data -e NANOCLAW_ENV=cloud -e AWS_REGION=ap-southeast-1 -e USE_SUBAGENT=1 -e WHATSAPP_ENABLED=true -e DATA_BUCKET=nanoclaw-data-709609992277 -e CLAWD_CRON_DIGEST=true -e CLAWD_CRON_DIGEST=true -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets 709609992277.dkr.ecr.ap-southeast-1.amazonaws.com/nanoclaw-orchestrator:current"
-  ]'
+# Force new deployment (picks up latest image)
+aws ecs update-service   --cluster nanoclaw-cluster --service nanoclaw-sub-agent   --force-new-deployment   --profile clawd-prod --region ap-southeast-1
 ```
 
-**Expected recovery: 2–3 min.**
+If new tasks crash on start, roll back to previous task definition revision:
+see docs/ci-cd.md rollback section.
 
-### 2. Sub-agent task unhealthy
+## EC2 orchestrator down
 
-Symptoms: WhatsApp messages get queued but no replies; sub-agent ECS health
-check fails.
+Symptoms: WhatsApp / Telegram bots offline. EC2 instance unreachable.
 
 ```bash
-# Force a fresh deployment
-aws ecs update-service --cluster nanoclaw-cluster --service nanoclaw-sub-agent \
-  --force-new-deployment --region ap-southeast-1
+# Check instance state
+aws ec2 describe-instances   --instance-ids i-0f9cd20350cfdc1a6   --profile clawd-prod --region ap-southeast-1   --query 'Reservations[0].Instances[0].State.Name'
 
-# Watch the rollout
-aws ecs describe-services --cluster nanoclaw-cluster --services nanoclaw-sub-agent \
-  --region ap-southeast-1 \
-  --query 'services[0].{state:deployments[0].rolloutState,running:runningCount,events:events[0:3]}'
+# Start if stopped
+aws ec2 start-instances   --instance-ids i-0f9cd20350cfdc1a6   --profile clawd-prod --region ap-southeast-1
 
-# Tail logs
-aws logs tail /ecs/nanoclaw-sub-agent --follow --region ap-southeast-1
+# Connect via SSM (no SSH key needed)
+aws ssm start-session   --target i-0f9cd20350cfdc1a6   --profile clawd-prod --region ap-southeast-1
+
+# On EC2: check and restart service
+sudo systemctl status nanoclaw
+sudo journalctl -u nanoclaw -n 50 --no-pager
+sudo systemctl restart nanoclaw
 ```
 
-**Expected recovery: 3–5 min** (Fargate task launch + image pull + Redis connect).
+If the instance is unrecoverable, provision a new one from the AMI and
+run the orchestrator bootstrap from infrastructure/terraform/.
 
-### 3. EC2 instance failure
+## Redis failure
 
-Symptoms: instance state `stopped` or `terminated`; SSM unreachable; public
-IP unresponsive.
+Symptoms: all requests fail with connection errors. Queues empty.
+
+ElastiCache Redis is a managed cluster. AWS handles automatic failover for
+Multi-AZ deployments. If the endpoint is unreachable:
 
 ```bash
-aws ec2 describe-instances --instance-ids i-0f9cd20350cfdc1a6 --region ap-southeast-1
+# Check cluster state
+aws elasticache describe-cache-clusters   --cache-cluster-id nanoclaw-redis   --profile clawd-prod --region ap-southeast-1   --query 'CacheClusters[0].{status:CacheClusterStatus,endpoint:RedisConfiguration}'
+```
 
-# If terminated and EBS detached, launch a new one with same SG and IAM role
-# via terraform:
+If the cluster is in failed state, raise an AWS support ticket.
+In the meantime, sub-agent tasks will backpressure and retry via the DLQ.
+
+## DynamoDB table deleted or corrupted
+
+DynamoDB point-in-time recovery (PITR) is enabled on all nanoclaw-* tables.
+Restore from PITR:
+
+```bash
+aws dynamodb restore-table-to-point-in-time   --source-table-name nanoclaw-chat-messages   --target-table-name nanoclaw-chat-messages-restore   --use-latest-restorable-time   --profile clawd-prod --region ap-southeast-1
+```
+
+Rename (swap) tables via Terraform after restore is complete.
+
+## S3 data loss
+
+S3 bucket nanoclaw-data-709609992277 has versioning enabled.
+Recover a deleted object:
+
+```bash
+# List versions
+aws s3api list-object-versions   --bucket nanoclaw-data-709609992277   --prefix media/generated/YOUR-FILE.pdf   --profile clawd-prod --region ap-southeast-1
+
+# Restore by removing the delete marker
+aws s3api delete-object   --bucket nanoclaw-data-709609992277   --key media/generated/YOUR-FILE.pdf   --version-id <DELETE_MARKER_VERSION_ID>   --profile clawd-prod --region ap-southeast-1
+```
+
+## OpenSearch Serverless degraded
+
+Symptoms: RAG responses empty, slow, or error. Context missing from replies.
+
+AOSS is fully managed -- no manual restart option. If the collection endpoint
+is unreachable, the sub-agent falls back to LLM-only responses (no RAG context).
+Users will still get replies, just without personal knowledge base context.
+
+Check AOSS health in AWS console -> OpenSearch -> Serverless -> nanoclaw-documents.
+
+## Full system rebuild from Terraform
+
+If all resources need to be rebuilt from scratch:
+
+```bash
 cd infrastructure/terraform
-# ensure terraform.tfvars has the desired instance_type
-terraform plan
-terraform apply -target=aws_instance.nanoclaw
-
-# Bootstrap pulls latest ECR image and starts the container via user-data.
-# Verify:
-curl http://<new-public-ip>:3000/health
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
 
-If a new IP was assigned, update DNS / any external webhook URLs.
+Then:
+1. Push latest code to trigger CI/CD (ECS image push + service deploy)
+2. SSH to new EC2, run orchestrator bootstrap
+3. Restore DynamoDB from PITR if data recovery is needed
 
-**Expected recovery: 15–20 min.**
+## Queue drain after an outage
 
-### 4. EC2 disk full
-
-Symptoms (the canonical sequence): `aws ssm send-command` returns
-`Status=Failed`, `ResponseCode=1`, `ExecutionElapsedTime=PT0S`, empty output.
-Console output shows `No space left on device` plus `lookup ... connection
-refused`. The chain: disk full → systemd-resolved can't write cache →
-DNS dies → SSM agent hibernates.
-
-Recovery:
-```bash
-# 1. Expand the EBS volume
-aws ec2 modify-volume --volume-id vol-0c15cf0eccb7dd78e --size 256 --region ap-southeast-1
-
-# 2. Open an interactive shell via SSM Session Manager
-#    (SSH/port 22 is CLOSED — admin_ssh_cidrs=[]; SSM is the only host access path)
-aws ssm start-session --target i-0f9cd20350cfdc1a6 --region ap-southeast-1
-
-# 3. Grow partition + filesystem
-sudo growpart /dev/nvme0n1 1
-sudo resize2fs /dev/nvme0n1p1
-df -h /
-
-# 4. Reclaim space
-sudo docker system prune -af
-# (NOT --volumes if you have bind-mounted /opt/nanoclaw-data — check first)
-
-# 5. Re-deploy fresh image via SSM RunShellScript (don't wait for GHA rebuild)
-ECR=709609992277.dkr.ecr.ap-southeast-1.amazonaws.com
-aws ecr get-login-password --region ap-southeast-1 | sudo docker login --username AWS --password-stdin $ECR
-sudo docker pull $ECR/nanoclaw-orchestrator:current
-sudo docker stop nanoclaw-orchestrator && sudo docker rm nanoclaw-orchestrator
-sudo docker run -d ...   # full env block per docs/AWS-DEPLOYMENT.md §5
-```
-
-This sequence is documented as a Hermes skill at
-`~/.hermes/skills/devops/aws-ec2-disk-full-recovery/SKILL.md`.
-
-**Expected recovery: 10–15 min.**
-
-### 5. WhatsApp session lost
-
-Symptoms: orchestrator log shows `Connection closed` or `Stream Errored`;
-WhatsApp messages go un-acknowledged; admin dashboard QR section shows
-"disconnected".
+Messages that arrived during downtime sit in the Redis queues.
+They will be processed in order once services come back up.
+If the queue has grown very large, check DLQ length and clear stale entries:
 
 ```bash
-# Re-pair via admin dashboard
-open http://3.0.132.150:3000/admin
-# Tab "WhatsApp" → click "Generate new QR" → scan with phone
-
-# If dashboard is down, force fresh QR via SSM Session Manager
-aws ssm start-session --target i-0f9cd20350cfdc1a6 --region ap-southeast-1
-# then, inside the session:
-sudo docker exec nanoclaw-orchestrator rm -rf /app/sessions/baileys_auth_info
-sudo docker restart nanoclaw-orchestrator
-sudo docker logs -f nanoclaw-orchestrator   # scan QR from log output
-```
-
-**Expected recovery: 1–2 min.**
-
-### 6. Bedrock throttling / region outage
-
-Symptoms: `ThrottlingException` or `ServiceUnavailableException` from
-Bedrock; sub-agent log floods with retries.
-
-Mitigation:
-- Bedrock has built-in retries; the sub-agent's `BedrockClient` adds
-  exponential backoff up to 30 s.
-- For sustained throttling, request a quota increase on the Bedrock model
-  (AWS console → Bedrock → Quotas).
-- For a region outage, manual failover requires changing
-  `nanoclaw/app-config:llm_region` and the embedding pipeline picks up the
-  new region. Note that PDPA residency forbids serving SG users from
-  regions outside SG, so this is **only** acceptable as a temporary
-  emergency measure during a multi-region AWS outage.
-
-### 7. OpenSearch 403 (after IAM change)
-
-Symptoms: every RAG query fails with `RequestError(403)`; embedding indexing
-silently fails; log shows opaque 403 with no policy match details.
-
-Cause: someone removed `aoss:APIAccessAll` from the EC2 or task role.
-
-```bash
-aws iam put-role-policy --role-name nanoclaw-ec2-role \
-  --policy-name aoss-api-access \
-  --policy-document '{
-    "Version":"2012-10-17",
-    "Statement":[{
-      "Effect":"Allow",
-      "Action":"aoss:APIAccessAll",
-      "Resource":"arn:aws:aoss:ap-southeast-1:709609992277:collection/66ik2p21jw225em9uj25"
-    }]
-  }'
-
-# Same for sub-agent task role
-aws iam put-role-policy --role-name nanoclaw-sub-agent-task-role \
-  --policy-name aoss-api-access \
-  --policy-document '...'
-```
-
-Plus verify the data-access policy still includes both principals.
-
-**Expected recovery: 1 min after IAM propagation.**
-
-### 8. Catastrophic — region-wide AWS outage
-
-If `ap-southeast-1` itself goes down:
-- All compute and managed services are unavailable.
-- DynamoDB PITR can be restored to a different region in 1–4 h, but PDPA
-  residency forbids serving traffic from outside SG.
-- Recommended: declare maintenance, post status on the landing page footer
-  via static HTML edit + S3 redirect, wait for region to recover.
-- An Azure variant exists (see `nanoclaw-prd.html`) as a parallel reference
-  but is not deployed and not failover-ready.
-
----
-
-## Backup procedures
-
-| Asset | Backup mechanism | Recovery |
-|---|---|---|
-| DynamoDB tables | PITR (point-in-time recovery) — 35 days | `aws dynamodb restore-table-from-backup` |
-| S3 bucket | Versioning enabled | Restore previous version |
-| OpenSearch collection | No native backup; serverless is single-AZ | Re-ingest from S3 documents |
-| Redis | No backup (ephemeral; messages re-deliver from queue logic) | N/A |
-| Secrets | Manual export to local KMS-encrypted backup | Manual reload |
-| Container images | ECR image immutable + tagged per SHA + lifecycle keeps last 10 | Pull from ECR |
-| WhatsApp session | Persisted to S3 `sessions/` prefix | S3 versioning + re-pair fallback |
-| Code | GitHub `tokenlab42/pocketclaw` | `git clone` |
-
----
-
-## Verification checklist (post-recovery)
-
-```bash
-# 1. Orchestrator health
-curl http://3.0.132.150:3000/health
-
-# 2. Admin dashboard reachable + Basic auth works
-curl -u admin:<PASS> -i http://3.0.132.150:3000/admin
-
-# 3. Sub-agent task running
-aws ecs describe-services --cluster nanoclaw-cluster --services nanoclaw-sub-agent \
-  --region ap-southeast-1 --query 'services[0].runningCount'   # expect 1
-
-# 4. WhatsApp connected
-curl -u admin:<PASS> http://3.0.132.150:3000/admin/api/health \
-  | jq '.services[] | select(.name=="whatsappSession")'
-
-# 5. Send a real message and confirm reply round-trip
-# (best-effort — send a benign question to the WA number and watch logs)
+# Check queue depths via SSM on EC2
+aws ssm send-command   --instance-ids i-0f9cd20350cfdc1a6   --document-name AWS-RunShellScript   --parameters commands='["redis-cli -u $REDIS_URL llen queue:agent:dispatch"]'   --profile clawd-prod --region ap-southeast-1
 ```
