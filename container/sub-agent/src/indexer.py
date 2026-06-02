@@ -189,6 +189,15 @@ async def index_file(message: dict) -> None:
             }
             await state.redis.lpush(DATA_GATEWAY_QUEUE, json.dumps(index_request))
 
+        # Clear the per-user "no docs" short-circuit cache so the very next
+        # question routes through RAG retrieval instead of skipping it. Without
+        # this, a stale 5-min no_docs flag (set before this upload) makes the
+        # agent answer "I don't see a document" right after a successful index.
+        try:
+            await state.redis.delete(f"cache:no_docs:{user_id}")
+        except Exception as _cache_err:
+            logger.warning("Could not clear no_docs cache for %s: %s", user_id, _cache_err)
+
         if not is_corporate and "/staging/" in s3_key:
             documents_key = f"{user_id}/documents/{filename}"
             try:

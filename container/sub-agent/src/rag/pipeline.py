@@ -145,9 +145,23 @@ class RAGPipeline:
         results = response.get("results", [])
         filtered = [r for r in results if r.get("score", 0) >= MIN_SIMILARITY_THRESHOLD]
 
-        # Cache "no docs" for 5 min so subsequent messages skip embed+search entirely
-        if not filtered:
+        # Only cache "no docs" when the user genuinely has ZERO indexed chunks
+        # (raw results empty). Previously we cached on an empty *filtered* list --
+        # i.e. when chunks existed but merely scored below MIN_SIMILARITY_THRESHOLD.
+        # That poisoned the cache for 5 min and made follow-up questions like
+        # "what is this document about?" skip RAG entirely and ask the user to
+        # attach a file, even though their doc was indexed. Cache only on the
+        # true empty-index signal so genuinely doc-less users still get the fast path.
+        if not results:
             await self._redis.setex(no_docs_key, 300, "1")
+        elif not filtered:
+            # Docs exist but nothing cleared the threshold for THIS query. Do NOT
+            # poison the cache. Fall back to the best raw hit so the LLM can answer
+            # broad "summarise my document" questions instead of denying the doc.
+            best = sorted(results, key=lambda r: r.get("score", 0), reverse=True)[:2]
+            logger.info("RAG below-threshold fallback: %d raw hits, returning top %d",
+                        len(results), len(best))
+            return best
 
         return filtered
 
