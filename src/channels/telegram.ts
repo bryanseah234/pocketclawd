@@ -188,6 +188,22 @@ const adapter: ChannelAdapter = {
             return;
         }
 
+        // Document delivery (from generate_document tool)
+        if (message.kind === 'document' && typeof content.url === 'string') {
+            try {
+                const caption = (content.caption as string) || '';
+                await tgCall('sendDocument', {
+                    chat_id: platformId,
+                    document: content.url as string,
+                    caption,
+                });
+            } catch (err) {
+                log.error('Failed to send Telegram document', { platformId, err });
+                await sendTelegramMessage(platformId, `Here's your document: ${content.url as string}`);
+            }
+            return;
+        }
+
         // Plain text — WhatsApp *bold* → Telegram <b>bold</b>
         const raw = typeof content.text === 'string' ? content.text : JSON.stringify(content);
         const html = raw.replace(/\*(.*?)\*/g, '<b>$1</b>');
