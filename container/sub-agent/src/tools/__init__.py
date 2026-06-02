@@ -25,6 +25,7 @@ from .iss import ISS_TOOL, get_iss_location
 from .image_gen import IMAGE_GEN_TOOL, generate_image
 from .tts import TTS_TOOL, text_to_speech
 from .fetch_url import FETCH_URL_TOOL, fetch_url
+from .document_gen import DOCUMENT_GEN_TOOL, generate_document
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ TOOL_DEFINITIONS = [
     IMAGE_GEN_TOOL,
     TTS_TOOL,
     FETCH_URL_TOOL,
+    DOCUMENT_GEN_TOOL,
 ]
 
 # Map tool names to async callables
@@ -71,6 +73,7 @@ _DISPATCH: dict[str, Any] = {
     "generate_image": generate_image,
     "text_to_speech": text_to_speech,
     "fetch_url": fetch_url,
+    "generate_document": generate_document,
 }
 
 
