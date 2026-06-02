@@ -84,7 +84,9 @@ class TestGoogleNewsRss:
         rss = _make_rss([{"title": "Test article - Reuters", "link": "https://reuters.com/1", "source": "Reuters"}])
         client = _make_client({"news.google.com": _mock_response(200, rss)})
         results = await _google_news_rss(client, "test", 5)
-        assert "Reuters" in results[0]["snippet"]
+        # Source is now in the "source" field, not "snippet"
+        assert results[0]["source"] == "Reuters"
+        assert results[0]["snippet"] == ""  # snippet empty when source field is set
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_non_200(self):
