@@ -40,12 +40,21 @@ async def handle_list_documents(redis: Redis, user_id: str) -> str:
         return "⚠️ Could not retrieve document list (timeout). Please try again."
     if not resp.get("success"):
         return f"⚠️ Error listing documents: {resp.get('error', 'unknown error')}"
-    files: list[str] = resp.get("files", [])
+    files = resp.get("files", [])
     if not files:
         return "No documents found."
     lines = ["📄 *Your documents:*"]
-    for i, name in enumerate(files, 1):
-        lines.append(f"  {i}. {name}")
+    for i, f_entry in enumerate(files, 1):
+        # DGW returns {key, size, lastModified} dicts; extract display name
+        if isinstance(f_entry, dict):
+            key = f_entry.get("key", "")
+            # Strip userId prefix and drafts/ subfolder for display
+            name = key.split("/")[-1] if "/" in key else key
+            size_b = f_entry.get("size", 0)
+            size_str = f" ({size_b // 1024}KB)" if size_b and size_b >= 1024 else ""
+            lines.append(f"  {i}. {name}{size_str}")
+        else:
+            lines.append(f"  {i}. {f_entry}")
     lines.append("\nUse /delete <filename> to remove a document.")
     return "\n".join(lines)
 
@@ -236,7 +245,16 @@ async def handle_profile(redis: Redis, user_id: str, arg: str) -> str:
         logger.error("Failed to enqueue /profile update for user_id=%s: %s", user_id, exc)
         return "⚠️ Could not save your profile change right now — try again."
 
-    return f"✅ Updated: {key}={value}"
+    # Return confirmed values optimistically — no re-read; the write is
+    # fire-and-forget so a re-read races the DGW queue and shows stale data.
+    final_depth = payload_prefs.get("technical_depth") or "(unset)"
+    final_domain = payload_prefs.get("primary_domain") or "(unset)"
+    return (
+        f"✅ Updated: {key}={value}\n\n"
+        f"*Your profile*\n"
+        f"• Technical depth: {final_depth}\n"
+        f"• Primary domain: {final_domain}"
+    )
 
 
 async def handle_ingested(redis: Redis, user_id: str) -> str:
