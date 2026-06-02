@@ -135,6 +135,7 @@ class BedrockClaude:
         system_prompt: str | None = None,
         temperature: float | None = None,
         user_profile: dict | None = None,
+        image_bytes_list: list[tuple[bytes, str]] | None = None,
     ) -> str:
         """
         Generate a response using Bedrock Claude with tool-use support.
@@ -168,9 +169,23 @@ class BedrockClaude:
             user_content += f"<context>\n{rag_context}\n</context>\n\n"
         user_content += user_message
 
+        # Build user content blocks: images first (if any), then text
+        import base64 as _b64
+        _user_blocks: list[dict] = []
+        if image_bytes_list:
+            for _img_b, _img_mime in image_bytes_list:
+                _user_blocks.append({
+                    "image": {
+                        "format": _img_mime.split("/")[-1].replace("jpeg","jpeg"),
+                        "source": {
+                            "bytes": _img_b,
+                        },
+                    }
+                })
+        _user_blocks.append({"text": user_content})
         messages.append({
             "role": "user",
-            "content": [{"text": user_content}],
+            "content": _user_blocks,
         })
 
         prompt = system_prompt or SYSTEM_PROMPT
