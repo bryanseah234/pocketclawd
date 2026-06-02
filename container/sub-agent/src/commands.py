@@ -245,8 +245,16 @@ async def handle_profile(redis: Redis, user_id: str, arg: str) -> str:
         logger.error("Failed to enqueue /profile update for user_id=%s: %s", user_id, exc)
         return "⚠️ Could not save your profile change right now — try again."
 
-    # Return confirmed values optimistically — no re-read; the write is
-    # fire-and-forget so a re-read races the DGW queue and shows stale data.
+    # Cache confirmed values so the SHOW path reads them immediately
+    # without racing the async DGW queue write (TTL=120s).
+    cache_key = f"cache:profile:{user_id}"
+    try:
+        await redis.setex(cache_key, 120, json.dumps({
+            "technical_depth": payload_prefs.get("technical_depth"),
+            "primary_domain":  payload_prefs.get("primary_domain"),
+        }))
+    except Exception:
+        pass
     final_depth = payload_prefs.get("technical_depth") or "(unset)"
     final_domain = payload_prefs.get("primary_domain") or "(unset)"
     return (
