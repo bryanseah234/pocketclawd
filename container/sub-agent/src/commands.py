@@ -486,7 +486,7 @@ async def handle_disconnect(redis: Redis, user_id: str, arg: str) -> str:
     return f"\u2705 {service.capitalize()} disconnected and tokens deleted."
 
 
-async def handle_command(redis: Redis, user_id: str, content: str) -> str | None:
+async def handle_command(redis: Redis, user_id: str, content: str, channel_type: str = "whatsapp", platform_id: str = "") -> str | None:
     """
     Returns a response string if content is a slash command, else None.
     """
@@ -525,7 +525,7 @@ async def handle_command(redis: Redis, user_id: str, content: str) -> str | None
     if cmd == "/integrations":
         return CONNECT_HELP
     if cmd == "/remind":
-        return await parse_remind_command(redis, user_id, stripped)
+        return await parse_remind_command(redis, user_id, stripped, channel_type=channel_type, platform_id=platform_id)
     if cmd == "/reminders":
         items = await list_reminders(redis, user_id)
         if not items:
