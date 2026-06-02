@@ -56,6 +56,11 @@ def _apply_time_of_day(base: datetime, s: str) -> datetime | None:
 def _parse_time_str(time_str: str, now: datetime) -> datetime | None:
     s = time_str.strip().lower()
 
+    # Strip a leading "at " prefix (comes from parse_remind_command splitting
+    # on " at " and prepending "at " back, e.g. "at 3pm", "at 9am", "at 3pm today")
+    import re as _re
+    s = _re.sub(r"^at\s+", "", s)
+
     # "in X minutes/hours/days/weeks"
     m = re.match(r"in\s+(\d+)\s*(min(?:ute)?s?|h(?:our)?s?|days?|weeks?)", s)
     if m:
