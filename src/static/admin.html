@@ -1153,6 +1153,19 @@
         }
         .testchat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .testchat-send-btn:hover:not(:disabled) { opacity: 0.85; }
+        .history-divider {
+            text-align: center;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            padding: 6px 0 4px;
+            letter-spacing: 0.05em;
+            opacity: 0.6;
+        }
+        img.generated {
+            max-height: 180px;
+            width: auto;
+            display: block;
+        }
         /* Standardize all cards: same padding, same border, same radius */
         .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
         /* Settings tabs - coherent padding */
@@ -3068,7 +3081,10 @@
             const grid = document.getElementById('testchat-grid');
             if (!grid || grid.dataset.built) return;
             grid.dataset.built = '1';
-            TEST_USERS.forEach(u => grid.appendChild(buildPanel(u)));
+            TEST_USERS.forEach(u => {
+                grid.appendChild(buildPanel(u));
+                loadPanelHistory(u.id);
+            });
         }
 
         function buildPanel(u) {
@@ -3147,7 +3163,7 @@
             const div = document.createElement('div');
             div.className = 'testchat-msg ' + kind;
 
-            // Image preview for user-sent images
+            // Image preview for user-sent images (data URL from file picker)
             if (kind === 'user' && meta && meta.imageDataUrl) {
                 const img = document.createElement('img');
                 img.className = 'thumb';
@@ -3155,9 +3171,47 @@
                 div.appendChild(img);
             }
 
-            const txt = document.createElement('div');
-            txt.textContent = content;
-            div.appendChild(txt);
+            // Detect generated image markers and markdown images in bot replies
+            // Handles: IMAGE_URL:<url>:IMAGE_URL  and  ![alt](url)
+            const imgUrlMatch = typeof content === 'string' && content.match(/^IMAGE_URL:(.+):IMAGE_URL$/);
+            const mdImgMatch  = typeof content === 'string' && content.match(/!\[[^\]]*\]\((https?:\/\/[^\)]+)\)/);
+            const imgSrc = imgUrlMatch ? imgUrlMatch[1] : (mdImgMatch ? mdImgMatch[1] : null);
+
+            if (imgSrc) {
+                const img = document.createElement('img');
+                img.className = 'thumb generated';
+                img.src = imgSrc;
+                img.style.maxWidth = '100%';
+                img.style.borderRadius = '6px';
+                img.style.marginTop = '4px';
+                img.style.cursor = 'pointer';
+                img.title = 'Click to open full size';
+                img.onclick = () => window.open(imgSrc, '_blank');
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    const link = document.createElement('a');
+                    link.href = imgSrc;
+                    link.target = '_blank';
+                    link.textContent = '🖼 View image';
+                    link.style.color = 'var(--accent)';
+                    div.insertBefore(link, img.nextSibling);
+                };
+                div.appendChild(img);
+                // Also show the text caption (strip the raw marker / md image from it)
+                const caption = content
+                    .replace(/^IMAGE_URL:.+:IMAGE_URL$/, '')
+                    .replace(/!\[[^\]]*\]\(https?:\/\/[^\)]+\)/g, '')
+                    .trim();
+                if (caption) {
+                    const txt = document.createElement('div');
+                    txt.textContent = caption;
+                    div.appendChild(txt);
+                }
+            } else {
+                const txt = document.createElement('div');
+                txt.textContent = content;
+                div.appendChild(txt);
+            }
 
             if (meta && meta.ts) {
                 const m = document.createElement('div');
@@ -3168,6 +3222,42 @@
 
             log.appendChild(div);
             log.scrollTop = log.scrollHeight;
+        }
+
+        async function loadPanelHistory(uid) {
+            const log = document.getElementById('log-' + uid);
+            if (!log) return;
+            try {
+                const r = await fetch('/admin/api/chat/history?userId=' + encodeURIComponent(uid) + '&limit=60',
+                    { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                const msgs = data.messages || [];
+                if (msgs.length === 0) return;
+
+                // Divider so it's clear this is persisted history, not live session
+                const divider = document.createElement('div');
+                divider.className = 'history-divider';
+                divider.textContent = '── history ──';
+                log.appendChild(divider);
+
+                msgs.forEach(m => {
+                    const ts = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const kind = m.role === 'user' ? 'user' : 'bot';
+                    // Use the text field (DynamoDB schema) or content field
+                    const body = m.text || m.content || '';
+                    appendMsg(uid, kind, body, { ts, fromHistory: true });
+                });
+
+                // Second divider to mark where live session begins
+                const divider2 = document.createElement('div');
+                divider2.className = 'history-divider';
+                divider2.textContent = '── live ──';
+                log.appendChild(divider2);
+                log.scrollTop = log.scrollHeight;
+            } catch (e) {
+                // silently ignore — history is best-effort
+            }
         }
 
         async function sendMsg(uid) {
