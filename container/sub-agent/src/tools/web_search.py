@@ -135,12 +135,41 @@ async def _google_news_rss(
                     "title": title,
                     "url": link,
                     "snippet": f"Source: {source_name}" if source_name else "",
+                    "source": source_name,
                 })
+        # Resolve Google redirect URLs to clean publisher URLs
+        results = await _resolve_google_urls(client, results)
         return results
     except Exception as e:
         logger.debug("Google News RSS failed: %s", e)
         return []
 
+
+
+
+async def _resolve_google_urls(client: httpx.AsyncClient, results: list[dict]) -> list[dict]:
+    """Resolve Google News redirect URLs to clean publisher URLs.
+
+    Google RSS links look like https://news.google.com/rss/articles/CBMi...
+    A HEAD request with follow_redirects=True gives the final URL.
+    We resolve concurrently, cap per-URL at 2s, and fall back to the original on failure.
+    """
+
+    async def _resolve_one(item: dict) -> dict:
+        url = item.get("url", "")
+        if "news.google.com" not in url:
+            return item
+        try:
+            resp = await client.head(url, timeout=2.0, follow_redirects=True)
+            final = str(resp.url)
+            if final and "news.google.com" not in final:
+                return {**item, "url": final}
+        except Exception:
+            pass
+        return item
+
+    resolved = await asyncio.gather(*[_resolve_one(r) for r in results])
+    return list(resolved)
 
 async def _ddg_instant(client: httpx.AsyncClient, encoded: str) -> list[dict]:
     """DuckDuckGo Instant Answer API -- good for factual/entity queries."""
@@ -178,10 +207,16 @@ def _format_results(results: list[dict], query: str) -> str:
     for i, r in enumerate(results, 1):
         title = r.get("title", "").strip()
         url = r.get("url", "").strip()
+        source = r.get("source", "").strip()
         snippet = r.get("snippet", "").strip()
+        # Clean snippet: strip "Source: X" if we now have a proper source field
+        if source and snippet == f"Source: {source}":
+            snippet = ""
         lines.append(f"{i}. {title}")
         if url:
-            lines.append(f"   {url}")
+            lines.append(f"   URL: {url}")
+        if source:
+            lines.append(f"   Source: {source}")
         if snippet:
             lines.append(f"   {snippet}")
         lines.append("")
