@@ -470,13 +470,25 @@ async function main(): Promise<void> {
         const audioMatch = rawContent.match(/AUDIO_URL:(.+?):AUDIO_URL/);
         const docMatch = rawContent.match(/DOC_URL:(.+?):DOC_URL/);
         if (imgMatch) {
-          resolvedKind = 'image';
-          // Everything outside the marker becomes the caption
-          const caption = rawContent
-            .replace(/IMAGE_URL:.+?:IMAGE_URL/, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-          content = JSON.stringify({ url: imgMatch[1], caption });
+          const extractedUrl = imgMatch[1];
+          // Only trust image URLs from our own S3 bucket (presigned URLs).
+          // Reject hallucinated third-party URLs (pollinations.ai, etc.) — treat as plain text.
+          const isTrustedImageUrl = extractedUrl.includes('.s3.') &&
+            extractedUrl.includes('amazonaws.com') &&
+            extractedUrl.includes('media/generated');
+          if (isTrustedImageUrl) {
+            resolvedKind = 'image';
+            const caption = rawContent
+              .replace(/IMAGE_URL:.+?:IMAGE_URL/, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            content = JSON.stringify({ url: extractedUrl, caption });
+          } else {
+            // Hallucinated URL -- log and deliver as plain text with the marker stripped
+            log.warn('Rejected non-S3 IMAGE_URL (hallucinated?)', { url: extractedUrl.slice(0, 80) });
+            const strippedText = rawContent.replace(/IMAGE_URL:.+?:IMAGE_URL/, '[image generation failed — try again]').trim();
+            content = JSON.stringify({ text: strippedText });
+          }
         } else if (audioMatch) {
           resolvedKind = 'audio';
           content = JSON.stringify({ url: audioMatch[1] });
