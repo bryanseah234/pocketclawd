@@ -92,8 +92,13 @@ async def _fetch(url: str) -> tuple[str, str] | None:
             # Lightweight HTML→text: strip tags. For richer extraction use
             # the existing documents/extractors module via download → process.
             if "html" in ct:
-                from src.documents.extractors import extract_text
-                text = extract_text(content, "text/html")
+                # Strip HTML tags inline — extract_text does not handle text/html
+                raw = content.decode("utf-8", errors="replace")
+                import re as _re
+                # Remove scripts, styles, and tags; collapse whitespace
+                raw = _re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw, flags=_re.S | _re.I)
+                raw = _re.sub(r"<[^>]+>", " ", raw)
+                text = _re.sub(r"[ \t]+", " ", raw).strip()
             elif "pdf" in ct:
                 from src.documents.extractors import extract_text
                 text = extract_text(content, "application/pdf")
