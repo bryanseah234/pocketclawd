@@ -1,14 +1,15 @@
 """
 Web search -- multi-source, keyless, no API keys required.
 
-Source priority:
-  1. DuckDuckGo HTML scrape (POST) -- reliable, no rate limit for reasonable use
-  2. Brave Search HTML scrape      -- secondary source, works from AWS EC2
-     (Note: SearXNG all instances block AWS IPs at network layer — 403/429)
-  3. DDG Instant Answer API        -- fallback for factual/entity queries
+Source priority (all verified working from AWS ap-southeast-1 EC2/ECS):
+  1. Google News RSS  -- 100 fresh items, always 200, real XML, no key
+  2. DDG Instant API  -- good for entity/fact queries (abstracts only)
+  Both are tried concurrently; first non-empty set wins.
 
-After getting URLs, optionally auto-fetch the top result via Jina Reader
-for richer context (controlled by fetch_top_result param).
+Confirmed broken from AWS ASN (do not re-add without a proxy):
+  - DuckDuckGo HTML/Lite POST  --> 202 CAPTCHA challenge, zero results
+  - Brave Search HTML scrape   --> 429 rate-limited / ASN block
+  - SearXNG public instances   --> 403/429 across all instances
 """
 import asyncio
 import html as html_module
@@ -16,6 +17,8 @@ import json
 import logging
 import re
 import urllib.parse
+import xml.etree.ElementTree as ET
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -50,7 +53,6 @@ WEB_SEARCH_TOOL = {
     }
 }
 
-# DDG JSON API endpoint (fallback after HTML scrape)
 _DDG_JSON_URL = "https://api.duckduckgo.com/"
 
 _UA = (
@@ -70,10 +72,7 @@ async def search_web(query: str, num_results: int = 5) -> str:
         follow_redirects=True,
         headers={"User-Agent": _UA},
     ) as client:
-
-        # Run DDG HTML + Brave concurrently for speed
         results = await _search_concurrent(client, query, encoded, num_results)
-
         if results:
             return _format_results(results, query)
 
@@ -86,123 +85,70 @@ async def search_web(query: str, num_results: int = 5) -> str:
 async def _search_concurrent(
     client: httpx.AsyncClient, query: str, encoded: str, n: int
 ) -> list[dict]:
-    """Run multiple search sources concurrently, return first non-empty result."""
+    """Run Google News RSS + DDG Instant concurrently, return first non-empty result."""
     tasks = [
-        _ddg_html(client, encoded, n),
-        _brave_search(client, encoded, n),
+        _google_news_rss(client, encoded, n),
+        _ddg_instant(client, encoded),
     ]
-    # Fire all, return first good result
     results_list = await asyncio.gather(*tasks, return_exceptions=True)
     for r in results_list:
         if isinstance(r, list) and r:
             return r
-    # Fallback: DDG Instant
-    instant = await _ddg_instant(client, encoded)
-    if instant:
-        return instant
     return []
 
 
-async def _ddg_html(client: httpx.AsyncClient, encoded: str, n: int) -> list[dict]:
-    """DuckDuckGo HTML endpoint -- most reliable, no key needed."""
+async def _google_news_rss(
+    client: httpx.AsyncClient, encoded: str, n: int
+) -> list[dict]:
+    """Google News RSS search -- verified working from AWS EC2/ECS, no key needed.
+
+    Returns up to n items with title, link, and source name.
+    Note: links are Google redirect URLs (articles/...) -- fetch_url handles them.
+    """
     try:
-        resp = await client.post(
-            "https://html.duckduckgo.com/html/",
-            data={"q": urllib.parse.unquote_plus(encoded), "b": "", "kl": "us-en"},
-            headers={
-                "User-Agent": _UA,
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Referer": "https://duckduckgo.com/",
-            },
-            timeout=10.0,
+        url = (
+            f"https://news.google.com/rss/search"
+            f"?q={encoded}&hl=en-SG&gl=SG&ceid=SG:en"
         )
+        resp = await client.get(url, timeout=10.0)
         if resp.status_code != 200:
+            logger.debug("Google News RSS returned %s", resp.status_code)
             return []
 
-        # Parse result blocks
+        root = ET.fromstring(resp.text)
+        items = root.findall(".//item")
         results = []
-        # DDG HTML uses class="result__a" for titles and result__url for URLs
-        # and result__snippet for snippets
-        title_pattern = re.compile(
-            r'class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>', re.DOTALL
-        )
-        snippet_pattern = re.compile(
-            r'class="result__snippet"[^>]*>(.*?)</a>', re.DOTALL
-        )
-        # Also extract result URLs (DDG wraps in redirect)
-        url_pattern = re.compile(r'class="result__url"[^>]*>(.*?)</span>', re.DOTALL)
-
-        titles = title_pattern.findall(resp.text)
-        snippets = snippet_pattern.findall(resp.text)
-        url_texts = url_pattern.findall(resp.text)
-
-        for i, (href, title_html) in enumerate(titles[:n]):
-            title = html_module.unescape(re.sub(r"<[^>]+>", "", title_html)).strip()
-            snippet = ""
-            if i < len(snippets):
-                snippet = html_module.unescape(
-                    re.sub(r"<[^>]+>", "", snippets[i])
-                ).strip()
-            # Extract real URL (DDG wraps in /l/?uddg=...)
-            real_url = href
-            if "uddg=" in href:
-                m = re.search(r"uddg=([^&]+)", href)
-                if m:
-                    real_url = urllib.parse.unquote(m.group(1))
-            elif i < len(url_texts):
-                url_text = html_module.unescape(
-                    re.sub(r"<[^>]+>", "", url_texts[i])
-                ).strip()
-                if url_text and not url_text.startswith("/"):
-                    real_url = "https://" + url_text if not url_text.startswith("http") else url_text
-
-            if title and real_url:
-                results.append({"title": title, "url": real_url, "snippet": snippet})
-
+        for item in items[:n]:
+            title_el = item.find("title")
+            link_el = item.find("link")
+            source_el = item.find("source")
+            if title_el is None or link_el is None:
+                continue
+            title = (title_el.text or "").strip()
+            # Strip " - Source Name" suffix that Google appends
+            source_name = source_el.text.strip() if source_el is not None and source_el.text else ""
+            if source_name and title.endswith(f" - {source_name}"):
+                title = title[: -len(f" - {source_name}")].strip()
+            link = (link_el.text or "").strip()
+            if title and link:
+                results.append({
+                    "title": title,
+                    "url": link,
+                    "snippet": f"Source: {source_name}" if source_name else "",
+                })
         return results
     except Exception as e:
-        logger.debug("DDG HTML search failed: %s", e)
-        return []
-
-
-async def _brave_search(client: httpx.AsyncClient, encoded: str, n: int) -> list[dict]:
-    """Brave Search API -- public endpoint, no API key required for basic use."""
-    try:
-        resp = await client.get(
-            "https://search.brave.com/search",
-            params={"q": urllib.parse.unquote_plus(encoded), "source": "web"},
-            headers={
-                "User-Agent": _UA,
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            timeout=8.0,
-        )
-        if resp.status_code != 200:
-            return []
-        # Parse Brave HTML results (similar structure to DDG)
-        results = []
-        title_pat = re.compile(r'<a[^>]+class="[^"]*result-header[^"]*"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.DOTALL)
-        snippet_pat = re.compile(r'class="[^"]*snippet-description[^"]*"[^>]*>(.*?)</p>', re.DOTALL)
-        titles = title_pat.findall(resp.text)
-        snippets = snippet_pat.findall(resp.text)
-        for i, (url, title_html) in enumerate(titles[:n]):
-            title = html_module.unescape(re.sub(r"<[^>]+>", "", title_html)).strip()
-            snippet = ""
-            if i < len(snippets):
-                snippet = html_module.unescape(re.sub(r"<[^>]+>", "", snippets[i])).strip()
-            if title and url and url.startswith("http"):
-                results.append({"title": title, "url": url, "snippet": snippet})
-        return results
-    except Exception as e:
-        logger.debug("Brave search failed: %s", e)
+        logger.debug("Google News RSS failed: %s", e)
         return []
 
 
 async def _ddg_instant(client: httpx.AsyncClient, encoded: str) -> list[dict]:
     """DuckDuckGo Instant Answer API -- good for factual/entity queries."""
     try:
-        url = f"https://api.duckduckgo.com/?q={encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1"
+        url = (
+            f"https://api.duckduckgo.com/"
+            f"?q={encoded}&format=json&no_redirect=1&no_html=1&skip_disambig=1"
+        )
         resp = await client.get(url, timeout=8.0)
         if resp.status_code != 200:
             return []
