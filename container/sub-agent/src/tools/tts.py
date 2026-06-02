@@ -31,12 +31,17 @@ async def text_to_speech(text: str, voice: str = "Joanna") -> str:
         return "TTS unavailable (DATA_BUCKET not configured)."
     try:
         polly = boto3.client("polly", region_name=region)
-        resp = polly.synthesize_speech(
-            Text=text[:1000],
-            OutputFormat="mp3",
-            VoiceId=voice if voice in ("Joanna", "Matthew", "Amy", "Brian") else "Joanna",
-            Engine="neural",
-        )
+        vid = voice if voice in ("Joanna", "Matthew", "Amy", "Brian") else "Joanna"
+        try:
+            resp = polly.synthesize_speech(
+                Text=text[:1000], OutputFormat="mp3", VoiceId=vid, Engine="neural",
+            )
+        except Exception as neural_err:  # noqa: BLE001
+            # Neural engine may be unavailable in-region or per-voice; fall back to standard.
+            logger.warning("Polly neural failed (%s); retrying with standard engine", neural_err)
+            resp = polly.synthesize_speech(
+                Text=text[:1000], OutputFormat="mp3", VoiceId=vid, Engine="standard",
+            )
         audio = resp["AudioStream"].read()
         s3 = boto3.client("s3", region_name=region)
         key = f"media/tts/{uuid.uuid4()}.mp3"

@@ -182,7 +182,16 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
 
     // 5. Rate limiter
     log.info('Cloud bootstrap: initializing rate limiter');
-    const rateLimiter = new RateLimiter(redis);
+    // Env-configurable caps (defaults preserve prod: 20/min, 200/hr). Lets load/
+    // integration tests raise the ceiling without a code change.
+    const _rlUser = process.env.RATE_LIMIT_USER_PER_MIN
+        ? parseInt(process.env.RATE_LIMIT_USER_PER_MIN, 10) : undefined;
+    const _rlGlobal = process.env.RATE_LIMIT_GLOBAL_PER_HOUR
+        ? parseInt(process.env.RATE_LIMIT_GLOBAL_PER_HOUR, 10) : undefined;
+    const rateLimiter = new RateLimiter(redis, {
+        ...(Number.isFinite(_rlUser as number) ? { userLimitPerMinute: _rlUser as number } : {}),
+        ...(Number.isFinite(_rlGlobal as number) ? { globalLimitPerHour: _rlGlobal as number } : {}),
+    });
     log.info('Cloud bootstrap: rate limiter ready');
 
     // 6. CloudWatch logger

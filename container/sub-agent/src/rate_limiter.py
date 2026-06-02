@@ -21,12 +21,21 @@ class RateLimiter:
     def __init__(
         self,
         redis: Redis,
-        user_limit_per_min: int = 20,
-        global_limit_per_hour: int = 200,
+        user_limit_per_min: int | None = None,
+        global_limit_per_hour: int | None = None,
     ) -> None:
+        import os as _os
         self.redis = redis
-        self.user_limit_per_min = user_limit_per_min
-        self.global_limit_per_hour = global_limit_per_hour
+        # Env-configurable so load/integration tests can raise the caps without
+        # a code change. Defaults preserve production behaviour (20/min, 200/hr).
+        self.user_limit_per_min = (
+            user_limit_per_min if user_limit_per_min is not None
+            else int(_os.environ.get("RATE_LIMIT_USER_PER_MIN", "20"))
+        )
+        self.global_limit_per_hour = (
+            global_limit_per_hour if global_limit_per_hour is not None
+            else int(_os.environ.get("RATE_LIMIT_GLOBAL_PER_HOUR", "200"))
+        )
 
     async def check_and_record(self, user_id: str) -> tuple[bool, str]:
         """

@@ -63,6 +63,13 @@ resource "aws_iam_role_policy" "sub_agent_task" {
       {
         Effect = "Allow"
         Action = [
+          "polly:SynthesizeSpeech",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",

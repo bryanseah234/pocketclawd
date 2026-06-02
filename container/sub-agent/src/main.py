@@ -300,19 +300,37 @@ async def process_message(message: InboundMessage) -> AgentResponse:
                         metadata={"source": "sub-agent", "type": "onboarding"},
                     )
             elif not _is_escape_cmd:
-                # Check if brand new user (skip for escape slash commands)
-                from src.persona.preference_probe import probe_user_preferences
-                persona_ctx = await probe_user_preferences(state.redis, message.user_id)
-                if persona_ctx.is_new_user:
-                    disc_state, first_q = discovery_skill.activate(message.user_id, message.content)
-                    await discovery_skill.save_state(state.redis, disc_state)
-                    return AgentResponse(
-                        message_id=message.message_id,
-                        user_id=message.user_id,
-                        content=first_q,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                        metadata={"source": "sub-agent", "type": "onboarding"},
-                    )
+                # Auto-activate onboarding ONLY on a user's first-ever message.
+                # A persistent "greeted" marker prevents the discovery wizard from
+                # spuriously re-triggering mid-session -- which previously happened
+                # whenever preference_probe read is_new_user=True, including on a
+                # transient DataGateway timeout (fail-open). That hijacked the
+                # conversation with "reply with 1/2/3/4" for already-active users.
+                greeted_key = f"greeted:{message.user_id}"
+                already_greeted = False
+                try:
+                    already_greeted = bool(await state.redis.get(greeted_key))
+                except Exception:
+                    already_greeted = False
+                if not already_greeted:
+                    from src.persona.preference_probe import probe_user_preferences
+                    persona_ctx = await probe_user_preferences(state.redis, message.user_id)
+                    # Mark greeted regardless, so a probe timeout (which fails open to
+                    # is_new_user=True) can never re-onboard on a subsequent message.
+                    try:
+                        await state.redis.set(greeted_key, "1")
+                    except Exception:
+                        pass
+                    if persona_ctx.is_new_user:
+                        disc_state, first_q = discovery_skill.activate(message.user_id, message.content)
+                        await discovery_skill.save_state(state.redis, disc_state)
+                        return AgentResponse(
+                            message_id=message.message_id,
+                            user_id=message.user_id,
+                            content=first_q,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                            metadata={"source": "sub-agent", "type": "onboarding"},
+                        )
 
         # Rate limiting (only after consent granted)
         from src.rate_limiter import RateLimiter
@@ -927,6 +945,40 @@ async def poll_queue() -> None:
                             logger.info("Fetched image attachment from S3 key=%s", _s3key)
                         except Exception as _img_fetch_err:
                             logger.warning("Could not fetch image attachment %s: %s", _att.get("name"), _img_fetch_err)
+                # D1 fix: also support image envelopes that reference the image by
+                # URL rather than an S3-staged attachment. The admin test endpoint and
+                # some channels deliver kind:"image" with payload.url (a presigned/HTTP
+                # URL) and payload.content as plain caption text. Without this, the live
+                # vision pipeline never received the bytes and the agent replied "I don't
+                # see an image" -- photos only worked later via RAG once indexed.
+                if not _image_bytes_list:
+                    _img_url = (
+                        payload_dict.get("url")
+                        or payload_dict.get("imageUrl")
+                        or (payload_dict.get("media") or {}).get("url")
+                    )
+                    _is_image_kind = (
+                        payload_dict.get("kind") == "image"
+                        or str(payload_dict.get("mimeType", "")).startswith("image/")
+                        or str(data.get("type", "")).startswith("image")
+                    )
+                    if _img_url and (_is_image_kind or "/media/" in str(_img_url) or "staging" in str(_img_url)):
+                        try:
+                            import urllib.request as _urlreq
+                            with _urlreq.urlopen(_img_url, timeout=15) as _r:
+                                _img_bytes = _r.read()
+                                _ctype = _r.headers.get("Content-Type", "") or ""
+                            _mime = _ctype.split(";")[0].strip() if _ctype.startswith("image/") else ""
+                            if not _mime:
+                                _ext = os.path.splitext(str(_img_url).split("?")[0])[1].lower()
+                                _mime = {".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",
+                                         ".webp":"image/webp",".gif":"image/gif",".heic":"image/heic",
+                                         ".heif":"image/heif",".tiff":"image/tiff",".bmp":"image/bmp"}.get(_ext, "image/jpeg")
+                            if _img_bytes:
+                                _image_bytes_list.append((_img_bytes, _mime))
+                                logger.info("Fetched image from URL for live vision (mime=%s, %d bytes)", _mime, len(_img_bytes))
+                        except Exception as _url_img_err:
+                            logger.warning("Could not fetch image from URL %s: %s", _img_url, _url_img_err)
                 # Store image bytes on merged_meta so process_message can pass to LLM
                 merged_meta["_image_bytes_list"] = _image_bytes_list
                 message = InboundMessage(

@@ -363,6 +363,14 @@ async def handle_draft(redis: Redis, user_id: str, arg: str) -> str:  # noqa: AR
     short-circuited if the LLM client can\'t initialise (e.g. local pytest).
     """
     parts = arg.strip().split(None, 1)
+    # Validate the type FIRST so an unknown single token (e.g. "/draft banana")
+    # returns the "Unknown draft type" error rather than the generic usage text.
+    first = parts[0].lower() if parts and parts[0].strip() else ""
+    if first and first not in DRAFT_TYPES:
+        return (
+            f"Unknown draft type \'{first}\'.\n"
+            f"Types: {', '.join(sorted(DRAFT_TYPES.keys()))}"
+        )
     if len(parts) < 2:
         return (
             "Usage: /draft <type> <topic>\n"
