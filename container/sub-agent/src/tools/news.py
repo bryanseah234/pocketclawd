@@ -86,11 +86,18 @@ async def get_news(topic: str = "", source: str = "cna", limit: int = 5) -> str:
     feed_name, feed_url = RSS_FEEDS.get(key, RSS_FEEDS["cna"])
     limit = min(max(1, int(limit)), 10)
 
+    # Mothership uses Cloudflare which blocks bot UAs -- use browser UA for it
+    _browser_ua = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+    _ua = _browser_ua if key == "mothership" else "NanoClaw/1.0 (+https://clawd.app)"
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         try:
             resp = await client.get(
                 feed_url,
-                headers={"User-Agent": "NanoClaw/1.0 (+https://clawd.app)"},
+                headers={"User-Agent": _ua},
             )
             resp.raise_for_status()
             root = ET.fromstring(resp.text)
