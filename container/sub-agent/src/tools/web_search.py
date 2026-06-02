@@ -130,15 +130,19 @@ async def _google_news_rss(
             if source_name and title.endswith(f" - {source_name}"):
                 title = title[: -len(f" - {source_name}")].strip()
             link = (link_el.text or "").strip()
+            # Use the source url attribute as the clean publisher URL.
+            # The <link> in Google News RSS is a redirect that can't be resolved
+            # server-side; source.url is the publisher homepage (e.g. channelnewsasia.com).
+            source_url = source_el.get("url", "") if source_el is not None else ""
+            clean_url = source_url or link  # fall back to google link if no source url
             if title and link:
                 results.append({
                     "title": title,
-                    "url": link,
-                    "snippet": f"Source: {source_name}" if source_name else "",
+                    "url": clean_url,
+                    "google_url": link,  # kept so fetch_url can still access the article
+                    "snippet": "",
                     "source": source_name,
                 })
-        # Resolve Google redirect URLs to clean publisher URLs
-        results = await _resolve_google_urls(client, results)
         return results
     except Exception as e:
         logger.debug("Google News RSS failed: %s", e)
@@ -146,30 +150,6 @@ async def _google_news_rss(
 
 
 
-
-async def _resolve_google_urls(client: httpx.AsyncClient, results: list[dict]) -> list[dict]:
-    """Resolve Google News redirect URLs to clean publisher URLs.
-
-    Google RSS links look like https://news.google.com/rss/articles/CBMi...
-    A HEAD request with follow_redirects=True gives the final URL.
-    We resolve concurrently, cap per-URL at 2s, and fall back to the original on failure.
-    """
-
-    async def _resolve_one(item: dict) -> dict:
-        url = item.get("url", "")
-        if "news.google.com" not in url:
-            return item
-        try:
-            resp = await client.head(url, timeout=2.0, follow_redirects=True)
-            final = str(resp.url)
-            if final and "news.google.com" not in final:
-                return {**item, "url": final}
-        except Exception:
-            pass
-        return item
-
-    resolved = await asyncio.gather(*[_resolve_one(r) for r in results])
-    return list(resolved)
 
 async def _ddg_instant(client: httpx.AsyncClient, encoded: str) -> list[dict]:
     """DuckDuckGo Instant Answer API -- good for factual/entity queries."""
@@ -217,6 +197,10 @@ def _format_results(results: list[dict], query: str) -> str:
             lines.append(f"   URL: {url}")
         if source:
             lines.append(f"   Source: {source}")
+        # Include the Google fetch URL so the model can call fetch_url for full article
+        google_url = r.get("google_url", "").strip()
+        if google_url and google_url != url:
+            lines.append(f"   Fetch: {google_url}")
         if snippet:
             lines.append(f"   {snippet}")
         lines.append("")
