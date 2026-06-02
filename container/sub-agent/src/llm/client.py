@@ -24,6 +24,11 @@ DEFAULT_MAX_TOKENS = 800  # WA messages should be concise; reduces latency
 DEFAULT_TEMPERATURE = 0.5
 
 _PERSONA_CANDIDATES = [
+    # /app/src/persona/ -- correct path after COPY src/ ./src/
+    "/app/src/persona/system_prompt_template.json",
+    # relative from src/llm/client.py -> ../persona/
+    os.path.join(os.path.dirname(__file__), "../persona/system_prompt_template.json"),
+    # legacy fallbacks
     "/app/persona/system_prompt_template.json",
     os.path.join(os.path.dirname(__file__), "../../../persona/system_prompt_template.json"),
 ]
