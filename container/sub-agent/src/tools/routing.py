@@ -51,8 +51,23 @@ async def get_directions(from_place: str, to_place: str, mode: str = "driving") 
             return "Could not find a route."
 
         dist_km = routes[0]["distance"] / 1000
-        duration_min = routes[0]["duration"] / 60
+        # OSRM duration is network-optimised and unrealistic for human travel.
+        # Override with real-world average speeds:
+        #   cycling: 15 km/h (leisure rider on PCN/road mix)
+        #   walking: 5 km/h
+        #   driving: use OSRM (road network is accurate)
+        if mode == "cycling":
+            duration_min = (dist_km / 15.0) * 60  # 15 km/h leisure cycling
+            speed_note = "at ~15 km/h leisure pace"
+        elif mode == "walking":
+            duration_min = (dist_km / 5.0) * 60   # 5 km/h walking
+            speed_note = "at ~5 km/h walking pace"
+        else:
+            duration_min = routes[0]["duration"] / 60
+            speed_note = ""
+        time_str = f"{int(duration_min)} min" if duration_min < 90 else f"{duration_min/60:.1f} hr"
+        note = f" ({speed_note})" if speed_note else ""
         return (
             f"*{from_place}* to *{to_place}*\n"
-            f"{dist_km:.1f} km | ~{duration_min:.0f} min {mode}"
+            f"{dist_km:.1f} km | ~{time_str} {mode}{note}"
         )
