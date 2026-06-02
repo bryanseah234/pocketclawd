@@ -129,6 +129,9 @@ class ProcessResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Background task registry
+_bg_tasks: set = set()
+
 class AppState:
     """Mutable application state shared across the lifespan."""
 
@@ -382,10 +385,14 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
         # Store user message fire-and-forget (don't block pipeline on it)
         asyncio.ensure_future(_store_chat_message(message.user_id, "user", message.content))
 
-        # Silent URL ingestion (non-blocking)
+        # Silent URL ingestion (non-blocking).
+        # Store the task in _bg_tasks to prevent GC before it runs.
         try:
             from src.url_ingestion import schedule_silent_ingest
-            schedule_silent_ingest(state.redis, message.user_id, message.content)
+            _task = schedule_silent_ingest(state.redis, message.user_id, message.content)
+            if _task is not None:
+                _bg_tasks.add(_task)
+                _task.add_done_callback(_bg_tasks.discard)
         except Exception as url_err:
             logger.warning("URL silent-ingest scheduling failed: %s", url_err)
 
