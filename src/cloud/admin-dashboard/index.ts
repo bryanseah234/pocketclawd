@@ -582,7 +582,7 @@ function parseMultipart(
         pos = nextSep < 0 ? raw.length : nextSep;
 
         // extract field name + optional filename + content-type
-        const cdMatch = headerStr.match(/Content-Disposition[^\r\n]*name="([^"]+)"/i);
+        const cdMatch = headerStr.match(/Content-Disposition[^\r\n]*?name="([^"]+)"/i);  // non-greedy: must capture the field name, not a trailing filename="..."
         const fnMatch = headerStr.match(/filename="([^"]+)"/i);
         const ctMatch = headerStr.match(/Content-Type:\s*([^\r\n]+)/i);
         if (!cdMatch) continue;

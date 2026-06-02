@@ -957,8 +957,6 @@ async def poll_queue() -> None:
                         or payload_dict.get("imageUrl")
                         or (payload_dict.get("media") or {}).get("url")
                     )
-                    logger.info("VISION-DIAG kind=%r has_url=%s payload_keys=%r data_type=%r",
-                                payload_dict.get("kind"), bool(_img_url), sorted(payload_dict.keys()), data.get("type"))
                     _is_image_kind = (
                         payload_dict.get("kind") == "image"
                         or str(payload_dict.get("mimeType", "")).startswith("image/")
