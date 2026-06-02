@@ -24,9 +24,10 @@ IMAGE_GEN_TOOL = {
     "toolSpec": {
         "name": "generate_image",
         "description": (
-            "Generate an image from a text description. "
-            "Use this when the user asks you to draw, create, generate, or visualise something. "
-            "E.g. 'make me a birthday card', 'draw a logo', 'generate a picture of...'."
+            "Generate an image from a text description using AWS Bedrock AI. "
+            "ALWAYS call this tool when the user asks to draw, create, generate, or visualise an image. "
+            "Do NOT construct or guess image URLs yourself -- ONLY this tool produces real images. "
+            "E.g. 'make me a birthday card', 'draw a logo', 'generate a picture of...', 'create an image of...'."
         ),
         "inputSchema": {
             "json": {
