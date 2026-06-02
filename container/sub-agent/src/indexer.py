@@ -142,7 +142,12 @@ async def index_file(message: dict) -> None:
         content = obj["Body"].read()
         logger.info("Downloaded %d bytes from %s/%s", len(content), bucket, s3_key)
 
-        from src.documents.extractors import extract_text, is_supported
+        from src.documents.extractors import extract_text, is_supported, resolve_content_type
+
+        # Re-queued files (s3-reindex) and some clients send a generic
+        # application/octet-stream. Recover the real type from the filename
+        # extension so PDFs/Office docs/images aren't wrongly rejected.
+        content_type = resolve_content_type(content_type, filename)
         from src.embeddings.pipeline import EmbeddingPipeline, RecursiveCharacterSplitter
 
         if not is_supported(content_type):

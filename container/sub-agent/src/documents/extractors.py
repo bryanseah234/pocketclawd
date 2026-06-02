@@ -9,6 +9,7 @@ Requirements: REQ-5.1
 import csv
 import io
 import logging
+import os
 from typing import Callable
 
 # Module-level imports so unittest.mock.patch can target these names.
@@ -316,3 +317,47 @@ def is_supported(content_type: str) -> bool:
     raising ValueError on an unsupported upload.
     """
     return _get_extractor(content_type) is not None
+
+
+# Extension -> canonical MIME. Used when the upstream content-type is generic
+# (application/octet-stream) or empty -- common for s3-reindex re-queues and
+# some chat clients. Extension is the more reliable signal in those cases.
+_EXT_TO_MIME: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".csv": "text/csv",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".markdown": "text/markdown",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".xhtml": "application/xhtml+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".bmp": "image/bmp",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+}
+
+_GENERIC_CT = {"", "application/octet-stream", "binary/octet-stream", "application/binary"}
+
+
+def resolve_content_type(content_type: str, filename: str = "") -> str:
+    """Return a usable MIME type, preferring the extension when the supplied
+    content-type is generic/unknown. Falls back to the original content-type."""
+    ct = (content_type or "").split(";")[0].strip().lower()
+    # If the declared type is already supported, keep it.
+    if ct and ct not in _GENERIC_CT and _get_extractor(ct) is not None:
+        return ct
+    # Otherwise try the filename extension.
+    _, ext = os.path.splitext((filename or "").lower())
+    if ext in _EXT_TO_MIME:
+        return _EXT_TO_MIME[ext]
+    return ct or content_type

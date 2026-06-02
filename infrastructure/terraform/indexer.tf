@@ -57,8 +57,19 @@ resource "aws_ecs_task_definition" "indexer" {
       { name = "OPENSEARCH_COLLECTION", value = aws_opensearchserverless_collection.documents.name },
       { name = "ASSISTANT_NAME", value = "Clawd" },
       { name = "PYTHONUNBUFFERED", value = "1" },
+      { name = "AGENT_USER_ID", value = "indexer" },
+      { name = "REDIS_HOST", value = "master.nanoclaw-redis-rg.sipa0z.apse1.cache.amazonaws.com" },
+      { name = "REDIS_PORT", value = "6379" },
+      { name = "REDIS_SSL", value = "true" },
       { name = "BEDROCK_LLM_MODEL_ID", value = "global.anthropic.claude-sonnet-4-5-20250929-v1:0" },
-      { name = "BEDROCK_EMBEDDING_MODEL_ID", value = "cohere.embed-v4:0" },
+      { name = "BEDROCK_EMBEDDING_MODEL_ID", value = "cohere.embed-multilingual-v3" },
+    ]
+
+    secrets = [
+      {
+        name      = "REDIS_PASSWORD"
+        valueFrom = "${aws_secretsmanager_secret.app_config.arn}:redis_password::"
+      },
     ]
 
     # Queue worker — no inbound port, no HTTP health check. Liveness is the
