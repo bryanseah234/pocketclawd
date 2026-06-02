@@ -1117,6 +1117,26 @@ registerChannelAdapter('whatsapp', {
           return;
         }
 
+        // Document delivery (from generate_document tool) -- send as file
+        if (message.kind === 'document' && content.url) {
+          try {
+            const docResp = await fetch(content.url as string);
+            const docBuffer = Buffer.from(await docResp.arrayBuffer());
+            const filename = (content.url as string).split('/').pop()?.split('?')[0] || 'document.pdf';
+            const caption = (content.caption as string) || '';
+            await sock.sendMessage(platformId, {
+              document: docBuffer,
+              mimetype: filename.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream',
+              fileName: filename,
+              caption,
+            });
+          } catch (err) {
+            log.error('Failed to send document message', { platformId, err });
+            await sendRawMessage(platformId, `Here's your document: ${content.url as string}`);
+          }
+          return;
+        }
+
         // Normal message (with optional file attachments)
         const text = (content.markdown as string) || (content.text as string);
         const hasFiles = message.files && message.files.length > 0;
