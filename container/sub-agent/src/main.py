@@ -402,6 +402,14 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
         # Store assistant response fire-and-forget
         asyncio.ensure_future(_store_chat_message(message.user_id, "assistant", response_text))
 
+        # Bust the chat-history Redis cache synchronously so the NEXT message
+        # always fetches fresh history from DynamoDB (avoids stale-cache
+        # multi-turn failure where message N+1 can't recall message N).
+        try:
+            await state.redis.delete(f"cache:chat_history:{message.user_id}")
+        except Exception:
+            pass
+
         return AgentResponse(
             message_id=message.message_id,
             user_id=message.user_id,
