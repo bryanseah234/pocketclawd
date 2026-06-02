@@ -57,6 +57,8 @@ resource "aws_ecs_task_definition" "indexer" {
       { name = "OPENSEARCH_COLLECTION", value = aws_opensearchserverless_collection.documents.name },
       { name = "ASSISTANT_NAME", value = "Clawd" },
       { name = "PYTHONUNBUFFERED", value = "1" },
+      { name = "TMPDIR", value = "/tmp" },
+      { name = "HOME", value = "/tmp" },
       { name = "AGENT_USER_ID", value = "indexer" },
       { name = "REDIS_HOST", value = "master.nanoclaw-redis-rg.sipa0z.apse1.cache.amazonaws.com" },
       { name = "REDIS_PORT", value = "6379" },
@@ -74,7 +76,10 @@ resource "aws_ecs_task_definition" "indexer" {
 
     # Queue worker — no inbound port, no HTTP health check. Liveness is the
     # ECS task state; the BRPOP loop reconnects to Redis on failure.
-    readonlyRootFilesystem = true
+    # Writable rootfs to match the sub-agent: PDF/Office extractors (pdfminer,
+    # pdf2image, python-pptx) need a writable scratch dir; a readonly rootfs
+    # with only /tmp mounted was rejected by Python tempfile under uid 1001.
+    readonlyRootFilesystem = false
     mountPoints = [
       { sourceVolume = "tmp", containerPath = "/tmp", readOnly = false },
     ]
