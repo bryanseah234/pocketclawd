@@ -103,9 +103,22 @@ def _parse_time_str(time_str: str, now: datetime) -> datetime | None:
     return None
 
 
-async def add_reminder(redis: aioredis.Redis, user_id: str, text: str, fire_at: datetime) -> str:
+async def add_reminder(
+    redis: aioredis.Redis,
+    user_id: str,
+    text: str,
+    fire_at: datetime,
+    channel_type: str = "whatsapp",
+    platform_id: str = "",
+) -> str:
     rid = uuid.uuid4().hex[:8]
-    entry = json.dumps({"id": rid, "text": text, "createdAt": datetime.now(SGT).isoformat()})
+    entry = json.dumps({
+        "id": rid,
+        "text": text,
+        "createdAt": datetime.now(SGT).isoformat(),
+        "channelType": channel_type,
+        "platformId": platform_id or f"{user_id}@s.whatsapp.net",
+    })
     await redis.zadd(REMINDERS_PREFIX + user_id, {entry: fire_at.timestamp()})
     return rid
 
@@ -137,7 +150,7 @@ async def cancel_reminder(redis: aioredis.Redis, user_id: str, rid: str) -> bool
     return False
 
 
-async def parse_remind_command(redis: aioredis.Redis, user_id: str, text: str) -> str:
+async def parse_remind_command(redis: aioredis.Redis, user_id: str, text: str, channel_type: str = "whatsapp", platform_id: str = "") -> str:
     body = re.sub(r"^/remind\s+(me\s+to\s+|me\s+)?", "", text, flags=re.IGNORECASE).strip()
 
     split_at = re.split(r"\s+at\s+", body, maxsplit=1, flags=re.IGNORECASE)
@@ -169,7 +182,7 @@ async def parse_remind_command(redis: aioredis.Redis, user_id: str, text: str) -
     if fire_at <= now:
         return "\u26a0\ufe0f That time is in the past. Pick a future time."
 
-    rid = await add_reminder(redis, user_id, reminder_text, fire_at)
+    rid = await add_reminder(redis, user_id, reminder_text, fire_at, channel_type=channel_type, platform_id=platform_id)
     when_str = fire_at.strftime("%a, %d %b at %-I:%M %p SGT")
     return (
         f"\u23f0 Got it! I'll remind you to *{reminder_text}* on {when_str}.\n\n"
@@ -193,7 +206,11 @@ async def reminder_delivery_loop(redis: aioredis.Redis) -> None:
                     for member, score in due:
                         try:
                             d = json.loads(member)
-                            await _fire_reminder(redis, user_id, d["text"])
+                            await _fire_reminder(
+                                redis, user_id, d["text"],
+                                channel_type=d.get("channelType", "whatsapp"),
+                                platform_id=d.get("platformId", ""),
+                            )
                             await redis.zrem(key, member)
                             logger.info("Reminder fired user=%s: %s", user_id, d["text"][:40])
                         except Exception as exc:
@@ -206,15 +223,28 @@ async def reminder_delivery_loop(redis: aioredis.Redis) -> None:
             logger.error("Reminder loop error: %s", exc)
 
 
-async def _fire_reminder(redis: aioredis.Redis, user_id: str, text: str) -> None:
+async def _fire_reminder(
+    redis: aioredis.Redis,
+    user_id: str,
+    text: str,
+    channel_type: str = "whatsapp",
+    platform_id: str = "",
+) -> None:
+    _ch = channel_type or "whatsapp"
+    if platform_id:
+        _pid = platform_id
+    elif _ch == "telegram":
+        _pid = str(user_id)  # Telegram: chat_id is numeric user_id
+    else:
+        _pid = f"{user_id}@s.whatsapp.net"
     payload = json.dumps({
         "id": f"reminder-{uuid.uuid4().hex[:8]}",
         "userId": user_id,
         "type": "chat",
         "payload": {
             "content": f"\u23f0 *Reminder:* {text}",
-            "platformId": f"{user_id}@s.whatsapp.net",
-            "channelType": "whatsapp",
+            "platformId": _pid,
+            "channelType": _ch,
             "threadId": None,
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
