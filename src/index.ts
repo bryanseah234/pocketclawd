@@ -459,19 +459,34 @@ async function main(): Promise<void> {
         const kind = (payload.kind as string) ?? 'chat';
         const rawContent = (payload.content as string) ?? '';
 
-        // Detect special media markers from image_gen / tts tools.
-        // IMAGE_URL:<url>:IMAGE_URL → deliver as image kind
-        // AUDIO_URL:<url>:AUDIO_URL → deliver as audio kind
+        // Detect special media markers from image_gen / tts / doc_gen tools.
+        // IMAGE_URL:<url>:IMAGE_URL  -- may be embedded in surrounding prose (caption)
+        // AUDIO_URL:<url>:AUDIO_URL  -- same
+        // DOC_URL:<url>:DOC_URL      -- downloadable document
         let content: string;
         let resolvedKind = kind;
-        const imgMatch = rawContent.match(/^IMAGE_URL:(.+):IMAGE_URL$/);
-        const audioMatch = rawContent.match(/^AUDIO_URL:(.+):AUDIO_URL$/);
+        // Non-anchored: marker may appear anywhere in the response text.
+        const imgMatch = rawContent.match(/IMAGE_URL:(.+?):IMAGE_URL/);
+        const audioMatch = rawContent.match(/AUDIO_URL:(.+?):AUDIO_URL/);
+        const docMatch = rawContent.match(/DOC_URL:(.+?):DOC_URL/);
         if (imgMatch) {
           resolvedKind = 'image';
-          content = JSON.stringify({ url: imgMatch[1], caption: '' });
+          // Everything outside the marker becomes the caption
+          const caption = rawContent
+            .replace(/IMAGE_URL:.+?:IMAGE_URL/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          content = JSON.stringify({ url: imgMatch[1], caption });
         } else if (audioMatch) {
           resolvedKind = 'audio';
           content = JSON.stringify({ url: audioMatch[1] });
+        } else if (docMatch) {
+          resolvedKind = 'document';
+          const docCaption = rawContent
+            .replace(/DOC_URL:.+?:DOC_URL/, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          content = JSON.stringify({ url: docMatch[1], caption: docCaption });
         } else {
           // Sub-agent emits plain-text content; deliveryAdapter.deliver expects
           // a JSON-encoded OutboundMessage payload (e.g. {"text": "..."}). Wrap
