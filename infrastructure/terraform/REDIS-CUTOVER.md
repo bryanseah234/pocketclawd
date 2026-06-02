@@ -1,78 +1,46 @@
-# Redis Cutover Runbook (t7-49)
+# Redis Cutover Runbook
 
-> **STATUS: COMPLETE.** The cutover is done. Production runs the encrypted, HA replication
-> group `nanoclaw-redis-rg` (1 primary + 1 replica, `cache.r6g.large`, transit encryption +
-> AUTH). The old standalone `nanoclaw-redis-ec2vpc` cluster was destroyed. The AUTH token is
-> sourced from Secrets Manager at apply via `TF_VAR_redis_auth_token` and is **not** stored in
-> any tfvars file in git. The steps below are retained as historical record / rollback reference.
+Use when migrating to a new Redis cluster (version upgrade, instance type change,
+or endpoint change).
 
-Migrate from the standalone `aws_elasticache_cluster` to an encrypted,
-highly-available `aws_elasticache_replication_group` (at-rest + in-transit
-encryption, Multi-AZ failover).
+## Before cutover
 
-## Why this is blue/green, not in-place
-
-A standalone ElastiCache cluster cannot be converted in place to an encrypted
-replication group. Encryption flags (`at_rest_encryption_enabled`,
-`transit_encryption_enabled`) are immutable at creation. So we stand up the new
-group, cut traffic over, then retire the old cluster.
-
-The application reads Redis connection details (host, port, password/AUTH, TLS)
-from the `nanoclaw/app-config` Secrets Manager secret. Both clients already
-support TLS + AUTH:
-- TS (orchestrator): `ioredis` with `tls: {}` + `password` (src/cloud/bootstrap.ts)
-- Python (sub-agent): `redis.asyncio` with `ssl=True` + `password` (container/sub-agent/src/main.py)
-
-So cutover requires **no code change** — only config + a redeploy.
-
-## Data loss expectations
-
-Redis here is a queue + ephemeral cache (dispatch queue, PDPA flow TTLs,
-scheduler dedup flags, rate-limit counters). It is NOT the system of record
-(DynamoDB + S3 + OpenSearch are). A brief flush of in-flight queue entries on
-cutover is acceptable given no SLA. If you must preserve in-flight messages,
-drain the dispatch queue first (scale sub-agent workers up, orchestrator down).
-
-## Steps
-
-1. Generate an AUTH token (16-128 chars, no `/ @ "` spaces):
-   ```
-   openssl rand -base64 32 | tr -d '/+=@" ' | cut -c1-48
+1. Confirm new cluster is in AVAILABLE state:
+   ```bash
+   aws elasticache describe-cache-clusters      --cache-cluster-id nanoclaw-redis-new      --profile clawd-prod --region ap-southeast-1      --query 'CacheClusters[0].CacheClusterStatus'
    ```
 
-2. Store it as a TF var (CI secret or `terraform.tfvars`, never committed):
-   ```
-   redis_use_replication_group = true
-   redis_replica_count         = 1
-   redis_auth_token            = "<token>"
-   ```
-
-3. Apply — creates the replication group alongside the old cluster:
-   ```
-   terraform plan -out tf.plan
-   terraform apply tf.plan
-   terraform output redis_endpoint   # new primary endpoint:port
+2. Check current queue depths on the old cluster. Wait for queues to drain:
+   ```bash
+   # Via SSM on EC2
+   redis-cli -u $REDIS_URL llen queue:agent:dispatch
+   redis-cli -u $REDIS_URL llen queue:orchestrator:responses
    ```
 
-4. Update the `nanoclaw/app-config` secret:
-   - `redis_host` = new primary endpoint
-   - `redis_port` = 6379
-   - `redis_password` = the AUTH token
-   - `redis_tls` = true   (TS reads this; sub-agent reads REDIS_SSL — set both)
-   For the sub-agent ECS task-def env: `REDIS_SSL=true`, `REDIS_PASSWORD=<token>`,
-   `REDIS_HOST=<endpoint>`.
+3. Put the orchestrator in maintenance mode (stop accepting new messages):
+   ```bash
+   sudo systemctl stop nanoclaw
+   ```
 
-5. Roll the services (orchestrator EC2 + sub-agent ECS). Verify:
-   - orchestrator log: "Cloud bootstrap: Redis connected"
-   - sub-agent log: "Starting queue poll loop on key=queue:agent:dispatch"
-   - send a test WhatsApp message end-to-end
+## Cutover
 
-6. Once healthy, retire the old cluster: the `count` toggle already set its
-   count to 0, so the next `apply` (step 3) destroyed it. Confirm with
-   `aws elasticache describe-cache-clusters`.
+4. Update REDIS_URL in nanoclaw/app-config (Secrets Manager):
+   read -> set REDIS_URL to new endpoint -> write back
 
-## Rollback
+5. Restart orchestrator:
+   ```bash
+   sudo systemctl start nanoclaw
+   ```
 
-Set `redis_use_replication_group = false`, restore the prior `nanoclaw/app-config`
-values (old endpoint, no AUTH, `redis_tls=false`), apply, redeploy. The old
-cluster is recreated (empty). Acceptable because Redis is not the system of record.
+6. Trigger ECS force-redeploy so sub-agent picks up new REDIS_URL:
+   ```bash
+   aws ecs update-service      --cluster nanoclaw-cluster --service nanoclaw-sub-agent      --force-new-deployment      --profile clawd-prod --region ap-southeast-1
+   ```
+
+7. Send a test message via admin dashboard. Confirm response is delivered.
+
+## If something breaks
+
+Revert REDIS_URL in Secrets Manager to old endpoint and restart both services.
+Reminders in the old Redis sorted sets will need to be migrated manually if
+any were set by users during the outage window.
