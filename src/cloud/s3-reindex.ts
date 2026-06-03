@@ -66,10 +66,22 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
                 }
                 if (!userId || !filename) { skipped++; continue; }
 
-                // Check OpenSearch count for this key
+                // Check OpenSearch count for this key. If we CAN'T check
+                // (client missing or AOSS error), SKIP this object this tick
+                // rather than queueing it. The old "queue anyway" path could
+                // re-enqueue the entire bucket during an AOSS hiccup (the silent
+                // catch swallowed the error and the count defaulted to 0), since
+                // we never set the seen-sentinel on the error branch either.
+                // Skipping is safe: the next 15-min tick retries, and a genuinely
+                // unindexed file still gets picked up once AOSS is healthy.
+                const osClient = (services.dataGateway as any).openSearchClient;
+                if (!osClient) {
+                    log.warn('S3 reindex: openSearchClient unavailable, skipping key this tick', { key });
+                    skipped++;
+                    continue;
+                }
                 try {
-                    const { dataGateway } = services;
-                    const countResult = await (dataGateway as any).openSearchClient?.count({
+                    const countResult = await osClient.count({
                         index: services.config.openSearch.indexName,
                         body: { query: { bool: { must: [
                             { term: { userId } },
@@ -82,8 +94,13 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
                         skipped++;
                         continue;
                     }
-                } catch {
-                    // Can't check — queue it anyway (idempotent on OS side)
+                } catch (countErr) {
+                    // AOSS error -> do NOT queue (avoids a full-bucket re-enqueue
+                    // storm during an outage). No seen-sentinel, so it retries
+                    // next tick once AOSS recovers.
+                    log.warn('S3 reindex: count check failed, skipping key this tick', { key, err: String(countErr) });
+                    skipped++;
+                    continue;
                 }
 
                 // Push straight to the indexer queue (same shape the
