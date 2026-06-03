@@ -645,69 +645,9 @@ function cfgFromServices(services: { dataGateway: { cfg: { dynamoDb: { chatMessa
     return t ? '4 tables (' + t + ' active)' : '4 tables';
 }
 
-export async function handleAdminRequest(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-): Promise<boolean> {
-    const url = req.url || '';
-    const method = req.method || 'GET';
+// ── Admin route handlers (extracted from handleAdminRequest) ──
 
-    // Only handle /admin routes
-    if (!url.startsWith('/admin')) return false;
-
-    // Parse URL to separate path from query string
-    const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
-    const path = parsedUrl.pathname;
-
-    // Rate limit check
-    const clientIp = getClientIp(req);
-    if (isRateLimited(clientIp)) {
-        sendRateLimited(res);
-        return true;
-    }
-
-    // Auth check
-    if (!isAuthenticated(req)) {
-        recordFailedAttempt(clientIp);
-        sendUnauthorized(res);
-        return true;
-    }
-
-    // Auth succeeded — clear failed attempts
-    clearFailedAttempts(clientIp);
-
-    // CSRF (A2): for state-mutating methods, require matching cookie + header token.
-    // Same-origin GETs and the initial /admin HTML load are exempt.
-    if (!passesCsrfCheck(req)) {
-        sendCsrfFailure(res);
-        return true;
-    }
-
-    try {
-        // ── Settings API delegation ──
-        // Delegate /admin/api/settings routes to the settings handler.
-        // Auth and rate limiting are already verified above.
-        // GET /admin/api/settings/html -- lazy-loaded settings form fragment
-        if (path === '/admin/api/settings/html' && method === 'GET') {
-            try {
-                const { getSettingsHtml } = await import('./settings/html.js');
-                const cats = getSettingsManager().getAllSettings();
-                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(getSettingsHtml(cats));
-            } catch (_e) {
-                res.writeHead(503, { 'Content-Type': 'text/plain' });
-                res.end('Settings unavailable');
-            }
-            return true;
-        }
-
-        if (url.startsWith('/admin/api/settings')) {
-            const handled = await getSettingsHandler()(req, res);
-            if (handled) return true;
-        }
-
-        // GET /admin — serve HTML dashboard with settings panel
-        if ((path === '/admin' || path === '/admin/') && method === 'GET') {
+async function handleAdminHtml(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const adminPath = [nodePath.join(process.cwd(), 'dist', 'static', 'admin.html'), nodePath.join(process.cwd(), 'src', 'static', 'admin.html')].find(fs.existsSync) ?? '';
             if (fs.existsSync(adminPath)) {
                 // Issue session cookie so EventSource/fetch don't need explicit auth headers
@@ -718,26 +658,21 @@ export async function handleAdminRequest(
                 res.end('Admin UI not built.');
             }
             return true;
-        }
+}
 
-        // GET /admin/settings -- redirect to /admin (tab selection now client-side)
-        if (path === '/admin/settings' && method === 'GET') {
+async function handleSettingsRedirect(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             res.writeHead(302, { 'Location': '/admin' });
             res.end();
             return true;
-        }
+}
 
-        // GET /admin/api/health — system health JSON
-
-
-        if (path === '/admin/api/health' && method === 'GET') {
+async function handleHealth(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const health = await config!.provider.getSystemHealth();
             sendJson(res, health);
             return true;
-        }
+}
 
-        // GET /admin/api/whatsapp/status — WhatsApp status + QR (from bridge)
-        if (path === '/admin/api/whatsapp/status' && method === 'GET') {
+async function handleWhatsappStatus(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const bridgeState = getWhatsAppState();
             const status = {
                 connected: bridgeState.status === 'connected',
@@ -761,17 +696,15 @@ export async function handleAdminRequest(
             };
             sendJson(res, status);
             return true;
-        }
+}
 
-        // POST /admin/api/whatsapp/disconnect
-        if (path === '/admin/api/whatsapp/disconnect' && method === 'POST') {
+async function handleWhatsappDisconnect(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const result = await config!.provider.disconnectWhatsApp();
             sendJson(res, result);
             return true;
-        }
+}
 
-        // POST /admin/api/whatsapp/phone -- save phone + request pairing code
-        if (path === '/admin/api/whatsapp/phone' && method === 'POST') {
+async function handleWhatsappPhone(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const body = await readJsonBody(req);
             const phone = String(body?.phone ?? '').trim().replace(/[^\d]/g, '');
             if (!phone) { sendJson(res, { error: 'phone required' }, 400); return true; }
@@ -782,10 +715,9 @@ export async function handleAdminRequest(
                 sendJson(res, { success: true, phone, pairingCode });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
             return true;
-        }
+}
 
-        // POST /admin/api/setup/telegram-token
-        if (path === '/admin/api/setup/telegram-token' && method === 'POST') {
+async function handleTelegramToken(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const body = await readJsonBody(req);
             const token = String(body?.token ?? '').trim();
             if (!token) { sendJson(res, { error: 'token required' }, 400); return true; }
@@ -794,10 +726,9 @@ export async function handleAdminRequest(
                 sendJson(res, { success: true });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
             return true;
-        }
+}
 
-        // PUT /admin/api/setup/auto-approve
-        if (path === '/admin/api/setup/auto-approve' && method === 'PUT') {
+async function handleAutoApprove(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const body = await readJsonBody(req);
             const enabled = body?.enabled !== false;
             try {
@@ -805,11 +736,9 @@ export async function handleAdminRequest(
                 sendJson(res, { success: true, policy: enabled ? 'public' : 'request_approval' });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
             return true;
-        }
+}
 
-
-        // ── GET /admin/api/data/stats — DynamoDB / OpenSearch / S3 size + counts ──
-        if (path === '/admin/api/data/stats' && method === 'GET') {
+async function handleDataStats(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 if (!config!.provider.getDataStats) { sendJson(res, { error: 'not implemented' }, 501); return true; }
                 const stats = await config!.provider.getDataStats();
@@ -819,10 +748,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // ── GET /admin/api/data/documents — list with optional ?filter=all|admin|user ──
-        if (path === '/admin/api/data/documents' && method === 'GET') {
+async function handleListDocuments(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 if (!config!.provider.listDocuments) { sendJson(res, { error: 'not implemented' }, 501); return true; }
                 const url = new URL(req.url ?? '/', 'http://localhost');
@@ -835,10 +763,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // ── DELETE /admin/api/data/documents/:id — delete from S3 + OpenSearch ──
-        if (path.startsWith('/admin/api/data/documents/') && method === 'DELETE') {
+async function handleDeleteDocument(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 if (!config!.provider.deleteDocument) { sendJson(res, { error: 'not implemented' }, 501); return true; }
                 const documentId = decodeURIComponent(path.substring('/admin/api/data/documents/'.length));
@@ -850,10 +777,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // ── GET /admin/api/data/ingestion-sources ──
-        if (path === '/admin/api/data/ingestion-sources' && method === 'GET') {
+async function handleIngestionSources(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 if (!config!.provider.getIngestionSources) { sendJson(res, { sources: [] }); return true; }
                 const sources = await config!.provider.getIngestionSources();
@@ -863,10 +789,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // ── GET /admin/api/chat/users — list distinct users with latest preview ──
-        if (path === '/admin/api/chat/users' && method === 'GET') {
+async function handleChatUsers(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 const { listChatUsers } = await import('./chat-history.js');
                 const result = await listChatUsers(50);
@@ -876,10 +801,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // ── GET /admin/api/chat/history?userId=… — full conversation ──
-        if (path === '/admin/api/chat/history' && method === 'GET') {
+async function handleChatHistory(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 const userId = parsedUrl.searchParams.get('userId') ?? '';
                 if (!userId) { sendJson(res, { error: 'userId required' }, 400); return true; }
@@ -892,31 +816,27 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // POST /admin/api/whatsapp/reconnect
-        if (path === '/admin/api/whatsapp/reconnect' && method === 'POST') {
+async function handleWhatsappReconnect(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const result = await config!.provider.reconnectWhatsApp();
             sendJson(res, result);
             return true;
-        }
+}
 
-        // GET /admin/api/containers — active containers
-        if (path === '/admin/api/containers' && method === 'GET') {
+async function handleContainers(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const containers = await config!.provider.getContainers();
             sendJson(res, containers);
             return true;
-        }
+}
 
-        // GET /admin/api/stats — rate limiting stats
-        if (path === '/admin/api/stats' && method === 'GET') {
+async function handleStats(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const stats = await config!.provider.getStats();
             sendJson(res, stats);
             return true;
-        }
+}
 
-        // GET /admin/sse — Server-Sent Events stream
-        if (path.startsWith('/admin/sse') && method === 'GET') {
+async function handleSse(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             res.writeHead(200, {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
@@ -933,10 +853,9 @@ export async function handleAdminRequest(
             // Send initial data immediately
             void emitHealthUpdate();
             return true;
-        }
+}
 
-        // GET /admin/api/data/users — distinct users from chat-messages + per-user doc count
-        if (path === '/admin/api/data/users' && method === 'GET') {
+async function handleDataUsers(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -986,10 +905,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // Wave 10 (dashboard live-data): GET /admin/api/spend — Bedrock cost snapshot
-        if (path === '/admin/api/spend' && method === 'GET') {
+async function handleSpend(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 const { getBedrockSpendLive } = await import('./live-data.js');
                 const spend = await getBedrockSpendLive();
@@ -998,10 +916,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // Wave 10 (dashboard live-data): GET /admin/api/queues — Redis queue depth
-        if (path === '/admin/api/queues' && method === 'GET') {
+async function handleQueues(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -1012,10 +929,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // K1 (Wave 8): GET /admin/api/data/consent — list user × consent timestamp × version
-        if (path === '/admin/api/data/consent' && method === 'GET') {
+async function handleConsent(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -1042,11 +958,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // POST /admin/api/data/users/reset-all - DESTRUCTIVE: wipe all user data.
-        // Clears chat-messages, user-preferences, and S3 user/* prefixes (NOT corporate, NOT sessions).
-        if (path === '/admin/api/data/users/reset-all' && method === 'POST') {
+async function handleResetAllUsers(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -1126,10 +1040,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // GET /admin/api/architecture/state - infrastructure + dataflow snapshot for the architecture tab
-        if (path === '/admin/api/architecture/state' && method === 'GET') {
+async function handleArchitectureState(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             try {
                 const services = getCloudServices();
                 const bridgeState = getWhatsAppState();
@@ -1176,10 +1089,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // GET /admin/api/test/users — fixed test user list (for CLI automation)
-        if (path === '/admin/api/test/users' && method === 'GET') {
+async function handleTestUsers(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             sendJson(res, {
                 users: [
                     { id: 'test_alpha',   label: 'Alpha',   color: '#4f8ef7' },
@@ -1189,17 +1101,9 @@ export async function handleAdminRequest(
                 ],
             });
             return true;
-        }
+}
 
-        // POST /admin/api/test/send — inject a message into the live sub-agent stack.
-        // Accepts JSON  { userId, text }
-        //   or multipart { userId, text?, file }  (when attaching a file/image).
-        // Pushes to queue:agent:dispatch (DISPATCH_SENTINEL key) with channelType='admin-test'.
-        // File path: uploads bytes to S3, then either:
-        //   image/* → kind='image' envelope with presigned URL
-        //   other   → kind='document_upload' via nanoclaw:uploads:pending + chat ack
-        // Response is surfaced via admin:test:response:{messageId} (BRPOP, 45s).
-        if (path === '/admin/api/test/send' && method === 'POST') {
+async function handleTestSend(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -1345,20 +1249,18 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // POST /admin/api/logout - clear session cookie + force re-auth
-        if (path === '/admin/api/logout' && method === 'POST') {
+async function handleLogout(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             res.setHeader('Set-Cookie', [
                 'nanoclaw_admin_session=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0',
                 'nanoclaw_admin_csrf=; SameSite=Strict; Path=/admin; Max-Age=0',
             ]);
             sendJson(res, { success: true });
             return true;
-        }
+}
 
-        // GET /admin/logged-out -- 401 to flush browser Basic Auth credential cache
-        if (path === '/admin/logged-out') {
+async function handleLoggedOut(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             res.writeHead(401, {
                 'WWW-Authenticate': 'Basic realm="NanoClaw Admin", charset="UTF-8"',
                 'Content-Type': 'text/html; charset=utf-8',
@@ -1374,10 +1276,9 @@ export async function handleAdminRequest(
                 + '</head><body><p>Signed out. Redirecting to login...</p></body></html>'
             );
             return true;
-        }
+}
 
-        // GET /admin/api/data/users/:id — full detail
-        if (path.startsWith('/admin/api/data/users/') && method === 'GET') {
+async function handleGetUser(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             const uid = decodeURIComponent(path.substring('/admin/api/data/users/'.length));
@@ -1425,10 +1326,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // DELETE /admin/api/data/users/:id — admin-triggered /forget (PDPA right of erasure)
-        if (path.startsWith('/admin/api/data/users/') && method === 'DELETE') {
+async function handleDeleteUser(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             const uid = decodeURIComponent(path.substring('/admin/api/data/users/'.length));
@@ -1446,10 +1346,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // GET /admin/api/data/system-errors — recent rows from nanoclaw-system-errors
-        if (path === '/admin/api/data/system-errors' && method === 'GET') {
+async function handleSystemErrors(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const services = getCloudServices();
             if (!services) { sendJson(res, { error: 'cloud services not initialized' }, 503); return true; }
             try {
@@ -1476,10 +1375,9 @@ export async function handleAdminRequest(
                 sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500);
             }
             return true;
-        }
+}
 
-        // POST /admin/api/upload — multipart file upload
-        if (path === '/admin/api/upload' && method === 'POST') {
+async function handleUpload(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             const contentType = req.headers['content-type'] || '';
             const boundaryMatch = contentType.match(/boundary=(.+)/);
             if (!boundaryMatch) {
@@ -1563,18 +1461,132 @@ export async function handleAdminRequest(
                 })),
             });
             return true;
-        }
+}
 
-        // GET /admin/api/uploads — list recent uploads
-        if (path === '/admin/api/uploads' && method === 'GET') {
+async function handleUploads(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             sendJson(res, { uploads: recentUploads });
             return true;
-        }
+}
 
-        // POST /admin/api/actions/clear-rate-limits
-        if (path === '/admin/api/actions/clear-rate-limits' && method === 'POST') {
+async function handleClearRateLimits(req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string): Promise<boolean> {
             sendJson(res, { success: true, message: 'Rate limits cleared' });
             return true;
+}
+
+interface AdminRoute {
+    match: (path: string, method: string, url: string) => boolean;
+    handle: (req: http.IncomingMessage, res: http.ServerResponse, parsedUrl: URL, path: string, method: string, url: string) => Promise<boolean>;
+}
+
+// Ordered route table for handleAdminRequest. ORDER IS LOAD-BEARING:
+// prefix/wildcard routes (data/users/*, documents/*) and the reset-all exact
+// match keep their original relative order so first-match-wins behaves
+// identically to the previous flat if-chain. Guards (rate-limit/auth/CSRF) and
+// the settings-delegation fall-through stay inline in handleAdminRequest and run
+// BEFORE this table is consulted.
+const ADMIN_ROUTES: AdminRoute[] = [
+    { match: (path, method, url) => (path === '/admin' || path === '/admin/') && method === 'GET', handle: handleAdminHtml },
+    { match: (path, method, url) => path === '/admin/settings' && method === 'GET', handle: handleSettingsRedirect },
+    { match: (path, method, url) => path === '/admin/api/health' && method === 'GET', handle: handleHealth },
+    { match: (path, method, url) => path === '/admin/api/whatsapp/status' && method === 'GET', handle: handleWhatsappStatus },
+    { match: (path, method, url) => path === '/admin/api/whatsapp/disconnect' && method === 'POST', handle: handleWhatsappDisconnect },
+    { match: (path, method, url) => path === '/admin/api/whatsapp/phone' && method === 'POST', handle: handleWhatsappPhone },
+    { match: (path, method, url) => path === '/admin/api/setup/telegram-token' && method === 'POST', handle: handleTelegramToken },
+    { match: (path, method, url) => path === '/admin/api/setup/auto-approve' && method === 'PUT', handle: handleAutoApprove },
+    { match: (path, method, url) => path === '/admin/api/data/stats' && method === 'GET', handle: handleDataStats },
+    { match: (path, method, url) => path === '/admin/api/data/documents' && method === 'GET', handle: handleListDocuments },
+    { match: (path, method, url) => path.startsWith('/admin/api/data/documents/') && method === 'DELETE', handle: handleDeleteDocument },
+    { match: (path, method, url) => path === '/admin/api/data/ingestion-sources' && method === 'GET', handle: handleIngestionSources },
+    { match: (path, method, url) => path === '/admin/api/chat/users' && method === 'GET', handle: handleChatUsers },
+    { match: (path, method, url) => path === '/admin/api/chat/history' && method === 'GET', handle: handleChatHistory },
+    { match: (path, method, url) => path === '/admin/api/whatsapp/reconnect' && method === 'POST', handle: handleWhatsappReconnect },
+    { match: (path, method, url) => path === '/admin/api/containers' && method === 'GET', handle: handleContainers },
+    { match: (path, method, url) => path === '/admin/api/stats' && method === 'GET', handle: handleStats },
+    { match: (path, method, url) => path.startsWith('/admin/sse') && method === 'GET', handle: handleSse },
+    { match: (path, method, url) => path === '/admin/api/data/users' && method === 'GET', handle: handleDataUsers },
+    { match: (path, method, url) => path === '/admin/api/spend' && method === 'GET', handle: handleSpend },
+    { match: (path, method, url) => path === '/admin/api/queues' && method === 'GET', handle: handleQueues },
+    { match: (path, method, url) => path === '/admin/api/data/consent' && method === 'GET', handle: handleConsent },
+    { match: (path, method, url) => path === '/admin/api/data/users/reset-all' && method === 'POST', handle: handleResetAllUsers },
+    { match: (path, method, url) => path === '/admin/api/architecture/state' && method === 'GET', handle: handleArchitectureState },
+    { match: (path, method, url) => path === '/admin/api/test/users' && method === 'GET', handle: handleTestUsers },
+    { match: (path, method, url) => path === '/admin/api/test/send' && method === 'POST', handle: handleTestSend },
+    { match: (path, method, url) => path === '/admin/api/logout' && method === 'POST', handle: handleLogout },
+    { match: (path, method, url) => path === '/admin/logged-out', handle: handleLoggedOut },
+    { match: (path, method, url) => path.startsWith('/admin/api/data/users/') && method === 'GET', handle: handleGetUser },
+    { match: (path, method, url) => path.startsWith('/admin/api/data/users/') && method === 'DELETE', handle: handleDeleteUser },
+    { match: (path, method, url) => path === '/admin/api/data/system-errors' && method === 'GET', handle: handleSystemErrors },
+    { match: (path, method, url) => path === '/admin/api/upload' && method === 'POST', handle: handleUpload },
+    { match: (path, method, url) => path === '/admin/api/uploads' && method === 'GET', handle: handleUploads },
+    { match: (path, method, url) => path === '/admin/api/actions/clear-rate-limits' && method === 'POST', handle: handleClearRateLimits },
+];
+
+export async function handleAdminRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+): Promise<boolean> {
+    const url = req.url || '';
+    const method = req.method || 'GET';
+
+    // Only handle /admin routes
+    if (!url.startsWith('/admin')) return false;
+
+    // Parse URL to separate path from query string
+    const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+    const path = parsedUrl.pathname;
+
+    // Rate limit check
+    const clientIp = getClientIp(req);
+    if (isRateLimited(clientIp)) {
+        sendRateLimited(res);
+        return true;
+    }
+
+    // Auth check
+    if (!isAuthenticated(req)) {
+        recordFailedAttempt(clientIp);
+        sendUnauthorized(res);
+        return true;
+    }
+
+    // Auth succeeded — clear failed attempts
+    clearFailedAttempts(clientIp);
+
+    // CSRF (A2): for state-mutating methods, require matching cookie + header token.
+    // Same-origin GETs and the initial /admin HTML load are exempt.
+    if (!passesCsrfCheck(req)) {
+        sendCsrfFailure(res);
+        return true;
+    }
+
+    try {
+        // ── Settings API delegation ──
+        // Delegate /admin/api/settings routes to the settings handler.
+        // Auth and rate limiting are already verified above.
+        // GET /admin/api/settings/html -- lazy-loaded settings form fragment
+        if (path === '/admin/api/settings/html' && method === 'GET') {
+            try {
+                const { getSettingsHtml } = await import('./settings/html.js');
+                const cats = getSettingsManager().getAllSettings();
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(getSettingsHtml(cats));
+            } catch (_e) {
+                res.writeHead(503, { 'Content-Type': 'text/plain' });
+                res.end('Settings unavailable');
+            }
+            return true;
+        }
+
+        if (url.startsWith('/admin/api/settings')) {
+            const handled = await getSettingsHandler()(req, res);
+            if (handled) return true;
+        }
+
+        // ── Route table dispatch ──
+        for (const route of ADMIN_ROUTES) {
+            if (route.match(path, method, url)) {
+                return await route.handle(req, res, parsedUrl, path, method, url);
+            }
         }
 
         // 404 for unknown /admin routes
@@ -1588,6 +1600,7 @@ export async function handleAdminRequest(
         return true;
     }
 }
+
 
 // ── S3 Upload + Redis Enqueue ──
 
@@ -1719,3 +1732,4 @@ export function _resetForTesting(): void {
     _settingsManager = null;
     _settingsHandler = null;
 }
+
