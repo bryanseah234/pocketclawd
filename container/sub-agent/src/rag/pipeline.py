@@ -145,9 +145,24 @@ class RAGPipeline:
         results = response.get("results", [])
         filtered = [r for r in results if r.get("score", 0) >= MIN_SIMILARITY_THRESHOLD]
 
-        # Cache "no docs" for 5 min so subsequent messages skip embed+search entirely
-        if not filtered:
+        # Cache "no docs" ONLY when the user genuinely has nothing indexed (raw
+        # results empty). Caching on `not filtered` (below-threshold) poisons the
+        # cache: a single low-scoring query makes the next 5 min skip RAG entirely
+        # even though the user HAS docs. If we got raw hits but all below
+        # threshold, fall back to the top-2 raw hits so doc content still reaches
+        # the LLM (and provenance correctly attributes the document).
+        if not results:
             await self._redis.setex(no_docs_key, 300, "1")
+            return []
+
+        if not filtered:
+            logger.info(
+                "RAG below-threshold fallback: %d raw hits, top score=%.3f",
+                len(results),
+                max((r.get("score", 0) for r in results), default=0.0),
+            )
+            results.sort(key=lambda r: r.get("score", 0), reverse=True)
+            return results[:2]
 
         return filtered
 
