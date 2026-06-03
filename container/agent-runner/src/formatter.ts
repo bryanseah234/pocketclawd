@@ -3,6 +3,55 @@ import type { MessageInRow } from './db/messages-in.js';
 import { TIMEZONE, formatLocalTime } from './timezone.js';
 
 /**
+ * Shape of a deserialized messages_in `content` payload.
+ *
+ * `parseContent` is intentionally permissive — different message kinds (chat,
+ * chat-sdk, scheduled/task, webhook, system_response) populate different subsets
+ * of these fields, and malformed JSON falls back to `{ text }`. All fields are
+ * therefore optional; consumers read only the ones relevant to their kind.
+ */
+export interface ParsedAttachment {
+  name?: string;
+  filename?: string;
+  type?: string;
+  localPath?: string;
+  url?: string;
+}
+
+export interface ParsedReplyTo {
+  id?: string | number;
+  sender?: string;
+  text?: string;
+}
+
+export interface ParsedAuthor {
+  userId?: string;
+  fullName?: string;
+  userName?: string;
+}
+
+export interface ParsedContent {
+  // chat / chat-sdk
+  text?: string;
+  sender?: string;
+  senderId?: string;
+  author?: ParsedAuthor;
+  replyTo?: ParsedReplyTo;
+  attachments?: ParsedAttachment[];
+  // scheduled / task
+  scriptOutput?: unknown;
+  prompt?: string;
+  // webhook
+  source?: string;
+  event?: string;
+  payload?: unknown;
+  // system_response
+  action?: string;
+  status?: string;
+  result?: unknown;
+}
+
+/**
  * Command categories for messages starting with '/'.
  * - admin: sender must be in NANOCLAW_ADMIN_USER_IDS
  * - filtered: silently drop (mark completed without processing)
@@ -78,8 +127,7 @@ export function isRunnerCommand(msg: MessageInRow): boolean {
   return cat === 'admin' || cat === 'passthrough';
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function extractSenderId(msg: MessageInRow, content: any): string | null {
+function extractSenderId(msg: MessageInRow, content: ParsedContent): string | null {
   const raw: string | null = content?.senderId || content?.author?.userId || null;
   if (!raw) return null;
   // Already namespaced (e.g. "telegram:123") — use as-is.
@@ -231,8 +279,7 @@ function formatSystemMessage(msg: MessageInRow): string {
  *
  * No truncation here (v1 didn't truncate).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatReplyContext(replyTo: any): string {
+function formatReplyContext(replyTo: ParsedReplyTo | undefined): string {
   if (!replyTo) return '';
   const sender = replyTo.sender;
   const text = replyTo.text;
@@ -240,8 +287,7 @@ function formatReplyContext(replyTo: any): string {
   return `\n  <quoted_message from="${escapeXml(sender)}">${escapeXml(text)}</quoted_message>\n`;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatAttachments(attachments: any[] | undefined): string {
+function formatAttachments(attachments: ParsedAttachment[] | undefined): string {
   if (!Array.isArray(attachments) || attachments.length === 0) return '';
   const parts = attachments.map((a) => {
     const name = a.name || a.filename || 'attachment';
@@ -256,10 +302,9 @@ function formatAttachments(attachments: any[] | undefined): string {
   return '\n' + parts.join('\n');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseContent(json: string): any {
+function parseContent(json: string): ParsedContent {
   try {
-    return JSON.parse(json);
+    return JSON.parse(json) as ParsedContent;
   } catch {
     return { text: json };
   }

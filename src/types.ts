@@ -4,7 +4,12 @@ export interface AgentGroup {
   id: string;
   name: string;
   folder: string;
-  /** @deprecated Use container_configs.provider instead. */
+  /**
+   * @deprecated Prefer `container_configs.provider`. Still a live DB column and
+   * the higher-priority arm of the provider cascade in container-runner.ts
+   * (`resolveProviderName(session.agent_provider, containerConfig.provider)`);
+   * removing it requires a schema migration, so it is retained for now.
+   */
   agent_provider: string | null;
   created_at: string;
 }
