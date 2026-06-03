@@ -25,7 +25,7 @@ from src.llm.client import BedrockClaude
 logger = logging.getLogger(__name__)
 
 # Minimum similarity threshold (PRD §4.2.3)
-MIN_SIMILARITY_THRESHOLD = 0.7
+MIN_SIMILARITY_THRESHOLD = 0.73
 
 
 class RAGPipeline:
@@ -146,23 +146,29 @@ class RAGPipeline:
         filtered = [r for r in results if r.get("score", 0) >= MIN_SIMILARITY_THRESHOLD]
 
         # Cache "no docs" ONLY when the user genuinely has nothing indexed (raw
-        # results empty). Caching on `not filtered` (below-threshold) poisons the
-        # cache: a single low-scoring query makes the next 5 min skip RAG entirely
-        # even though the user HAS docs. If we got raw hits but all below
-        # threshold, fall back to the top-2 raw hits so doc content still reaches
-        # the LLM (and provenance correctly attributes the document).
+        # results empty). Caching on `not filtered` (below-threshold) would poison
+        # the cache: a single low-scoring query would make the next 5 min skip RAG
+        # entirely even though the user HAS docs. So we only set the no-docs cache
+        # when the index returned zero raw hits.
+        #
+        # If we got raw hits but NONE clear MIN_SIMILARITY_THRESHOLD, we return []
+        # rather than falling back to top-K. Grounding the answer (and stamping a
+        # "your documents" provenance footer) on a 0.5-relevance chunk produces
+        # false citations and lets irrelevant PDFs leak into unrelated answers.
+        # Below-threshold means "not relevant enough to ground on" — treat as miss.
         if not results:
             await self._redis.setex(no_docs_key, 300, "1")
             return []
 
         if not filtered:
             logger.info(
-                "RAG below-threshold fallback: %d raw hits, top score=%.3f",
+                "RAG below-threshold miss: %d raw hits, top score=%.3f (< %.2f); "
+                "not grounding (no fallback)",
                 len(results),
                 max((r.get("score", 0) for r in results), default=0.0),
+                MIN_SIMILARITY_THRESHOLD,
             )
-            results.sort(key=lambda r: r.get("score", 0), reverse=True)
-            return results[:2]
+            return []
 
         return filtered
 
@@ -212,6 +218,10 @@ class RAGPipeline:
         if any(t in self._MEDIA_TOOLS for t in tools_used) or "IMAGE_URL:" in text or "DOC_URL:" in text:
             return text
         parts = []
+        # Document provenance: only when retrieval actually grounded the answer.
+        # `search_results` here is post-threshold (>= MIN_SIMILARITY_THRESHOLD) and
+        # non-empty only when relevant chunks were injected into the prompt. We do
+        # NOT attest "your documents" on a below-threshold miss (search returns []).
         if search_results:
             seen = []
             for r in search_results:
@@ -221,6 +231,7 @@ class RAGPipeline:
             doc_names = ", ".join(seen[:3])
             extra = "" if len(seen) <= 3 else " +%d more" % (len(seen) - 3)
             parts.append("\U0001F4C4 your documents (%s%s)" % (doc_names, extra))
+        # Tool provenance: only when a real (non-media) tool actually ran this turn.
         seen_labels = []
         for t in tools_used:
             if t in self._MEDIA_TOOLS:
@@ -230,9 +241,14 @@ class RAGPipeline:
             if tag not in seen_labels:
                 seen_labels.append(tag)
         parts.extend(seen_labels)
-        if not parts:
-            parts.append("\U0001F9E0 general knowledge")
+        # Strip any model-emitted "Source:" line (the model is told to cite in prose
+        # only; a structured footer is owned deterministically by code, not the LLM).
         import re as _re
         text = _re.sub(r"\n+_?Sources?:.*$", "", text.rstrip(), flags=_re.IGNORECASE | _re.DOTALL).rstrip()
+        # If nothing genuinely grounded the answer (no docs, no tools), append NO
+        # footer. We never claim "general knowledge" — an un-footered reply is the
+        # truthful signal that the answer came from the model itself.
+        if not parts:
+            return text
         return text + "\n\n_Source: " + " \u00b7 ".join(parts) + "_"
 

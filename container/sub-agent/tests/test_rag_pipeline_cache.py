@@ -7,8 +7,8 @@ skip RAG entirely even though the user HAS documents). The flag may only be set
 when the raw search returns genuinely empty.
 
 The live agent (src/main.py) wires RAGPipeline from src/rag/pipeline.py -- this is
-the module under test. (src/rag/retrieval.py / RAGRetrieval is dead code covered
-by test_rag_retrieval.py and is NOT the deployed path.)
+the module under test. (The former src/rag/retrieval.py / RAGRetrieval was dead
+code never imported by the live path and has been removed.)
 """
 
 import pytest
@@ -74,16 +74,25 @@ async def test_below_threshold_does_not_set_no_docs_cache():
 
     out = await pipeline._search("vague query", [0.1] * 1536)
 
-    # No cache poisoning.
+    # No cache poisoning: user HAS docs (a raw hit was returned), so the no_docs
+    # short-circuit must NOT be set.
     assert redis.setex_calls == [], "below-threshold must NOT setex cache:no_docs"
-    # Fall back to top raw hit(s) so doc content still reaches the LLM.
-    assert len(out) >= 1
-    assert out[0]["filename"] == "notes.pdf"
+    # Below-threshold is a clean miss: no grounding, no top-K fallback. A 0.54
+    # chunk is not relevant enough to ground on or to stamp a "your documents"
+    # citation, so _search returns [] (and the answer carries no source footer).
+    assert out == []
 
 
 @pytest.mark.asyncio
-async def test_below_threshold_returns_top_two_raw_hits_sorted():
-    """Below-threshold fallback returns the top-2 raw hits, highest score first."""
+async def test_below_threshold_returns_empty_no_fallback():
+    """Below-threshold hits must NOT ground the answer: _search returns [].
+
+    Earlier code fell back to the top-2 raw hits so "doc content still reached
+    the LLM" — but that grounded answers on irrelevant chunks and stamped a
+    false "your documents" provenance footer. Below-threshold now means a clean
+    miss: return [] (no grounding, no footer). The no_docs cache must still NOT
+    be set, because the user DOES have indexed docs (raw hits were returned).
+    """
     redis = FakeRedis(dg_response=_dg_payload([
         {"score": 0.31, "filename": "c.pdf", "content": "c"},
         {"score": 0.58, "filename": "a.pdf", "content": "a"},
@@ -93,8 +102,8 @@ async def test_below_threshold_returns_top_two_raw_hits_sorted():
 
     out = await pipeline._search("q", [0.1] * 1536)
 
-    assert redis.setex_calls == []
-    assert [r["filename"] for r in out] == ["a.pdf", "b.pdf"]
+    assert out == [], "below-threshold must not ground (no top-K fallback)"
+    assert redis.setex_calls == [], "below-threshold must NOT poison no_docs cache"
 
 
 # ---------------------------------------------------------------------------
