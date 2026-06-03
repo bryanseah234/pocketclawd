@@ -1,9 +1,17 @@
 
 """beta_send_v2.py -- JSON + multipart file sender for the live admin test API."""
-import json, time, http.client, base64, urllib.request, uuid, mimetypes
+import os, json, time, http.client, base64, urllib.request, uuid, mimetypes
 
-HOST = "3.0.132.150"; PORT = 3000
-ADMIN_USER = "admin"; ADMIN_PASS = "NcLaw$2026!xK9m"
+# Config from env (with fallbacks so the suite runs without setup).
+# Override any of these via environment variables:
+#   CLAWD_TEST_HOST   -- orchestrator EC2 public IP (default 3.0.132.150)
+#   CLAWD_TEST_PORT   -- orchestrator port (default 3000)
+#   CLAWD_ADMIN_USER  -- admin basic-auth user (default "admin")
+#   CLAWD_ADMIN_PASS  -- admin basic-auth password (default the prod admin pass)
+HOST = os.environ.get("CLAWD_TEST_HOST", "3.0.132.150")
+PORT = int(os.environ.get("CLAWD_TEST_PORT", "3000"))
+ADMIN_USER = os.environ.get("CLAWD_ADMIN_USER", "admin")
+ADMIN_PASS = os.environ.get("CLAWD_ADMIN_PASS", "NcLaw$2026!xK9m")
 
 def _cookies():
     creds = base64.b64encode(f"{ADMIN_USER}:{ADMIN_PASS}".encode()).decode()
@@ -79,5 +87,3 @@ def send_file(user_id, file_path, text="", timeout=60, filename=None, mime=None)
         return {"ok": False, "response": None, "elapsed_s": round(time.time()-t0,2), "error": b.get("note") or b.get("error") or f"HTTP {e.code}"}
     except Exception as e:
         return {"ok": False, "response": None, "elapsed_s": round(time.time()-t0,2), "error": str(e)}
-
-import os

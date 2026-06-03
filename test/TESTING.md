@@ -91,12 +91,19 @@ G19 edge/stress/injection | G20 multi-turn memory.
 
 ### TARGET / AUTH (verify before every run)
 - Orchestrator EC2: i-0f9cd20350cfdc1a6, prod, ap-southeast-1.
-- beta_send_v2.py HOST must equal the instance Public IP. CHECK each run:
+- beta_send_v2.py reads its target + creds from ENV (with prod fallbacks so it
+  runs without setup). Override via:
+    CLAWD_TEST_HOST  (default 3.0.132.150 -- the orchestrator EC2 public IP)
+    CLAWD_TEST_PORT  (default 3000)
+    CLAWD_ADMIN_USER (default admin)
+    CLAWD_ADMIN_PASS (default the prod admin password)
+- HOST must equal the instance Public IP. CHECK each run:
     aws ec2 describe-instances --instance-ids i-0f9cd20350cfdc1a6 \
       --profile clawd-prod --region ap-southeast-1
-  If the IP changed (instance restarted), update HOST in beta_send_v2.py first.
-- Admin Basic-auth creds are hardcoded in beta_send_v2.py (do NOT rotate the
-  admin password -- standing instruction).
+  If the IP changed (instance restarted), set CLAWD_TEST_HOST (or update the
+  fallback in beta_send_v2.py).
+- Do NOT rotate the admin password -- standing instruction. The fallback value
+  matches the prod admin pass already present in src/cloud/admin-dashboard/index.ts.
 
 ### RUN PROCEDURE (full round)
 Step 0 -- preflight: confirm latest deploy is "completed success" and the
