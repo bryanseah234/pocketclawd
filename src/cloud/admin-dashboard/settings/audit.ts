@@ -17,6 +17,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import { envPath } from '../../../modules/paths.js';
+import { log } from '../../../log.js';
 
 // ── Types ──
 
@@ -85,7 +86,7 @@ export async function logSettingsChange(
         );
     } catch (err) {
         // Best effort — audit log failure must never block the save operation
-        console.error('[audit] Failed to write settings audit log:', (err as Error).message);
+        log.error('[audit] Failed to write settings audit log', { err: (err as Error).message });
     }
 }
 
@@ -117,7 +118,7 @@ export async function getChangeHistory(): Promise<AuditEntry[]> {
     } catch (err) {
         // File doesn't exist or can't be read — return empty history
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-            console.error('[audit] Failed to read settings audit log:', (err as Error).message);
+            log.error('[audit] Failed to read settings audit log', { err: (err as Error).message });
         }
         return [];
     }

@@ -10,6 +10,7 @@ import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import type { Redis } from 'ioredis';
 import { randomUUID } from 'crypto';
+import { log } from '../log.js';
 
 export interface NotificationConfig {
   dynamoClient: DynamoDBClient;
@@ -85,7 +86,7 @@ export async function sendDailyBriefings(config: NotificationConfig): Promise<Br
   try {
     userIds = await getUserIds(docClient, config.userPreferencesTable);
   } catch (e) {
-    console.error('[notification] Failed to scan users:', e);
+    log.error('[notification] Failed to scan users', { err: e instanceof Error ? e.message : String(e) });
     return [{ userId: '*', status: 'error', reason: e instanceof Error ? e.message : String(e) }];
   }
 

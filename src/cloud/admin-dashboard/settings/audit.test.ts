@@ -23,6 +23,12 @@ vi.mock('../../../modules/paths.js', async () => {
     };
 });
 
+// Mock the shared pino logger so we can assert on log.error without console noise
+const mockLogError = vi.hoisted(() => vi.fn());
+vi.mock('../../../log.js', () => ({
+    log: { error: mockLogError, warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
+}));
+
 // Dynamic import after mock is established
 const { logSettingsChange, getChangeHistory, getAuditLogPath } = await import('./audit.js');
 
@@ -102,19 +108,18 @@ describe('audit logger', () => {
             await fs.mkdir(path.dirname(logDir), { recursive: true });
             await fs.writeFile(logDir, 'blocker', 'utf8');
 
-            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+            mockLogError.mockClear();
 
             // Should not throw even when the write fails
             await expect(
                 logSettingsChange('admin', ['key'], { key: 'old' }, { key: 'new' }),
             ).resolves.toBeUndefined();
 
-            expect(consoleSpy).toHaveBeenCalledWith(
-                expect.stringContaining('[audit] Failed to write settings audit log:'),
-                expect.any(String),
+            expect(mockLogError).toHaveBeenCalledWith(
+                expect.stringContaining('[audit] Failed to write settings audit log'),
+                expect.objectContaining({ err: expect.any(String) }),
             );
 
-            consoleSpy.mockRestore();
             // Clean up the blocker file so afterEach can remove the directory
             await fs.rm(logDir, { force: true });
         });

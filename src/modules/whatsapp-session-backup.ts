@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import { S3Client, PutObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import type { Readable } from 'stream';
+import { log } from '../log.js';
 
 export interface SessionBackupConfig {
   s3Bucket: string;
@@ -133,7 +134,7 @@ export class WhatsAppSessionBackup {
 
   startPeriodicBackup(intervalMs = 5 * 60 * 1000): NodeJS.Timeout {
     return setInterval(() => {
-      this.backup().catch((e) => console.error('[session-backup] periodic error:', e));
+      this.backup().catch((e) => log.error('[session-backup] periodic error', { err: e instanceof Error ? e.message : String(e) }));
     }, intervalMs);
   }
 
