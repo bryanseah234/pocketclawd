@@ -47,7 +47,9 @@ function getDelay(attempt: number): number {
 export function resetCircuitBreaker(): void {
   try {
     fs.unlinkSync(CB_PATH);
-  } catch {}
+  } catch {
+    // Expected when no breaker file exists (first run / already reset).
+  }
   // Also write a clean-shutdown marker so the NEXT process startup
   // can definitively distinguish graceful exit (deploy / SIGTERM) from
   // a crash. Without this marker the new process would still load any
@@ -73,7 +75,10 @@ export async function enforceStartupBackoff(): Promise<void> {
     cleanShutdown = true;
     fs.unlinkSync(CLEAN_MARKER_PATH);
     log.info('Clean shutdown marker found - circuit breaker reset', { path: CLEAN_MARKER_PATH });
-  } catch {}
+  } catch {
+    // No clean-shutdown marker => previous exit was not graceful (crash/kill);
+    // fall through to normal backoff evaluation below.
+  }
 
   const prev = read();
 

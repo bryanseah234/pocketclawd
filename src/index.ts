@@ -314,7 +314,14 @@ async function main(): Promise<void> {
             const text = typeof parsedContent.text === 'string' ? parsedContent.text : '';
             const _dispatchUserId = (event.platformId || '').split('@')[0] || 'anon';
             const _queueId = process.env.NANOCLAW_ENV === 'cloud' ? 'dispatch' : _dispatchUserId;
-            if (process.env.NANOCLAW_ENV !== 'cloud') { try { await ensureContainer(_dispatchUserId); } catch(_e) {} }
+            // Local mode only: best-effort per-user container spawn. A failure
+            // here is non-fatal — the message is still enqueued below and the
+            // container is (re)spawned on the next wake. (Cloud mode: ECS owns
+            // lifecycle, no spawn here — see router.ts dispatch.)
+            if (process.env.NANOCLAW_ENV !== 'cloud') {
+              try { await ensureContainer(_dispatchUserId); }
+              catch (e) { log.debug('ensureContainer (local) failed; enqueueing anyway', { err: e instanceof Error ? e.message : String(e), userId: _dispatchUserId }); }
+            }
             await services.messageQueue.enqueueForAgent(_queueId, {
               id: event.message.id,
               userId: _dispatchUserId,  // real userId, not queue key
@@ -637,7 +644,8 @@ async function main(): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
   log.info('Shutdown signal received', { signal });
   // Write clean-shutdown marker immediately (before any async) so circuit breaker is not triggered
-  try { const { resetCircuitBreaker: _rcb } = await import('./circuit-breaker.js'); _rcb(); } catch {}
+  try { const { resetCircuitBreaker: _rcb } = await import('./circuit-breaker.js'); _rcb(); }
+  catch (e) { log.debug('resetCircuitBreaker on shutdown failed (non-fatal)', { err: e instanceof Error ? e.message : String(e) }); }
   for (const cb of getShutdownCallbacks()) {
     try {
       await cb();
