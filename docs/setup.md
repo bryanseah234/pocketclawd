@@ -72,8 +72,8 @@ The terminal tool runs git-bash (MSYS) which sometimes hits a DLL fork bug
 (dofork: child died unexpectedly). Workaround: use Python subprocess via
 execute_code for file I/O and shell commands.
 
-git push is broken on this machine via git-bash. Use the GitHub Git Data API
-(gh api repos/.../contents) to push individual files.
+On a host where git-bash is unreliable, drive git via PowerShell or push
+individual files through the GitHub contents API.
 
 ## Sub-agent local Docker run
 

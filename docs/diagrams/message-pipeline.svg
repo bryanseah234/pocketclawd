@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 860" width="900" height="860">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#64748b"/></marker>
+    <style>text{font-family:'JetBrains Mono','Consolas',monospace}
+      .nm{font-size:13px;font-weight:700} .sub{font-size:9.5px} .tiny{font-size:8px}
+      .ttl{font-size:20px;font-weight:700} .stl{font-size:11px}</style></defs>
+  <rect width="900" height="860" fill="#020617"/>
+  <rect width="900" height="860" fill="url(#grid)"/>
+  <circle cx="34" cy="34" r="6" fill="#22d3ee"/>
+  <text x="50" y="40" class="ttl" fill="#f1f5f9">Sub-Agent Message Pipeline</text>
+  <text x="50" y="62" class="stl" fill="#94a3b8">container/sub-agent/src/main.py — per inbound chat message</text>
+  <rect x="170" y="92" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="92" width="560" height="44" rx="8" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="450.0" y="110.0" text-anchor="middle" class="nm" fill="#f1f5f9">1 · BRPOP inbound</text>
+  <text x="450.0" y="126.0" text-anchor="middle" class="sub" fill="#fb923c">queue:agent:dispatch (30s)</text>
+
+  <rect x="170" y="148" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="148" width="560" height="44" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="450.0" y="166.0" text-anchor="middle" class="nm" fill="#f1f5f9">2 · Parse payload</text>
+  <text x="450.0" y="182.0" text-anchor="middle" class="sub" fill="#22d3ee">extract text + image attachments</text>
+
+  <line x1="450.0" y1="136" x2="450.0" y2="148" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="204" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="204" width="560" height="44" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="450.0" y="222.0" text-anchor="middle" class="nm" fill="#f1f5f9">3 · Fetch images</text>
+  <text x="450.0" y="238.0" text-anchor="middle" class="sub" fill="#fbbf24">from S3 staging → vision blocks</text>
+
+  <line x1="450.0" y1="192" x2="450.0" y2="204" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="260" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="260" width="560" height="44" rx="8" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="450.0" y="278.0" text-anchor="middle" class="nm" fill="#f1f5f9">4 · Consent gate</text>
+  <text x="450.0" y="294.0" text-anchor="middle" class="sub" fill="#fb7185">PDPA — stop if no consent</text>
+
+  <line x1="450.0" y1="248" x2="450.0" y2="260" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="316" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="316" width="560" height="44" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="450.0" y="334.0" text-anchor="middle" class="nm" fill="#f1f5f9">5 · Onboarding</text>
+  <text x="450.0" y="350.0" text-anchor="middle" class="sub" fill="#34d399">3-question discovery for new users</text>
+
+  <line x1="450.0" y1="304" x2="450.0" y2="316" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="372" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="372" width="560" height="44" rx="8" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="450.0" y="390.0" text-anchor="middle" class="nm" fill="#f1f5f9">6 · Rate limit</text>
+  <text x="450.0" y="406.0" text-anchor="middle" class="sub" fill="#fb923c">Redis token bucket</text>
+
+  <line x1="450.0" y1="360" x2="450.0" y2="372" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="428" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="428" width="560" height="44" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="450.0" y="446.0" text-anchor="middle" class="nm" fill="#f1f5f9">7 · Slash commands</text>
+  <text x="450.0" y="462.0" text-anchor="middle" class="sub" fill="#34d399">/help /list /remind /profile …</text>
+
+  <line x1="450.0" y1="416" x2="450.0" y2="428" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="484" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="484" width="560" height="44" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="450.0" y="502.0" text-anchor="middle" class="nm" fill="#f1f5f9">8 · RAG search</text>
+  <text x="450.0" y="518.0" text-anchor="middle" class="sub" fill="#a78bfa">Titan embed → OpenSearch hybrid (≥0.73)</text>
+
+  <line x1="450.0" y1="472" x2="450.0" y2="484" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="540" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="540" width="560" height="44" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="450.0" y="558.0" text-anchor="middle" class="nm" fill="#f1f5f9">9 · Bedrock Converse</text>
+  <text x="450.0" y="574.0" text-anchor="middle" class="sub" fill="#22d3ee">Claude + tool loop (≤6 turns)</text>
+
+  <line x1="450.0" y1="528" x2="450.0" y2="540" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="596" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="596" width="560" height="44" rx="8" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="450.0" y="614.0" text-anchor="middle" class="nm" fill="#f1f5f9">10 · Fake-image intercept</text>
+  <text x="450.0" y="630.0" text-anchor="middle" class="sub" fill="#fb7185">re-call generate_image for real</text>
+
+  <line x1="450.0" y1="584" x2="450.0" y2="596" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="652" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="652" width="560" height="44" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="450.0" y="670.0" text-anchor="middle" class="nm" fill="#f1f5f9">11 · Truthful footer</text>
+  <text x="450.0" y="686.0" text-anchor="middle" class="sub" fill="#a78bfa">provenance only when really grounded</text>
+
+  <line x1="450.0" y1="640" x2="450.0" y2="652" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="708" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="708" width="560" height="44" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="450.0" y="726.0" text-anchor="middle" class="nm" fill="#f1f5f9">12 · Store + cache bust</text>
+  <text x="450.0" y="742.0" text-anchor="middle" class="sub" fill="#a78bfa">DynamoDB write · sync cache delete</text>
+
+  <line x1="450.0" y1="696" x2="450.0" y2="708" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="764" width="560" height="44" rx="8" fill="#0f172a"/>
+  <rect x="170" y="764" width="560" height="44" rx="8" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="450.0" y="782.0" text-anchor="middle" class="nm" fill="#f1f5f9">13 · LPUSH response</text>
+  <text x="450.0" y="798.0" text-anchor="middle" class="sub" fill="#fb923c">queue:orchestrator:responses</text>
+
+  <line x1="450.0" y1="752" x2="450.0" y2="764" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+</svg>

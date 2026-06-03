@@ -1,28 +1,52 @@
 # Clawd
 
-WhatsApp and Telegram AI assistant for busy professionals in Singapore and Southeast Asia.
-Deployed on AWS ap-southeast-1, built on the NanoClaw v2 agent harness.
+WhatsApp and Telegram AI assistant for busy professionals in Singapore and
+Southeast Asia. Deployed on AWS ap-southeast-1, built on the NanoClaw v2 agent
+harness.
+
+**New here? Start with [docs/00-overview.md](docs/00-overview.md)** — a
+plain-English explanation with a system diagram. For a slide-ready visual,
+open [docs/diagrams/system-overview.html](docs/diagrams/system-overview.html)
+in a browser.
 
 ## What it does
 
 - Remembers what you tell it across sessions
 - Summarises documents and URLs you send
-- Answers questions using your personal knowledge base
+- Answers from your personal knowledge base
 - Web search, weather, live prices, maps, news
-- Generates images, PDFs and DOCX files on request
-- Fires reminders to the right platform (WhatsApp or Telegram)
-- Morning digest at 07:00 SGT
+- Generates images, PDFs and DOCX files
+- Reminders fired to the right platform; 07:00 SGT morning digest
 
-No app to download. Works in the WhatsApp or Telegram chat you already have.
+No app to download — works in the WhatsApp or Telegram chat you already have.
 
 ## Live system
 
-- Account: AWS ap-southeast-1 / 709609992277
+- AWS ap-southeast-1 / account 709609992277
 - Admin: http://3.0.132.150:3000/admin
-- WhatsApp: @pocketclaw234bot (Baileys long-poll)
-- Telegram: @pocketclaw234bot (long-poll; swap to webhook after C9 Caddy)
-- Sub-agent: ECS Fargate, cluster nanoclaw-cluster, service nanoclaw-sub-agent (2 tasks)
-- Orchestrator: EC2 i-0f9cd20350cfdc1a6, Node.js port 3000
+- WhatsApp + Telegram: `@pocketclaw234bot` (Baileys / long-poll)
+- Orchestrator: EC2 `i-0f9cd20350cfdc1a6`, Node.js port 3000
+- Sub-agent: ECS Fargate, cluster `nanoclaw-cluster`, service `nanoclaw-sub-agent`
+
+## Documentation
+
+| # | Doc | Audience |
+|---|---|---|
+| 00 | [Overview](docs/00-overview.md) | everyone (start here) |
+| 01 | [Architecture](docs/01-architecture.md) | engineers |
+| 02 | [AI Sub-agent](docs/02-sub-agent.md) | engineers |
+| 03 | [Deployment](docs/03-deployment.md) | engineers / ops |
+| 04 | [AWS Resources](docs/04-aws-resources.md) | ops |
+| 05 | [Security](docs/05-security.md) | ops / review |
+| 06 | [Operations & Runbooks](docs/06-operations.md) | ops |
+| 07 | [Persona](docs/07-persona.md) | engineers |
+| 08 | [API & Interfaces](docs/08-api.md) | engineers |
+| — | [Local dev setup](docs/setup.md) | engineers |
+| — | [Terraform infrastructure](infrastructure/README.md) | ops |
+| — | [Contributing](CONTRIBUTING.md) | contributors |
+
+Diagrams (vector SVG, zoom freely) live in
+[docs/diagrams/](docs/diagrams/).
 
 ## Repo layout
 
@@ -33,50 +57,28 @@ src/                    Orchestrator (Node.js / TypeScript)
   modules/              Approvals, self-mod, morning digest
 container/sub-agent/    Python sub-agent (FastAPI + Bedrock)
   src/llm/              Bedrock Converse client + tool loop
-  src/tools/            Web search, maps, weather, image gen, doc gen, news
+  src/tools/            Web search, maps, weather, image/doc gen, news
   src/rag/              Embed + OpenSearch pipeline
   src/persona/          system_prompt_template.json
 infrastructure/         Terraform (ECS, EC2, DynamoDB, S3, AOSS, Redis, ECR)
-docs/                   All documentation
+docs/                   All documentation + diagrams/
 ```
-
-## Docs index
-
-| Topic | File |
-|---|---|
-| System design and components | docs/architecture.md |
-| AWS deploy procedure | docs/deployment.md |
-| Local dev setup | docs/setup.md |
-| Persona and system prompt | docs/persona.md |
-| Security model | docs/security.md |
-| CI/CD pipeline | docs/ci-cd.md |
-| Disaster recovery runbook | docs/disaster-recovery.md |
-| Live AWS resource names | docs/aws-resources.md |
-| API reference | docs/api.md |
-| Sub-agent internals | docs/agent-runner.md |
-| Terraform infrastructure | infrastructure/README.md |
-| Contributing and conventions | CONTRIBUTING.md |
 
 ## Quickstart (dev)
 
 ```bash
 git clone git@github.com:tokenlab42/pocketclaw.git
 cd pocketclaw
-cp .env.example .env      # fill AWS creds, bot tokens, Redis URL
-pnpm install
-pnpm build
-pnpm start
+cp .env.example .env      # AWS creds, bot tokens, Redis URL
+pnpm install && pnpm build && pnpm start
 ```
 
-See docs/setup.md for full requirements.
+See [docs/setup.md](docs/setup.md) for full requirements.
 
 ## Tech stack
 
 - Orchestrator: Node.js 22, TypeScript, Baileys (WhatsApp), Telegram Bot API
 - Sub-agent: Python 3.12, FastAPI, boto3, httpx, lxml, reportlab, python-docx
-- LLM: Claude Sonnet 4.5 via AWS Bedrock Converse
-- Embeddings: Amazon Titan Embed v2
-- Vector store: OpenSearch Serverless
-- Cache: ElastiCache Redis 7.1
-- Storage: DynamoDB (chat history, user prefs), S3 (documents, generated media)
-- Infrastructure: Terraform, ECS Fargate, ECR, SSM, Secrets Manager
+- LLM: Claude Sonnet 4.5 via AWS Bedrock Converse · Embeddings: Titan Embed v2
+- Vector store: OpenSearch Serverless · Cache/queues: ElastiCache Redis 7.1
+- Storage: DynamoDB + S3 · Infra: Terraform, ECS Fargate, ECR, SSM, Secrets Manager

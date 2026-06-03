@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" width="1200" height="640">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: 'JetBrains Mono','Consolas',monospace; }
+      .nm{font-size:13px;font-weight:700} .sub{font-size:9.5px} .tiny{font-size:8px}
+      .ttl{font-size:20px;font-weight:700} .stl{font-size:11px}
+    </style>
+  </defs>
+  <rect width="1200" height="640" fill="#020617"/>
+  <rect width="1200" height="640" fill="url(#grid)"/>
+  <circle cx="34" cy="34" r="6" fill="#34d399"/>
+  <text x="50" y="40" class="ttl" fill="#f1f5f9">Clawd — System Overview</text>
+  <text x="50" y="62" class="stl" fill="#94a3b8">WhatsApp / Telegram AI assistant on AWS Singapore (ap-southeast-1)</text>
+  <rect x="60" y="150" width="170" height="90" rx="8" fill="#0f172a"/>
+  <rect x="60" y="150" width="170" height="90" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="145.0" y="186.0" text-anchor="middle" class="nm" fill="#f1f5f9">User</text>
+  <text x="145.0" y="201.0" text-anchor="middle" class="sub" fill="#94a3b8">WhatsApp / Telegram</text>
+  <text x="145.0" y="214.0" text-anchor="middle" class="tiny" fill="#94a3b8">sends a message</text>
+
+  <rect x="330" y="140" width="210" height="110" rx="8" fill="#0f172a"/>
+  <rect x="330" y="140" width="210" height="110" rx="8" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="435.0" y="186.0" text-anchor="middle" class="nm" fill="#f1f5f9">Orchestrator</text>
+  <text x="435.0" y="201.0" text-anchor="middle" class="sub" fill="#34d399">Node.js on EC2</text>
+  <text x="435.0" y="214.0" text-anchor="middle" class="tiny" fill="#94a3b8">receives + routes + replies</text>
+
+  <rect x="640" y="165" width="150" height="60" rx="8" fill="#0f172a"/>
+  <rect x="640" y="165" width="150" height="60" rx="8" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="715.0" y="191.0" text-anchor="middle" class="nm" fill="#f1f5f9">Redis</text>
+  <text x="715.0" y="207.0" text-anchor="middle" class="sub" fill="#fb923c">message queue</text>
+
+  <rect x="890" y="130" width="250" height="130" rx="8" fill="#0f172a"/>
+  <rect x="890" y="130" width="250" height="130" rx="8" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1015.0" y="186.0" text-anchor="middle" class="nm" fill="#f1f5f9">AI Sub-Agent</text>
+  <text x="1015.0" y="201.0" text-anchor="middle" class="sub" fill="#22d3ee">Python on ECS Fargate</text>
+  <text x="1015.0" y="214.0" text-anchor="middle" class="tiny" fill="#94a3b8">Claude (Bedrock) + tools + RAG</text>
+
+  <line x1="230" y1="195" x2="328" y2="195" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="279.0" y="189.0" text-anchor="middle" class="tiny" fill="#cbd5e1">message</text>
+
+  <line x1="540" y1="195" x2="638" y2="195" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="589.0" y="189.0" text-anchor="middle" class="tiny" fill="#cbd5e1">queue</text>
+
+  <line x1="790" y1="195" x2="888" y2="195" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="839.0" y="189.0" text-anchor="middle" class="tiny" fill="#cbd5e1">job</text>
+
+  <line x1="888" y1="235" x2="792" y2="235" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="840.0" y="229.0" text-anchor="middle" class="tiny" fill="#cbd5e1">reply</text>
+
+  <line x1="638" y1="235" x2="542" y2="235" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <line x1="328" y1="232" x2="232" y2="232" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="280.0" y="226.0" text-anchor="middle" class="tiny" fill="#cbd5e1">answer</text>
+
+  <text x="50" y="330" class="stl" fill="#f1f5f9">What the AI can do</text>
+  <rect x="60" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="60" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="145.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Memory</text>
+  <text x="145.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">remembers you</text>
+
+  <rect x="245" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="245" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="330.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Documents</text>
+  <text x="330.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">summarise PDFs/URLs</text>
+
+  <rect x="430" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="430" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="515.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Knowledge base</text>
+  <text x="515.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">ask your own docs</text>
+
+  <rect x="615" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="615" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="700.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Live data</text>
+  <text x="700.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">news, weather, prices, maps</text>
+
+  <rect x="800" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="800" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="885.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Create</text>
+  <text x="885.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">images, PDFs, DOCX</text>
+
+  <rect x="985" y="350" width="170" height="64" rx="8" fill="#0f172a"/>
+  <rect x="985" y="350" width="170" height="64" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1070.0" y="378.0" text-anchor="middle" class="nm" fill="#f1f5f9">Reminders</text>
+  <text x="1070.0" y="394.0" text-anchor="middle" class="sub" fill="#a78bfa">fired to your chat</text>
+
+  <text x="50" y="470" class="stl" fill="#f1f5f9">Where data lives (AWS managed)</text>
+  <rect x="60" y="490" width="205" height="64" rx="8" fill="#0f172a"/>
+  <rect x="60" y="490" width="205" height="64" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="162.5" y="518.0" text-anchor="middle" class="nm" fill="#f1f5f9">DynamoDB</text>
+  <text x="162.5" y="534.0" text-anchor="middle" class="sub" fill="#fbbf24">chat history + profiles</text>
+
+  <rect x="282" y="490" width="205" height="64" rx="8" fill="#0f172a"/>
+  <rect x="282" y="490" width="205" height="64" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="384.5" y="518.0" text-anchor="middle" class="nm" fill="#f1f5f9">OpenSearch</text>
+  <text x="384.5" y="534.0" text-anchor="middle" class="sub" fill="#fbbf24">your documents (vector)</text>
+
+  <rect x="504" y="490" width="205" height="64" rx="8" fill="#0f172a"/>
+  <rect x="504" y="490" width="205" height="64" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="606.5" y="518.0" text-anchor="middle" class="nm" fill="#f1f5f9">S3</text>
+  <text x="606.5" y="534.0" text-anchor="middle" class="sub" fill="#fbbf24">files + generated media</text>
+
+  <rect x="726" y="490" width="205" height="64" rx="8" fill="#0f172a"/>
+  <rect x="726" y="490" width="205" height="64" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="828.5" y="518.0" text-anchor="middle" class="nm" fill="#f1f5f9">Bedrock</text>
+  <text x="828.5" y="534.0" text-anchor="middle" class="sub" fill="#fbbf24">Claude Sonnet 4.5</text>
+
+  <rect x="948" y="490" width="205" height="64" rx="8" fill="#0f172a"/>
+  <rect x="948" y="490" width="205" height="64" rx="8" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="1050.5" y="518.0" text-anchor="middle" class="nm" fill="#f1f5f9">Secrets Mgr</text>
+  <text x="1050.5" y="534.0" text-anchor="middle" class="sub" fill="#fbbf24">all credentials</text>
+
+  <text x="1180" y="626" text-anchor="end" class="tiny" fill="#475569">Account 709609992277 · region ap-southeast-1</text>
+</svg>

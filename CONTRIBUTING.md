@@ -63,14 +63,14 @@ up to 1% error rate (rolling restart causes transient spikes).
 
 Never commit secrets. All runtime credentials live in AWS Secrets Manager
 at nanoclaw/app-config. The OneCLI gateway injects them into containers at
-request time. See docs/security.md.
+request time. See docs/05-security.md.
 
 ## Deploying
 
 Push to feature/nanoclaw-aws-deployment triggers CI then the Deploy Feature
 Branch workflow, which builds the sub-agent image, pushes to ECR, and
 force-redeploys the ECS service. The orchestrator on EC2 picks up the new
-image on next task restart. See docs/deployment.md.
+image on next task restart. See docs/03-deployment.md.
 
 ## Live-prod safety
 
