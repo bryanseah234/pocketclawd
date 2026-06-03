@@ -86,18 +86,41 @@ before the next begins.
 
 ---
 
-## Phase 2 -- MAJOR (structural; removes 1.1's home) -- TODO
+## Phase 2 -- MAJOR (structural) -- DONE (commit pending)
 
-### 3.1 Three parallel container-spawn implementations
-Collapse into one argv-based cloud spawn path. `src/container-runner.ts:108` and
-`CloudContainerManager.spawn` already use argv; `lifecycle.ts` was the unsafe one
-(now argv-fixed in P0, but still a *duplicate* path). Merge `lifecycle.ts` into the
-`ContainerManager` class (or delete it if its responsibilities fully overlap), and
-remove the duplicate `getActiveContainerCount` (`container-runner.ts:65` vs
-`lifecycle.ts:122`). **Decision needed:** which impl is canonical for cloud -- the
-class in `container-manager/index.ts` (currently *not* initialised) or the
-function module `lifecycle.ts` (currently *the* live path)? `bootstrap.ts:339`
-suggests the class was meant to supersede the module.
+### 3.1 Three parallel container-spawn implementations -- RESOLVED by DELETE
+**Decision:** the live cloud sub-agent lifecycle is managed by **ECS** (N workers
+pull from the Redis `dispatch` queue), NOT by orchestrator-spawned Docker. So
+*neither* cloud Docker-spawn impl was the real cloud path:
+
+- **`CloudContainerManager`** (`container-manager/index.ts`, the class) -- **DELETED**
+  (+ its `index.test.ts`, 18 tests). Zero live callers; `bootstrap.ts` explicitly
+  never initialised it. Fully superseded by ECS. It was the sole source of the
+  "3 impls" confusion. (`EcrAuthManager` went with it -- ECR auth on EC2 is done
+  by the deploy script's `aws ecr get-login-password | docker login`, not in-process.)
+- **`lifecycle.ts`** -- **KEPT** but clarified: it is the *local/on-prem* per-user
+  Docker path, driven from `index.ts:317` gated on `NANOCLAW_ENV !== 'cloud'`.
+  Already argv-hardened in P0 (1.1). Its `recordActivity`/`getActiveContainerCount`
+  stay as the local-mode API surface.
+- **`container-runner.ts`** -- **KEPT** unchanged: the canonical v2 *session*-based
+  spawn (different model: keyed by session, not user). The duplicate-name
+  `getActiveContainerCount` is now unambiguous -- session count (runner) vs user
+  count (lifecycle, local-only) -- and no longer collides in any live path.
+
+**Also fixed (folds in quick-win 3.5):**
+- `bootstrap.ts`: removed the misleading unconditional `initContainerManager()` call
+  in cloud bootstrap (it started an idle sweep timer with nothing to manage) and
+  replaced the stale comment with an accurate ECS-vs-local note.
+- `router.ts`: deleted the dead `if (!isCloudMode())` branch + `ensureContainer`
+  call (unreachable -- the enclosing block is already `isCloudMode()`-guarded) and
+  the dead `: userId` ternary arm; `dispatchQueue` is now always `'dispatch'`.
+  Removed the now-unused `ensureContainer, recordActivity` import.
+
+**Verify:** `pnpm typecheck` exit 0; `pnpm vitest run src/cloud` -> 34 files / 443
+tests pass (was 35/461; -1 file/-18 tests = the deleted dead-class test; e2e
+`MockContainerManager` flow tests still 14/14). Logic diff: index.ts -676, index.test.ts
+-394 (pure deletes), bootstrap.ts +9/-12, router.ts +6/-8.
+
 
 ---
 
