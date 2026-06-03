@@ -327,18 +327,15 @@ export async function bootstrapCloudServices(): Promise<CloudServices> {
         log.error('Cloud bootstrap: DataGateway worker failed (non-critical)', { err });
     }
 
-    // Initialize container manager (spawns/kills per-user Docker containers)
-    try {
-        const { initContainerManager } = await import('./container-manager/lifecycle.js');
-        initContainerManager(_services);
-        log.info('Cloud bootstrap: container manager initialized');
-    } catch (err) {
-        log.error('Cloud bootstrap: container manager failed (non-critical)', { err });
-    }
-
-    // Note: CloudContainerManager (per-user Docker) is intentionally not initialised here.
-    // In cloud mode, ECS manages sub-agent task lifecycle directly.
-    // The orchestrator on EC2 does not spawn Docker containers — that path is local-mode only.
+    // Note: in cloud mode the orchestrator does NOT spawn Docker containers.
+    // Sub-agent lifecycle is managed by ECS (N workers pull from the Redis
+    // dispatch queue). The per-user Docker spawn path (container-manager/
+    // lifecycle.ts) is local/on-prem only and is driven from index.ts, gated on
+    // NANOCLAW_ENV !== 'cloud'. We deliberately do not initContainerManager()
+    // here — doing so previously started an idle sweep timer that never had any
+    // containers to manage. The former CloudContainerManager class (per-user
+    // Docker with ECR auth / health / quarantine) was removed: it was dead code
+    // fully superseded by ECS task management.
 
     return _services;
 }

@@ -51,7 +51,6 @@ import { startTypingRefresh, stopTypingRefresh } from './modules/typing/index.js
 import { log } from './log.js';
 import { resolveSession, writeSessionMessage, writeOutboundDirect } from './session-manager.js';
 import { wakeContainer } from './container-runner.js';
-import { ensureContainer, recordActivity } from './cloud/container-manager/lifecycle.js';
 import { getSession } from './db/sessions.js';
 import type { AgentGroup, MessagingGroup, MessagingGroupAgent } from './types.js';
 import type { InboundEvent } from './channels/adapter.js';
@@ -523,13 +522,12 @@ async function deliverToAgent(
         }
 
         const messageId = messageIdForAgent(event.message.id, agent.agent_group_id);
-        // Cloud worker-pool: enqueue to shared dispatch queue.
-        // N ECS workers pull from queue:agent:dispatch; userId is in the payload.
-        // On-prem: ensureContainer spawns per-user Docker containers.
-        if (!isCloudMode()) {
-          try { await ensureContainer(userId); } catch (e) { /* non-fatal */ }
-        }
-        const dispatchQueue = isCloudMode() ? 'dispatch' : userId;
+        // Cloud worker-pool: enqueue to the shared dispatch queue. N ECS workers
+        // pull from queue:agent:dispatch; userId travels in the payload. This
+        // entire block is already guarded by isCloudMode() above, so there is no
+        // local-mode container spawn here (that path lives in index.ts, gated on
+        // NANOCLAW_ENV !== 'cloud') and the queue is always 'dispatch'.
+        const dispatchQueue = 'dispatch';
         const queueMessage = {
           id: messageId,
           userId,
