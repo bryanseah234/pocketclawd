@@ -1,0 +1,3 @@
+CLAWD PLAINTEXT FIXTURE
+The distinctive phrase is: PURPLE PANGOLIN PROTOCOL.
+This file tests text/plain extraction end to end.
