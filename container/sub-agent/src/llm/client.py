@@ -149,10 +149,15 @@ class BedrockClaude:
 
         messages: list[dict[str, Any]] = []
 
-        # Add conversation history (last 100 messages max)
+        # Add conversation history (last 20 messages max).
+        # Capped at 20 (was 100): a long tail of similar prior turns -- e.g. many
+        # file/image/URL questions in a row -- caused the model to MIRROR that
+        # persona onto an unrelated new question (e.g. answering "tell me a joke"
+        # with "I don't see an image attached"). 20 turns keeps enough context for
+        # continuity without letting a burst of one question-type dominate.
         # Skip blank-content messages — Bedrock Converse rejects empty text fields.
         if history:
-            for msg in history[-100:]:
+            for msg in history[-20:]:
                 content = (msg.get("content") or "").strip()
                 if not content:
                     continue
@@ -189,6 +194,18 @@ class BedrockClaude:
         })
 
         prompt = system_prompt or SYSTEM_PROMPT
+
+        # Anti-mirroring guard: stop the model from assuming an attachment exists
+        # just because recent history was full of file/image/URL questions. Each
+        # new message stands on its own.
+        prompt += (
+            "\n\nIMPORTANT: Treat the user's CURRENT message on its own merits. "
+            "Do NOT assume they attached an image, document, file, or URL unless "
+            "the current message actually contains one. If they ask a plain "
+            "question (a joke, the time, general knowledge), just answer it -- "
+            "never reply 'I don't see a document/image attached' to a message that "
+            "did not ask you to read an attachment."
+        )
 
         # Inject user profile so the model addresses them correctly
         if user_profile:

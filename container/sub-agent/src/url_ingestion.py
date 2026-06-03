@@ -129,6 +129,14 @@ async def ingest_urls_silently(
     if not safe_urls:
         return 0
 
+    # Signal "indexing in progress" so the chat path can surface the existing
+    # soft-notice ("still indexing a file you just sent") for URL ingestion too,
+    # and so a same-turn await knows work is pending. Mirrors the doc-upload flag.
+    try:
+        await redis.setex(f"nanoclaw:indexing:{user_id}", 120, "url")
+    except Exception:
+        pass
+
     from src.embeddings.pipeline import EmbeddingPipeline, RecursiveCharacterSplitter
 
     pipeline = EmbeddingPipeline()
@@ -185,6 +193,13 @@ async def ingest_urls_silently(
                 pass
         except Exception as e:  # noqa: BLE001 — never break the chat flow
             logger.error("URL silent-ingest failed for %s: %s", url, e)
+
+    # Done -- clear the indexing flag so the soft-notice stops and follow-up
+    # questions are treated as fully-indexed.
+    try:
+        await redis.delete(f"nanoclaw:indexing:{user_id}")
+    except Exception:
+        pass
 
     return ingested
 

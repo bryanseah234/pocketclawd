@@ -411,16 +411,39 @@ async def _handle_chat_message(message: InboundMessage, user_profile: dict | Non
         # Store user message fire-and-forget (don't block pipeline on it)
         asyncio.ensure_future(_store_chat_message(message.user_id, "user", message.content))
 
-        # Silent URL ingestion (non-blocking).
-        # Store the task in _bg_tasks to prevent GC before it runs.
+        # URL ingestion. For a message that is ESSENTIALLY JUST a URL (the user
+        # pasted a link to read), AWAIT the ingest (bounded) so the answer is
+        # generated from the freshly-indexed content and /ingested is populated
+        # immediately -- otherwise the follow-up "what did it say?" and /ingested
+        # race the background fetch+embed+index and come back empty. For URLs
+        # embedded in longer messages, keep it fire-and-forget (no latency hit).
         try:
-            from src.url_ingestion import schedule_silent_ingest
-            _task = schedule_silent_ingest(state.redis, message.user_id, message.content)
-            if _task is not None:
-                _bg_tasks.add(_task)
-                _task.add_done_callback(_bg_tasks.discard)
+            from src.url_ingestion import schedule_silent_ingest, extract_urls
+            _urls = extract_urls(message.content)
+            if _urls:
+                # "URL-only" heuristic: stripped message is dominated by the URL(s).
+                _stripped = message.content.strip()
+                _non_url = _stripped
+                for _u in _urls:
+                    _non_url = _non_url.replace(_u, "")
+                _url_only = len(_non_url.strip()) <= 15  # allow tiny prefixes like "read:" 
+                if _url_only:
+                    from src.url_ingestion import ingest_urls_silently
+                    try:
+                        _n = await asyncio.wait_for(
+                            ingest_urls_silently(state.redis, message.user_id, _urls),
+                            timeout=20,
+                        )
+                        logger.info("URL-only message: awaited ingest, %d indexed", _n)
+                    except asyncio.TimeoutError:
+                        logger.warning("URL-only ingest exceeded 20s; continuing (will finish in bg)")
+                else:
+                    _task = schedule_silent_ingest(state.redis, message.user_id, message.content)
+                    if _task is not None:
+                        _bg_tasks.add(_task)
+                        _task.add_done_callback(_bg_tasks.discard)
         except Exception as url_err:
-            logger.warning("URL silent-ingest scheduling failed: %s", url_err)
+            logger.warning("URL ingest scheduling failed: %s", url_err)
 
         # Wave 3: is a document still being indexed for this user? If so the
         # answer may be blind to it; surface a soft notice after the answer so

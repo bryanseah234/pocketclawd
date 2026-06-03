@@ -153,6 +153,19 @@ async def cancel_reminder(redis: aioredis.Redis, user_id: str, rid: str) -> bool
 async def parse_remind_command(redis: aioredis.Redis, user_id: str, text: str, channel_type: str = "whatsapp", platform_id: str = "") -> str:
     body = re.sub(r"^/remind\s+(me\s+to\s+|me\s+)?", "", text, flags=re.IGNORECASE).strip()
 
+    # Time-only with no task? e.g. "/remind at 3pm", "/remind in 2 hours",
+    # "/remind tomorrow". The body starts with a recognized time token, so there
+    # is no task text -- ask WHAT to remind about rather than emitting a
+    # misleading "couldn't understand the time" (the time is fine, the task is
+    # what's missing).
+    _time_lead = re.match(
+        r"^(at\s+|in\s+\d|tomorrow|tonight|today|this\s+|next\s+|on\s+|"
+        r"\d{1,2}\s*(am|pm|:)|morning|afternoon|evening)",
+        body, flags=re.IGNORECASE,
+    )
+    if _time_lead is not None:
+        return "\u26a0\ufe0f What should I remind you about? e.g. /remind me to call Bob at 3pm"
+
     split_at = re.split(r"\s+at\s+", body, maxsplit=1, flags=re.IGNORECASE)
     split_in = re.split(r"\s+in\s+(?=\d)", body, maxsplit=1, flags=re.IGNORECASE)
 
