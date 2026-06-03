@@ -327,3 +327,44 @@ god-object decomposition; the cleanest path is to fold a typed-accessor pass int
 that refactor rather than churn every file in an isolated sweep. Tracked as a
 scoped follow-up against P4-3.3.
 
+
+---
+
+## Phase 4 -- MAJOR DataGateway decomposition (3.2) -- ASSESSED, DECLINED (rationale)
+
+Audit 3.2 proposed splitting the PDPA lifecycle (`exportUserData`,
+`deleteAllUserData`) out of `data-gateway/index.ts` into collaborators. On close
+inspection the restructure is **not worth its risk**, for four concrete reasons:
+
+1. **The PDPA *orchestration* layer is already extracted.** `src/cloud/pdpa/index.ts`
+   owns the consent/export/deletion *flows* and depends on `IDataGateway` (its
+   `deps.dataGateway.exportUserData/deleteAllUserData`). The two methods left on the
+   gateway are the **data-layer aggregation primitives** the flow consumes — they
+   belong with the storage they aggregate.
+
+2. **Consumers depend on the `IDataGateway` interface, not the class.** `scheduler`
+   and `pdpa` both type their dep as `IDataGateway` (types.ts). The god-object is
+   already fronted by a clean abstraction; method count behind it is an internal
+   detail, not a leaked-coupling problem.
+
+3. **Extraction would *increase* coupling, not reduce it.** `exportUserData` /
+   `deleteAllUserData` touch `dynamoClient`, `s3Client`, `openSearchClient`,
+   `config`, and the private `getAllUserDocuments` simultaneously — they are
+   inherently cross-backend. A separate collaborator would need all of those
+   injected, trading one cohesive class for an indirection layer over the same
+   shared clients.
+
+4. **The methods enforce legally-significant invariants under property tests.**
+   `pdpa-lifecycle.property.test.ts` asserts "export returns ALL records" and
+   "after delete, every query returns empty". Restructuring a PDPA compliance path
+   for an aesthetic LOC win is poor risk/reward.
+
+Baseline verified green: data-gateway + pdpa suites = 13 files / 149 tests pass
+(incl. 17 property-based tests: routing/data isolation, PDPA lifecycle, TTL).
+
+The file *was* improved this phase: 6.7 prettier reconcile (2256 -> 1644 lines)
+collapsed the formatting bloat that made it *look* worse than it is. The DAL is
+large but cohesive; left intact. (Minor nit noted, not actioned: CloudServices
+could type `dataGateway` as `IDataGateway`, but it uses concrete-only members like
+`isInitialized`, so narrowing would ripple — deferred as not worth it.)
+
