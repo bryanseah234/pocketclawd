@@ -368,3 +368,46 @@ large but cohesive; left intact. (Minor nit noted, not actioned: CloudServices
 could type `dataGateway` as `IDataGateway`, but it uses concrete-only members like
 `isInitialized`, so narrowing would ripple — deferred as not worth it.)
 
+
+---
+
+## Phase 6 -- TYPE contract (2.2 / 2.3) -- DONE (bf0cd860)
+
+**2.2 parseContent typing (agent-runner/formatter.ts).** Replaced 4 eslint-disabled
+`any` with a `ParsedContent` interface (+ `ParsedAttachment` / `ParsedReplyTo` /
+`ParsedAuthor`) capturing the real optional field surface across all message kinds
+(chat/chat-sdk, scheduled/task, webhook, system_response). `parseContent` now
+returns `ParsedContent`; `extractSenderId`, `formatReplyContext`,
+`formatAttachments` are typed. 0 remaining `no-explicit-any` in the file.
+
+**2.3 retire deprecated dual paths -- partial, by design after audit:**
+- DELETED `sessionDbPath` + `openSessionDb` (session-manager.ts) -- grep proved
+  ZERO callers incl. tests; the "kept for test compatibility" note was stale.
+- `agent_provider` (types.ts) is NOT dead: it is the higher-priority arm of the
+  provider cascade (`resolveProviderName(session.agent_provider, containerConfig
+  .provider)` in container-runner.ts:231) and a live DB column wired through
+  schema/migrations/agent-groups/sessions. Removal requires a schema migration ->
+  out of scope; sharpened the `@deprecated` note to say so. LEFT IN.
+- `getDb()` is NOT deprecated -- it is the central-DB accessor used in ~15+ live
+  sites (command-gate, container-runner, delivery, cli/*). LEFT IN.
+- `cloud-responder.ts` direct bypass is a deliberate ECS-fallback safety net
+  (wired at index.ts:350), not dead code. LEFT IN.
+
+### Test-environment note (applies to ALL prior phases)
+The host vitest suites (root `src/`) cannot open the DB until `better-sqlite3` is
+rebuilt for the active Node: the host's default Node is v26 (NODE_MODULE_VERSION
+147) while the repo pins Node 22 (127). Running under the Node-22 PATH without a
+rebuild fails 100% at `new Database()` across db-v2 / host-core / session-manager.
+Fix once per environment: `npm rebuild better-sqlite3 --foreground-scripts` under
+Node 22 (prebuild-install fetches the correct ABI). After rebuild the full host
+suite is **813/814 pass** (the lone failure, `channel-approval.test.ts` "approve ->
+creates wiring ... replays", is pre-existing -- verified identical on the clean
+tree with this session's edits stashed). The `src/cloud` suites don't touch
+better-sqlite3, which is why earlier phases verified green against them alone.
+
+## Status summary
+P0,P1,P2,P3,P5-quick,P6-logging,P6-ops,P6-fmt,P5-5.2(assessed),P4-3.2(declined),
+P6-type-contract = DONE. **Remaining: P4-3.3** (handleAdminRequest 940L -> route
+table) -- intentionally held for an explicit diff-review checkpoint before merge
+(highest risk: live admin-auth + PDPA endpoints).
+
