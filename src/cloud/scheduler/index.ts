@@ -59,13 +59,17 @@ export class SchedulerService implements ISchedulerService {
     private running = false;
 
     /**
-     * Tracks which users have already been notified today to prevent
-     * duplicate notifications within the same day.
+     * Secondary, in-process record of who was notified today.
      *
-     * WARNING: In-process state — lost on orchestrator restart. If the orchestrator
-     * restarts during the 09:00 window, users may receive duplicate notifications.
-     * TODO: Persist to Redis (SET nanoclaw:notified:{userId}:{date} EX 86400) for
-     * idempotent cross-restart deduplication.
+     * The PRIMARY, restart-safe / multi-replica dedup is the Redis distributed
+     * lock (`deps.lock.markOnce(notifiedKey(userId, date), 26h)`) applied in
+     * checkAndNotify() below. Production bootstrap always wires `lock`
+     * (bootstrap.ts), so cross-restart idempotency is handled there.
+     *
+     * This Map remains only as a cheap local short-circuit (and the fallback
+     * when no lock is provided, e.g. in unit tests). It is intentionally not the
+     * source of truth; losing it on restart is harmless because markOnce still
+     * rejects a same-day re-send.
      */
     private notifiedToday: Map<string, UserNotificationState> = new Map();
 

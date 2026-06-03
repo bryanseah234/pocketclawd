@@ -258,3 +258,40 @@ $env:Path = "$node22;$env:Path"
 pnpm typecheck
 pnpm vitest run src/cloud
 ```
+
+
+---
+
+## Phase 6 -- OPS half-landed work (5.3 / 5.4) -- ASSESSED
+
+Audit 5.3 flagged three TODOs as "half-landed". On inspection, two are already
+wired in prod (the TODOs were stale) and one is an out-of-scope local enhancement.
+No risky live-infra change was made unprompted.
+
+### 5.3a Redis Streams migration (#14, redis-queue/index.ts:38) -- DEFERRED (deliberate flag rollout)
+The at-least-once Streams path is **already implemented behind a flag**:
+`MessageQueue.streamsEnabled` selects `enqueueForAgentStream` (XADD/XREADGROUP/XACK)
+vs the legacy LPUSH/BRPOP path, and `router.ts` dispatches on it. Both write
+distinct keyspaces so a rollback is a pure flag flip. Flipping it on is a
+delivery-semantics change to live prod and is a product decision, not a cleanup —
+**left behind the flag**. The class-level TODO comment is accurate as a roadmap
+note; kept.
+
+### 5.3b Scheduler restart-safe dedup (scheduler/index.ts:67) -- ALREADY WIRED (stale comment refreshed)
+The TODO said dedup was in-memory-only and lost on restart. In fact the Redis
+distributed lock IS the primary dedup: `checkAndNotify()` calls
+`deps.lock.markOnce(notifiedKey(userId, date), 26h)`, and **both** SchedulerService
+constructions in `bootstrap.ts` (success + degraded paths) pass `lock`. The
+in-process `notifiedToday` Map is only a local short-circuit / test fallback.
+Refreshed the misleading comment to document the real (already-correct) behavior;
+no logic change. (Digest currently no-ops at 0 opted-in users anyway.)
+
+### 5.3c claude-md-compose skill selection (claude-md-compose.ts:65) -- OUT OF SCOPE
+"Respect container.json skill selection" is a local/on-prem shared-source
+enhancement (composes CLAUDE.md skill fragments for local Docker agents); it does
+not touch the cloud/ECS prod path. Left as a roadmap TODO.
+
+### 5.4 Node-version preinstall guard -- VERIFIED
+`scripts/check-node-version.mjs` exists and `package.json` `preinstall` runs it
+behind an existence guard. Nothing to do.
+
