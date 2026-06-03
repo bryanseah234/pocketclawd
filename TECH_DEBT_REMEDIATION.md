@@ -295,3 +295,35 @@ not touch the cloud/ECS prod path. Left as a roadmap TODO.
 `scripts/check-node-version.mjs` exists and `package.json` `preinstall` runs it
 behind an existence guard. Nothing to do.
 
+
+---
+
+## Phase 5 -- CONFIG env centralization (5.2) -- ASSESSED, scoped-deferred
+
+Audit 5.2 proposed routing ~79 scattered `process.env` reads through a validated
+config. After inventory (96 reads across 23 non-test files) the picture is:
+
+**Secrets Manager boot contract: VERIFIED INTACT.** `bootstrap.ts:116-118` constructs
+`SecretsLoader`, `await loadConfig()` (reads `nanoclaw/app-config`), and
+`startAutoRefresh()`. The resolved `config` object is threaded through services.
+Business/runtime config (LLM model id, embedding model, rate limits, infra refs)
+comes from the secret, exactly as CLAUDE.md mandates. No call site reads runtime
+business config directly from `process.env` in violation of the contract.
+
+**The remaining `process.env` reads are legitimate task-env infrastructure refs**,
+not business config that belongs in the secret:
+- Bootstrapping inputs the loader itself needs: `AWS_REGION`, `NANOCLAW_ENV`.
+- ECS/AWS resource names injected by the task definition: `*_TABLE`, `DATA_BUCKET`,
+  `ECS_CLUSTER_NAME`, `ECS_SUB_AGENT_SERVICE`, `PUBLIC_BASE_URL`.
+- Feature flags / ops toggles: `REDIS_STREAMS_ENABLED`, `CLAWD_CRON_DIGEST`,
+  `CLOUD_RESPONDER_ENABLED`, `TELEGRAM_ENABLED`, `USE_SUBAGENT`, `ADMIN_TRUST_PROXY`.
+- Host/local-mode config already centralized in `config.ts` + `env.ts`.
+
+**Decision: do NOT do a sweeping 23-file env refactor now.** It is CONFIG-tier (not
+security/correctness), touches boot + live admin-dashboard, and risks the boot
+contract for low marginal value. The two highest-count offenders
+(`admin-dashboard/index.ts` = 15 reads, `index.ts` = 8) overlap with the P4
+god-object decomposition; the cleanest path is to fold a typed-accessor pass into
+that refactor rather than churn every file in an isolated sweep. Tracked as a
+scoped follow-up against P4-3.3.
+
