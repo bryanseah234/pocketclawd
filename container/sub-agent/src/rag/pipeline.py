@@ -87,7 +87,7 @@ class RAGPipeline:
 
         # Step 4: LLM call
         _tl = _time.monotonic()
-        response = await self._llm.generate(
+        response, tools_used = await self._llm.generate(
             user_message=user_message,
             history=hist,
             rag_context=rag_context if search_results else None,
@@ -95,8 +95,8 @@ class RAGPipeline:
             user_profile=user_profile,
             image_bytes_list=image_bytes_list,
         )
-        logger.info("PERF llm=%.2fs", _time.monotonic() - _tl)
-
+        logger.info("PERF llm=%.2fs tools=%s", _time.monotonic() - _tl, tools_used)
+        response = self._append_provenance(response, search_results, tools_used)
         return response
 
     async def _search(
@@ -175,3 +175,49 @@ class RAGPipeline:
             context_parts.append(f"{header}\n{content}")
 
         return "\n\n---\n\n".join(context_parts)
+
+    _TOOL_PROVENANCE = {
+        "web_search": ("\U0001F310", "web"),
+        "fetch_url": ("\U0001F310", "web"),
+        "get_news": ("\U0001F4F0", "news"),
+        "get_weather": ("\U0001F326", "live weather"),
+        "get_sg_weather": ("\U0001F326", "live weather"),
+        "get_sg_psi": ("\U0001F326", "live weather"),
+        "get_crypto_price": ("\U0001F4C8", "live market data"),
+        "get_stock_price": ("\U0001F4C8", "live market data"),
+        "convert_currency": ("\U0001F4B1", "live FX"),
+        "search_wikipedia": ("\U0001F4DA", "Wikipedia"),
+        "search_arxiv": ("\U0001F4DA", "arXiv"),
+    }
+    _MEDIA_TOOLS = {"generate_image", "generate_document"}
+
+    def _append_provenance(self, text, search_results, tools_used):
+        if not text:
+            return text
+        if any(t in self._MEDIA_TOOLS for t in tools_used) or "IMAGE_URL:" in text or "DOC_URL:" in text:
+            return text
+        parts = []
+        if search_results:
+            seen = []
+            for r in search_results:
+                fn = r.get("filename") or "your document"
+                if fn not in seen:
+                    seen.append(fn)
+            doc_names = ", ".join(seen[:3])
+            extra = "" if len(seen) <= 3 else " +%d more" % (len(seen) - 3)
+            parts.append("\U0001F4C4 your documents (%s%s)" % (doc_names, extra))
+        seen_labels = []
+        for t in tools_used:
+            if t in self._MEDIA_TOOLS:
+                continue
+            emoji, label = self._TOOL_PROVENANCE.get(t, ("\U0001F527", t.replace("_", " ")))
+            tag = "%s %s" % (emoji, label)
+            if tag not in seen_labels:
+                seen_labels.append(tag)
+        parts.extend(seen_labels)
+        if not parts:
+            parts.append("\U0001F9E0 general knowledge")
+        import re as _re
+        text = _re.sub(r"\n+_?Sources?:.*$", "", text.rstrip(), flags=_re.IGNORECASE | _re.DOTALL).rstrip()
+        return text + "\n\n_Source: " + " \u00b7 ".join(parts) + "_"
+

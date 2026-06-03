@@ -136,9 +136,12 @@ class BedrockClaude:
         temperature: float | None = None,
         user_profile: dict | None = None,
         image_bytes_list: list[tuple[bytes, str]] | None = None,
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """
         Generate a response using Bedrock Claude with tool-use support.
+
+        Returns (response_text, tools_used) -- tools_used is the list of tool
+        names that actually fired this turn, for the provenance footer.
 
         Runs a multi-turn tool-use loop: if the model requests a tool call,
         we execute the tool and feed the result back, up to MAX_TOOL_TURNS.
@@ -234,15 +237,14 @@ class BedrockClaude:
             "Do NOT say 'Here is your document' or add any text around the DOC_URL marker."
             "\n\n## Response Format Rules\n"
             "1. Answer first — direct, clear, no preamble.\n"
-            "2. If the answer came from a document (context blocks provided), end with:\n"
-            "   _Sources: [filename, page X]_ on its own line.\n"
-            "3. If the answer came from a web_search tool call, end with a sources line:\n"
-            "   _Sources: [Title](url), [Title](url)_ -- use the actual URLs from the search results.\n"
-            "   Show at most 3 sources. Use the clean resolved URL, not a google.com/articles/... redirect.\n"
+            "2. Do NOT append a Sources: line yourself -- the system adds a precise,\n"
+            "   typed source line automatically based on what was actually used.\n"
+            "3. If a web_search result is central, you MAY cite the specific [Title](url)\n"
+            "   inline in the prose, but never a trailing Sources: block.\n"
             "4. End EVERY response with exactly one brief follow-up question OR a yes/no prompt\n"
             "   that moves the conversation forward. Keep it to one short sentence.\n"
             "   Examples: 'Want more detail?' / 'Anything else?' / 'Want me to set a reminder?'\n"
-            "5. WhatsApp formatting: *bold* for key terms, _italics_ for sources/asides.\n"
+            "5. WhatsApp formatting: *bold* for key terms, _italics_ for asides.\n"
             "   No markdown headers (##). No bullet walls — max 4 bullets.\n"
             "6. Never say 'As an AI', 'I cannot', 'I'm unable'. Just do it or offer an alternative."
         )
@@ -251,6 +253,7 @@ class BedrockClaude:
             "temperature": temperature or self.temperature,
         }
 
+        tools_used: list[str] = []
         for _turn in range(MAX_TOOL_TURNS):
             request_body: dict[str, Any] = {
                 "modelId": self.model_id,
@@ -278,6 +281,8 @@ class BedrockClaude:
                     tool_name = block["toolUse"]["name"]
                     tool_input = block["toolUse"]["input"]
                     logger.info("Tool call: %s %s", tool_name, tool_input)
+                    if tool_name not in tools_used:
+                        tools_used.append(tool_name)
                     result_text = await dispatch_tool(tool_name, tool_input)
                     tool_results.append({
                         "toolResult": {
@@ -296,14 +301,14 @@ class BedrockClaude:
             for block in content_blocks:
                 if "text" in block:
                     response_text += block["text"]
-            return response_text.strip()
+            return response_text.strip(), tools_used
 
         # Exceeded MAX_TOOL_TURNS — extract whatever text we have
         response_text = ""
         for block in content_blocks:
             if "text" in block:
                 response_text += block["text"]
-        return response_text.strip() or "Sorry, I ran into an issue processing that. Try again."
+        return (response_text.strip() or "Sorry, I ran into an issue processing that. Try again."), tools_used
 
     async def _invoke_with_retry(self, request_body: dict[str, Any]) -> dict[str, Any]:
         """Invoke Bedrock Converse API with exponential backoff retry."""
