@@ -285,7 +285,9 @@ export function createChatSdkBridge(config: ChatSdkBridgeConfig): ChannelAdapter
         log.info('Inbound DM received', {
           adapter: adapter.name,
           channelId,
-          sender: (message.author as any)?.fullName ?? (message.author as any)?.userId ?? 'unknown',
+          sender: ((message.author as { fullName?: string; userId?: string } | undefined)?.fullName)
+            ?? (message.author as { fullName?: string; userId?: string } | undefined)?.userId
+            ?? 'unknown',
           threadId: thread.id,
           attachments: Array.isArray(message.attachments) ? message.attachments.length : 0,
           textLen: (message.text ?? '').length,

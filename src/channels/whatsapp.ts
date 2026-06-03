@@ -58,6 +58,7 @@ import { registerChannelAdapter } from './channel-registry.js';
 import { normalizeOptions, type NormalizedOption } from './ask-question.js';
 import type { ChannelAdapter, ChannelSetup, ConversationInfo, InboundMessage, OutboundMessage } from './adapter.js';
 import { WhatsAppSessionBackup } from '../modules/whatsapp-session-backup.js';
+import { getWaBridge } from '../cloud/admin-dashboard/whatsapp-bridge.js';
 
 const baileysLogger = pino({ level: 'silent' });
 
@@ -630,7 +631,7 @@ registerChannelAdapter('whatsapp', {
             }
             // Push QR to admin dashboard bridge (if available in cloud mode)
             try {
-              const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+              const bridge = getWaBridge();
               if (bridge?.setQrCode) await bridge.setQrCode(qr);
             } catch { /* bridge not available */ }
           })();
@@ -640,7 +641,7 @@ registerChannelAdapter('whatsapp', {
           connected = false;
           // Notify admin dashboard bridge
           try {
-            const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+            const bridge = getWaBridge();
             if (bridge?.setWhatsAppDisconnected) bridge.setWhatsAppDisconnected();
           } catch { /* bridge not available */ }
           const reason = (lastDisconnect?.error as { output?: { statusCode?: number } })?.output?.statusCode;
@@ -699,7 +700,7 @@ registerChannelAdapter('whatsapp', {
           (keepaliveTimer as unknown as { unref?: () => void }).unref?.();
           // Notify admin dashboard bridge
           try {
-            const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+            const bridge = getWaBridge();
             if (bridge?.setWhatsAppConnected) bridge.setWhatsAppConnected(sock.user?.id || 'unknown');
           } catch { /* bridge not available */ }
 

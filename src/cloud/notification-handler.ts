@@ -6,6 +6,7 @@
  * Triggered from index.ts at 07:00 daily.
  */
 import { DynamoDBClient, ScanCommand } from '@aws-sdk/client-dynamodb';
+import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import type { Redis } from 'ioredis';
 import { randomUUID } from 'crypto';
@@ -42,18 +43,21 @@ export function generateBriefingPrompt(prefs: { technical_depth?: string; primar
 
 async function getUserIds(docClient: DynamoDBDocumentClient, table: string): Promise<string[]> {
   const userIds = new Set<string>();
-  let lastKey: Record<string, unknown> | undefined;
+  let lastKey: Record<string, AttributeValue> | undefined;
   do {
     const result = await docClient.send(new ScanCommand({
       TableName: table,
       ProjectionExpression: 'userId',
-      ExclusiveStartKey: lastKey as any,
+      ExclusiveStartKey: lastKey,
     }));
     for (const item of result.Items ?? []) {
-      const id = item['userId']?.S ?? (item as any)['userId'];
+      // Low-level ScanCommand returns AttributeValue-wrapped items ({ S: '...' }).
+      // Keep a plain-string fallback in case a marshalled item ever flows through.
+      const rawId: unknown = item['userId']?.S ?? item['userId'];
+      const id = typeof rawId === 'string' ? rawId : undefined;
       if (id && id !== 'CORPORATE') userIds.add(id);
     }
-    lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+    lastKey = result.LastEvaluatedKey;
   } while (lastKey);
   return [...userIds];
 }
@@ -67,8 +71,8 @@ async function getUserPrefs(
     docClient.send(new GetCommand({ TableName: table, Key: { userId, preferenceKey: 'technical_depth' } })),
     docClient.send(new GetCommand({ TableName: table, Key: { userId, preferenceKey: 'primary_domain' } })),
   ]);
-  const depth = (depthItem.Item as any)?.preferenceValue as string | undefined;
-  const domain = (domainItem.Item as any)?.preferenceValue as string | undefined;
+  const depth = depthItem.Item?.['preferenceValue'] as string | undefined;
+  const domain = domainItem.Item?.['preferenceValue'] as string | undefined;
   if (!depth && !domain) return null;
   return { technical_depth: depth, primary_domain: domain };
 }

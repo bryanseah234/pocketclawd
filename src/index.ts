@@ -110,14 +110,14 @@ async function main(): Promise<void> {
   if (isCloudMode()) {
     const http = await import('node:http');
     const { handleAdminRequest, initAdminDashboard } = await import('./cloud/admin-dashboard/index.js');
-    const { getWhatsAppState, setWhatsAppConnected, setWhatsAppDisconnected, setQrCode } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
+    const { getWhatsAppState, setWhatsAppConnected, setWhatsAppDisconnected, setQrCode, setWaBridge } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
     const { registerWaStateProvider } = await import('./cloud/admin-dashboard/wa-state.js');
     registerWaStateProvider(getWhatsAppState);
 
     const services = getCloudServices();
 
     // Store bridge functions globally so we can wire them after channel adapters init
-    (globalThis as any).__nanoclaw_wa_bridge = { setQrCode, setWhatsAppConnected, setWhatsAppDisconnected, getWhatsAppState };
+    setWaBridge({ setQrCode, setWhatsAppConnected, setWhatsAppDisconnected, getWhatsAppState });
 
     initAdminDashboard({
       provider: {
@@ -162,7 +162,7 @@ async function main(): Promise<void> {
         getSystemHealth: async () => {
           const health = services ? await services.healthCheck.getHealth() : null;
           return {
-            overallStatus: (health?.status ?? 'unknown') as any,
+            overallStatus: health?.status ?? 'unknown',
             uptime: health?.uptime ?? 0,
             timestamp: new Date().toISOString(),
             services: health ? Object.entries(health.components).map(([name, c]) => ({ name, status: c.status, latencyMs: c.latencyMs, lastChecked: c.lastChecked ?? new Date().toISOString() })) : [],
@@ -575,7 +575,8 @@ async function main(): Promise<void> {
 
   // 8. Wire WhatsApp adapter events into the admin dashboard bridge
   if (isCloudMode()) {
-    const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+    const { getWaBridge } = await import('./cloud/admin-dashboard/whatsapp-bridge.js');
+    const bridge = getWaBridge();
     const waAdapter = getChannelAdapter('whatsapp');
     if (waAdapter && bridge) {
       const wa = waAdapter as unknown as Record<string, unknown>;

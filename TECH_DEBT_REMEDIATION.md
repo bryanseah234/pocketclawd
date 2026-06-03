@@ -124,14 +124,45 @@ tests pass (was 35/461; -1 file/-18 tests = the deleted dead-class test; e2e
 
 ---
 
-## Phase 3 -- TYPE (contract de-risk) -- TODO
+## Phase 3 -- TYPE (contract de-risk) -- DONE (commit pending)
 
-### 2.1 Type the `__nanoclaw_wa_bridge` global singleton
-Declare one exported `WhatsAppBridge` interface + a typed accessor; replace the
-`(globalThis as any)` write (`index.ts:120`) and ad-hoc `as any` reads
-(`whatsapp.ts:633/643/702`). Replace `(dataGateway as any).openSearchClient`
-(`s3-reindex.ts:72`, reaches into a private field) with a real `DataGateway`
-method. ~25 `as any` in non-test code total.
+### 2.1 Type the `__nanoclaw_wa_bridge` global singleton -- DONE
+- Added an exported `WhatsAppBridge` interface + `declare global` augmentation +
+  `setWaBridge()`/`getWaBridge()` accessors in `admin-dashboard/whatsapp-bridge.ts`
+  (co-located with the bridge functions). `requestPairingCode` typed optional --
+  it is referenced by the dashboard but never assigned by the only writer
+  (`index.ts`), so it is always undefined at runtime (flagged, behavior unchanged).
+- Replaced all 7 `(globalThis as any).__nanoclaw_wa_bridge` sites with the typed
+  accessor: `index.ts` (write via `setWaBridge`, read via `getWaBridge`),
+  `whatsapp.ts` x3, `admin-dashboard/index.ts`, `landing-page/index.ts`.
+- **Latent bug fixed:** `landing-page/index.ts` read `state.connected` /
+  `state.phone`, which do **not** exist on `WhatsAppBridgeState` (the real fields
+  are `status` / `phoneNumber`). The old `as any`-ish inline type masked it, so the
+  landing page's live-WA-number CTA was *always* falling back to the placeholder.
+  Now reads `state.status === 'connected'` / `state.phoneNumber`.
+
+### 2.1b Replace `(dataGateway as any).openSearchClient` -- DONE
+`s3-reindex.ts` now uses the existing public `DataGateway.openSearch` getter
+instead of an `as any` cast into the private field. Zero behavior change.
+
+### 2.1c Remaining non-test `as any` -- DONE (6 removed)
+- `index.ts:165` `overallStatus` cast was gratuitous (`health.status ?? 'unknown'`
+  is already a valid `ComponentStatus`) -- removed.
+- `chat-sdk-bridge.ts:288` author cast -> narrow `{ fullName?; userId? }` shape.
+- `notification-handler.ts` x4: typed `ExclusiveStartKey`/`lastKey` as
+  `Record<string, AttributeValue>`; narrowed the userId scan extraction (string
+  guard) and the GetCommand `Item.preferenceValue` reads -- dual `.S ?? fallback`
+  defensive logic preserved (low-level ScanCommand through the doc client).
+
+Non-test `as any` now: 0 real (1 remaining is a comment reference in
+whatsapp-bridge.ts). **Verify:** `pnpm typecheck` exit 0; `pnpm vitest run
+src/cloud` 34 files / 443 tests pass (landing-page + notification-handler suites
+green after the field-name + typing fixes).
+
+**Pitfall hit:** initially forgot the `getWaBridge` import in `landing-page/index.ts`
+-> tsc (run before the final edit) missed it, runtime test caught
+`ReferenceError`. Always re-typecheck after the LAST edit; tests are the backstop.
+
 
 ---
 

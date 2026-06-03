@@ -11,6 +11,7 @@
 import http from 'node:http';
 
 import { getLandingPageHtml } from './html.js';
+import { getWaBridge } from '../admin-dashboard/whatsapp-bridge.js';
 
 /**
  * Handle GET / requests by serving the landing page HTML.
@@ -25,19 +26,17 @@ export function handleLandingPageRequest(
     }
 
     // Pull live WA state from the bridge if available
-    const bridge = (globalThis as any).__nanoclaw_wa_bridge as {
-        getWhatsAppState?: () => { connected: boolean; phone?: string };
-    } | undefined;
+    const bridge = getWaBridge();
 
     let waPhone: string | undefined;
     let waConnected = false;
 
     if (bridge?.getWhatsAppState) {
         const state = bridge.getWhatsAppState();
-        waConnected = state.connected;
-        if (state.connected && state.phone) {
-            // phone is JID format like "6581234567@s.whatsapp.net" — extract digits
-            waPhone = state.phone.split('@')[0];
+        waConnected = state.status === 'connected';
+        if (waConnected && state.phoneNumber) {
+            // phoneNumber is JID format like "6581234567@s.whatsapp.net" — extract digits
+            waPhone = state.phoneNumber.split('@')[0];
         }
     }
 

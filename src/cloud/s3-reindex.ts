@@ -74,7 +74,7 @@ export async function runS3ReindexJob(services: CloudServices): Promise<void> {
                 // we never set the seen-sentinel on the error branch either.
                 // Skipping is safe: the next 15-min tick retries, and a genuinely
                 // unindexed file still gets picked up once AOSS is healthy.
-                const osClient = (services.dataGateway as any).openSearchClient;
+                const osClient = services.dataGateway.openSearch;
                 if (!osClient) {
                     log.warn('S3 reindex: openSearchClient unavailable, skipping key this tick', { key });
                     skipped++;

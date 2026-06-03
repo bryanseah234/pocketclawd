@@ -22,6 +22,41 @@ export interface WhatsAppBridgeState {
     pairingCode: string | null;
 }
 
+// ── Bridge contract (replaces `(globalThis as any).__nanoclaw_wa_bridge`) ──
+
+/**
+ * The set of bridge functions the WhatsApp (Baileys) adapter and the admin
+ * dashboard share via a single global. Stored on globalThis because the adapter
+ * is dynamically imported / channel-installed and cannot import the dashboard
+ * module directly without a load-order cycle.
+ *
+ * `requestPairingCode` is optional: the current index.ts wiring assigns only the
+ * four state functions, so at runtime it is normally undefined and callers must
+ * guard with `?.` (see admin-dashboard requestPairingCode usage).
+ */
+export interface WhatsAppBridge {
+    setQrCode: (qrText: string) => Promise<void>;
+    setWhatsAppConnected: (phoneNumber: string) => void;
+    setWhatsAppDisconnected: () => void;
+    getWhatsAppState: () => WhatsAppBridgeState;
+    requestPairingCode?: (phone: string) => Promise<string | null>;
+}
+
+declare global {
+    // eslint-disable-next-line no-var
+    var __nanoclaw_wa_bridge: WhatsAppBridge | undefined;
+}
+
+/** Publish the bridge functions for the adapter + dashboard to consume. */
+export function setWaBridge(bridge: WhatsAppBridge): void {
+    globalThis.__nanoclaw_wa_bridge = bridge;
+}
+
+/** Read the published bridge, or undefined if not yet wired (non-cloud / pre-init). */
+export function getWaBridge(): WhatsAppBridge | undefined {
+    return globalThis.__nanoclaw_wa_bridge;
+}
+
 // ── State ──
 
 const state: WhatsAppBridgeState = {

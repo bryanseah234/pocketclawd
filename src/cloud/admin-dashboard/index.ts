@@ -28,6 +28,7 @@ import { createSettingsManager } from './settings/settings-manager.js';
 import { triggerGracefulRestart } from './settings/restart.js';
 
 import type { DashboardDataProvider } from './types.js';
+import { getWaBridge } from './whatsapp-bridge.js';
 
 // ── Types ──
 
@@ -776,7 +777,7 @@ export async function handleAdminRequest(
             if (!phone) { sendJson(res, { error: 'phone required' }, 400); return true; }
             try {
                 getSettingsManager().updateSetting('credentials.whatsapp_phone_number', phone, 'admin');
-                const bridge = (globalThis as any).__nanoclaw_wa_bridge;
+                const bridge = getWaBridge();
                 const pairingCode = bridge?.requestPairingCode ? await bridge.requestPairingCode(phone) : null;
                 sendJson(res, { success: true, phone, pairingCode });
             } catch (err) { sendJson(res, { error: err instanceof Error ? err.message : String(err) }, 500); }
