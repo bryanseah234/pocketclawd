@@ -54,6 +54,7 @@ interface FailedAttempt {
 const RATE_LIMIT_WINDOW_MS = 5 * 60_000; // 5 minutes window
 const RATE_LIMIT_MAX_FAILURES = 5;
 const RATE_LIMIT_BLOCK_MS = 5 * 60_000; // 5 minutes block
+const FAILED_ATTEMPTS_MAX_ENTRIES = 10_000; // hard cap on distinct IPs tracked
 
 // ── State ──
 
@@ -178,15 +179,35 @@ function sendCsrfFailure(res: http.ServerResponse): void {
 // ── Auth: HTTP Basic Auth + Rate Limiting ──
 
 function getCredentials(): { username: string; password: string } {
+    // No hardcoded fallback password. When ADMIN_PASS is unset the password is
+    // the empty string, which can never match a Basic Auth credential (the
+    // length check in isAuthenticated rejects it). The genuine "no auth
+    // configured" dev/test path is handled separately at the top of
+    // isAuthenticated (no token + no pass => bypass), so an empty password here
+    // means "dashboard is locked" rather than "anyone with the old default".
     return {
         username: process.env.ADMIN_USER || 'admin',
-        password: process.env.ADMIN_PASS || 'NcLaw$2026!xK9m',
+        password: process.env.ADMIN_PASS || '',
     };
 }
 
+// X-Forwarded-For is only trusted when TRUST_PROXY is explicitly enabled
+// (i.e. the dashboard sits behind a known reverse proxy / ALB that sets it).
+// Otherwise any client can spoof the header and either evade the per-IP rate
+// limiter or pollute the failedAttempts map with unbounded distinct keys.
+const TRUST_PROXY = process.env.ADMIN_TRUST_PROXY === 'true';
+
 function getClientIp(req: http.IncomingMessage): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+    if (TRUST_PROXY) {
+        const forwarded = req.headers['x-forwarded-for'];
+        // Take the right-most untrusted hop the proxy appended: the left-most
+        // entry is the spoofable client-supplied value, so when we trust a
+        // single proxy hop the last entry is the address it observed.
+        if (typeof forwarded === 'string' && forwarded.length > 0) {
+            const parts = forwarded.split(',').map((s) => s.trim()).filter(Boolean);
+            if (parts.length > 0) return parts[parts.length - 1];
+        }
+    }
     return req.socket?.remoteAddress || 'unknown';
 }
 
@@ -208,8 +229,26 @@ function isRateLimited(ip: string): boolean {
     return false;
 }
 
+function pruneFailedAttempts(now: number): void {
+    // Evict entries whose window has expired and whose block has lifted, so a
+    // burst of distinct (possibly spoofed) IPs can't grow the map without bound.
+    for (const [k, v] of failedAttempts) {
+        if (v.blockedUntil <= now && now - v.firstAttemptAt > RATE_LIMIT_WINDOW_MS) {
+            failedAttempts.delete(k);
+        }
+    }
+    // Hard cap as a backstop against a flood within a single window: drop the
+    // oldest entries first (Map preserves insertion order).
+    while (failedAttempts.size > FAILED_ATTEMPTS_MAX_ENTRIES) {
+        const oldest = failedAttempts.keys().next().value;
+        if (oldest === undefined) break;
+        failedAttempts.delete(oldest);
+    }
+}
+
 function recordFailedAttempt(ip: string): void {
     const now = Date.now();
+    pruneFailedAttempts(now);
     const entry = failedAttempts.get(ip);
 
     if (!entry || now - entry.firstAttemptAt > RATE_LIMIT_WINDOW_MS) {
@@ -1627,7 +1666,24 @@ async function uploadToS3AndEnqueue(
  */
 export function initAdminDashboard(cfg: AdminDashboardConfig): void {
     config = cfg;
-    log.info('Admin dashboard initialized (Basic Auth)');
+
+    // Security posture check (replaces the former hardcoded default password).
+    // A request-time token (cfg.token) is the test/programmatic auth path.
+    // For the deployed dashboard the operator must set ADMIN_PASS (Basic Auth)
+    // or ADMIN_TOKEN (bearer). If none of these is present the dashboard runs
+    // OPEN — which is only intended for local dev — so warn loudly.
+    const hasToken = Boolean(cfg.token) || Boolean(process.env.ADMIN_TOKEN);
+    const hasPass = Boolean(process.env.ADMIN_PASS);
+    if (!hasToken && !hasPass) {
+        log.warn(
+            'Admin dashboard is running WITHOUT authentication — set ADMIN_PASS ' +
+            '(or ADMIN_TOKEN) to lock it down. This is only safe for local dev.',
+        );
+    } else {
+        log.info('Admin dashboard initialized (Basic Auth)', {
+            xffTrusted: process.env.ADMIN_TRUST_PROXY === 'true',
+        });
+    }
 }
 
 /**

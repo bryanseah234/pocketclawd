@@ -10,6 +10,7 @@ import { CloudContainerManager, EcrAuthManager } from './index.js';
 // Mock child_process
 vi.mock('child_process', () => ({
     execSync: vi.fn(),
+    spawnSync: vi.fn(() => ({ status: 0, stdout: '', stderr: '' })),
     spawn: vi.fn(() => {
         const proc = {
             stdout: { on: vi.fn() },
@@ -39,9 +40,9 @@ vi.mock('../../container-runtime.js', () => ({
     CONTAINER_RUNTIME_BIN: 'docker',
 }));
 
-import { execSync, spawn } from 'child_process';
+import { spawnSync, spawn } from 'child_process';
 
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 const mockSpawn = vi.mocked(spawn);
 
 describe('EcrAuthManager', () => {
@@ -53,9 +54,9 @@ describe('EcrAuthManager', () => {
     });
 
     it('refreshes token on first call', async () => {
-        mockExecSync
-            .mockReturnValueOnce('mock-ecr-token\n' as any) // get-login-password
-            .mockReturnValueOnce('' as any); // docker login
+        mockSpawnSync
+            .mockReturnValueOnce({ status: 0, stdout: 'mock-ecr-token\n', stderr: '' } as any) // get-login-password
+            .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any); // docker login
 
         const token = await authManager.getToken();
 
@@ -65,15 +66,15 @@ describe('EcrAuthManager', () => {
     });
 
     it('returns cached token when not expired', async () => {
-        mockExecSync
-            .mockReturnValueOnce('mock-ecr-token\n' as any)
-            .mockReturnValueOnce('' as any);
+        mockSpawnSync
+            .mockReturnValueOnce({ status: 0, stdout: 'mock-ecr-token\n', stderr: '' } as any)
+            .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
         const token1 = await authManager.getToken();
         const token2 = await authManager.getToken();
 
-        // Should only call execSync twice (once for get-login-password, once for docker login)
-        expect(mockExecSync).toHaveBeenCalledTimes(2);
+        // Should only call spawnSync twice (once for get-login-password, once for docker login)
+        expect(mockSpawnSync).toHaveBeenCalledTimes(2);
         expect(token1).toBe(token2);
     });
 
@@ -82,7 +83,7 @@ describe('EcrAuthManager', () => {
     });
 
     it('throws on auth failure', async () => {
-        mockExecSync.mockImplementation(() => {
+        mockSpawnSync.mockImplementation(() => {
             throw new Error('AWS CLI not configured');
         });
 
@@ -116,9 +117,9 @@ describe('CloudContainerManager', () => {
     describe('spawn', () => {
         it('spawns a container with correct resource limits', async () => {
             // Mock ECR auth
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any) // ECR get-login-password
-                .mockReturnValueOnce('' as any); // docker login
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any) // ECR get-login-password
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any); // docker login
 
             // Mock spawn to simulate a running container
             const mockProcess = {
@@ -164,9 +165,9 @@ describe('CloudContainerManager', () => {
         });
 
         it('returns existing container if already running', async () => {
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any)
-                .mockReturnValueOnce('' as any);
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any)
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },
@@ -190,9 +191,9 @@ describe('CloudContainerManager', () => {
 
     describe('kill', () => {
         it('stops and removes container', async () => {
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any)
-                .mockReturnValueOnce('' as any);
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any)
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },
@@ -209,7 +210,7 @@ describe('CloudContainerManager', () => {
             await spawnPromise;
 
             // Reset mock to track kill calls
-            mockExecSync.mockReturnValueOnce('' as any); // docker stop
+            mockSpawnSync.mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any); // docker stop
 
             await manager.kill('user-kill');
 
@@ -266,9 +267,9 @@ describe('CloudContainerManager', () => {
 
     describe('container exit handling', () => {
         it('handles OOM kill (exit 137) by recording failure and scheduling restart', async () => {
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any)
-                .mockReturnValueOnce('' as any);
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any)
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },
@@ -298,9 +299,9 @@ describe('CloudContainerManager', () => {
         });
 
         it('does not restart on normal exit (code 0)', async () => {
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any)
-                .mockReturnValueOnce('' as any);
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any)
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },
@@ -341,9 +342,9 @@ describe('CloudContainerManager', () => {
 
     describe('listActive', () => {
         it('returns only running/starting containers', async () => {
-            mockExecSync
-                .mockReturnValueOnce('ecr-token\n' as any)
-                .mockReturnValueOnce('' as any);
+            mockSpawnSync
+                .mockReturnValueOnce({ status: 0, stdout: 'ecr-token\n', stderr: '' } as any)
+                .mockReturnValueOnce({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },
@@ -367,7 +368,7 @@ describe('CloudContainerManager', () => {
 
     describe('subnet allocation', () => {
         it('allocates unique subnets for different users', async () => {
-            mockExecSync.mockReturnValue('' as any);
+            mockSpawnSync.mockReturnValue({ status: 0, stdout: '', stderr: '' } as any);
 
             const mockProcess = {
                 stdout: { on: vi.fn() },

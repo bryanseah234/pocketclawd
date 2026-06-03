@@ -11,7 +11,7 @@
  * Requirements: REQ-1.2, REQ-6.3
  */
 
-import { execSync, spawn, type ChildProcess } from 'child_process';
+import { spawn, spawnSync, type ChildProcess } from 'child_process';
 
 import { log } from '../../log.js';
 import { CONTAINER_RUNTIME_BIN } from '../../container-runtime.js';
@@ -91,18 +91,31 @@ export class EcrAuthManager {
         log.info('Refreshing ECR auth token', { region: this.region });
 
         try {
-            const output = execSync(
-                `aws ecr get-login-password --region ${this.region}`,
-                { encoding: 'utf-8', timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'] },
+            // argv form: region is config-derived, but no shell avoids any
+            // interpolation risk and keeps this consistent with the login call.
+            const getPw = spawnSync(
+                'aws',
+                ['ecr', 'get-login-password', '--region', this.region],
+                { encoding: 'utf-8', timeout: 30_000 },
             );
+            if (getPw.status !== 0) {
+                throw new Error(`ecr get-login-password failed (exit ${getPw.status}): ${(getPw.stderr || '').trim()}`);
+            }
 
-            const password = output.trim();
+            const password = (getPw.stdout || '').trim();
 
-            // Docker login with the ECR token
-            execSync(
-                `echo "${password}" | ${CONTAINER_RUNTIME_BIN} login --username AWS --password-stdin ${this.registryUri}`,
-                { encoding: 'utf-8', timeout: 30_000, stdio: ['pipe', 'pipe', 'pipe'] },
+            // Docker login with the ECR token. The password is fed via stdin
+            // (input) rather than echoed onto the command line, so it never
+            // appears in the process table / shell history and there is no
+            // shell to interpret it. --password-stdin reads it from fd 0.
+            const login = spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['login', '--username', 'AWS', '--password-stdin', this.registryUri],
+                { input: password, encoding: 'utf-8', timeout: 30_000 },
             );
+            if (login.status !== 0) {
+                throw new Error(`${CONTAINER_RUNTIME_BIN} login failed (exit ${login.status}): ${(login.stderr || '').trim()}`);
+            }
 
             // ECR tokens are valid for 12 hours
             const expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
@@ -239,15 +252,17 @@ export class CloudContainerManager {
         log.info('Killing container', { userId, containerName: info.containerName });
 
         try {
-            execSync(
-                `${CONTAINER_RUNTIME_BIN} stop -t 5 ${info.containerName}`,
+            spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['stop', '-t', '5', info.containerName],
                 { stdio: 'pipe', timeout: 15_000 },
             );
         } catch {
             // Force kill if graceful stop fails
             try {
-                execSync(
-                    `${CONTAINER_RUNTIME_BIN} kill ${info.containerName}`,
+                spawnSync(
+                    CONTAINER_RUNTIME_BIN,
+                    ['kill', info.containerName],
                     { stdio: 'pipe', timeout: 5_000 },
                 );
             } catch {
@@ -332,8 +347,9 @@ export class CloudContainerManager {
         log.info('Pulling agent image from ECR', { imageUri });
 
         try {
-            execSync(
-                `${CONTAINER_RUNTIME_BIN} pull ${imageUri}`,
+            spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['pull', imageUri],
                 { stdio: 'pipe', timeout: 300_000 }, // 5 min timeout for pull
             );
             log.info('Agent image pulled', { imageUri });
@@ -353,15 +369,17 @@ export class CloudContainerManager {
         const { dockerNetworkName, managementNetwork } = this.config;
 
         try {
-            execSync(
-                `${CONTAINER_RUNTIME_BIN} network inspect ${dockerNetworkName}`,
+            spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['network', 'inspect', dockerNetworkName],
                 { stdio: 'pipe' },
             );
             log.debug('Management network exists', { network: dockerNetworkName });
         } catch {
             log.info('Creating management network', { network: dockerNetworkName, subnet: managementNetwork });
-            execSync(
-                `${CONTAINER_RUNTIME_BIN} network create --driver bridge --subnet ${managementNetwork} ${dockerNetworkName}`,
+            spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['network', 'create', '--driver', 'bridge', '--subnet', managementNetwork, dockerNetworkName],
                 { stdio: 'pipe' },
             );
         }
@@ -483,10 +501,15 @@ export class CloudContainerManager {
      */
     private checkContainerHealth(userId: string, info: ContainerInfo): HealthCheckResult {
         try {
-            const output = execSync(
-                `${CONTAINER_RUNTIME_BIN} inspect --format '{{.State.Running}}' ${info.containerName}`,
+            const inspect = spawnSync(
+                CONTAINER_RUNTIME_BIN,
+                ['inspect', '--format', '{{.State.Running}}', info.containerName],
                 { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 5_000 },
             );
+            if (inspect.status !== 0) {
+                throw new Error(`inspect failed (exit ${inspect.status})`);
+            }
+            const output = inspect.stdout || '';
 
             const isRunning = output.trim() === 'true';
             return {

@@ -16,6 +16,7 @@
  */
 
 import { log } from '../../log.js';
+import { CONTAINER_RUNTIME_BIN } from '../../container-runtime.js';
 
 import type { CloudServices } from '../bootstrap.js';
 
@@ -135,48 +136,55 @@ export function recordActivity(userId: string): void {
 async function spawnContainer(userId: string): Promise<string> {
     if (!config) throw new Error('Container manager not initialized');
 
-    const { execSync } = await import('node:child_process');
+    const { spawnSync } = await import('node:child_process');
 
     const containerName = `nanoclaw-agent-${userId.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-    // Build environment variables for the container
-    const envArgs = [
-        `-e AGENT_USER_ID=${userId}`,
-        `-e REDIS_HOST=${config.redisHost}`,
-        `-e REDIS_PORT=${config.redisPort}`,
-        `-e AWS_REGION=${config.awsRegion}`,
-        `-e QUEUE_POLL_TIMEOUT=5`,
+    // Build environment variables for the container. Each value is passed as a
+    // discrete argv entry (key=value), so shell metacharacters in untrusted
+    // values (e.g. the channel-derived userId) are inert — there is no shell.
+    const envArgs: string[] = [
+        '-e', `AGENT_USER_ID=${userId}`,
+        '-e', `REDIS_HOST=${config.redisHost}`,
+        '-e', `REDIS_PORT=${config.redisPort}`,
+        '-e', `AWS_REGION=${config.awsRegion}`,
+        '-e', 'QUEUE_POLL_TIMEOUT=5',
     ];
     if (config.bedrockLlmModelId) {
-        envArgs.push(`-e BEDROCK_LLM_MODEL_ID=${config.bedrockLlmModelId}`);
+        envArgs.push('-e', `BEDROCK_LLM_MODEL_ID=${config.bedrockLlmModelId}`);
     }
     if (config.redisPassword) {
-        envArgs.push(`-e REDIS_PASSWORD=${config.redisPassword}`);
+        envArgs.push('-e', `REDIS_PASSWORD=${config.redisPassword}`);
     }
     if (config.redisHost.includes('amazonaws.com')) {
-        envArgs.push('-e REDIS_SSL=true');
+        envArgs.push('-e', 'REDIS_SSL=true');
     }
 
-    const cmd = [
-        'docker run -d',
-        `--name ${containerName}`,
-        `--memory ${config.memoryLimit}`,
-        `--memory-swap ${config.memoryLimit}`, // No swap
-        `--cpu-quota ${config.cpuQuota}`,
-        '--cpu-period 100000',
-        `--pids-limit ${config.pidsLimit}`,
+    const args: string[] = [
+        'run', '-d',
+        '--name', containerName,
+        '--memory', config.memoryLimit,
+        '--memory-swap', config.memoryLimit, // No swap
+        '--cpu-quota', String(config.cpuQuota),
+        '--cpu-period', '100000',
+        '--pids-limit', String(config.pidsLimit),
         '--read-only',
-        '--tmpfs /tmp:size=100m',
-        '--tmpfs /app/tmp:size=100m',
-        '--security-opt no-new-privileges',
-        '--cap-drop ALL',
-        '--restart unless-stopped',
+        '--tmpfs', '/tmp:size=100m',
+        '--tmpfs', '/app/tmp:size=100m',
+        '--security-opt', 'no-new-privileges',
+        '--cap-drop', 'ALL',
+        '--restart', 'unless-stopped',
         ...envArgs,
         config.image,
-    ].join(' ');
+    ];
 
-    const output = execSync(cmd, { encoding: 'utf-8', timeout: 30_000 }).trim();
-    return output.substring(0, 12); // Short container ID
+    // spawnSync with an argv array and shell:false (the default) passes args
+    // directly to the runtime with no shell interpretation — no injection sink.
+    const result = spawnSync(CONTAINER_RUNTIME_BIN, args, { encoding: 'utf-8', timeout: 30_000 });
+    if (result.status !== 0) {
+        throw new Error(`Container spawn failed (exit ${result.status}): ${(result.stderr || '').trim()}`);
+    }
+    return (result.stdout || '').trim().substring(0, 12); // Short container ID
 }
 
 async function killContainer(userId: string): Promise<void> {
@@ -184,8 +192,8 @@ async function killContainer(userId: string): Promise<void> {
     if (!container) return;
 
     try {
-        const { execSync } = await import('node:child_process');
-        execSync(`docker rm -f ${container.containerId}`, { encoding: 'utf-8', timeout: 10_000 });
+        const { spawnSync } = await import('node:child_process');
+        spawnSync(CONTAINER_RUNTIME_BIN, ['rm', '-f', container.containerId], { encoding: 'utf-8', timeout: 10_000 });
         containers.delete(userId);
         log.info('Container killed (idle)', { userId, containerId: container.containerId });
     } catch (err) {
