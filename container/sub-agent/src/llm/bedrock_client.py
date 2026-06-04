@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
 
 # Fallback chain for ThrottlingException / ServiceUnavailable scenarios (G_5).
 # Order: best-but-most-throttled -> regional fallback -> cheap-and-fast fallback.

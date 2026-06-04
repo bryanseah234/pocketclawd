@@ -19,7 +19,7 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 # Defaults per PRD §8.1.1
-DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 800  # WA messages should be concise; reduces latency
 DEFAULT_TEMPERATURE = 0.5
 

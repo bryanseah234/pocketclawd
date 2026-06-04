@@ -1057,7 +1057,7 @@ async function handleArchitectureState(req: http.IncomingMessage, res: http.Serv
                     components.dynamodb = { status: 'healthy', detail: cfgFromServices(services, 'dynamodb') };
                     components.opensearch = { status: 'healthy', detail: 'AOSS / 1024-d KNN (cohere-multilingual-v3)' };
                     components.s3 = { status: 'healthy', detail: 'nanoclaw-data-709609992277' };
-                    components.bedrock = { status: 'healthy', detail: 'embed: cohere.embed-multilingual-v3 (1024-d) / LLM: claude-sonnet-4.5' };
+                    components.bedrock = { status: 'healthy', detail: 'embed: cohere.embed-multilingual-v3 (1024-d) / LLM: claude-sonnet-4.6' };
                     components.subAgent = { status: 'healthy', detail: 'ECS Fargate | 20 tools: search, weather, currency, news, wiki, SO, arxiv, crypto, stocks, SG-weather, PSI, 4D, maps, routing, tz, ISS, img-gen, TTS, fetch-url' };
                     components.orchestrator = { status: 'healthy', detail: 'EC2 t3.small (orchestrator)' };
                 } else {

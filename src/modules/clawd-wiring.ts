@@ -38,7 +38,7 @@ async function audit(line: string): Promise<void> {
 async function bedrockChat(prompt: string): Promise<string> {
   const { BedrockRuntimeClient, InvokeModelCommand } = await import('@aws-sdk/client-bedrock-runtime');
   const region = process.env.AWS_REGION || 'ap-southeast-1';
-  const modelId = process.env.CLAWD_DIGEST_MODEL_ID || 'global.anthropic.claude-sonnet-4-5-20250929-v1:0';
+  const modelId = process.env.CLAWD_DIGEST_MODEL_ID || 'global.anthropic.claude-sonnet-4-6';
   const client = new BedrockRuntimeClient({ region });
   const body = {
     anthropic_version: 'bedrock-2023-05-31',
