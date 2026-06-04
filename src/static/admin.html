@@ -243,17 +243,10 @@ tr:hover td{background:rgba(255,255,255,.4)}
     <div class="hint">Drop a file or click to browse. Ingested into the knowledge base for retrieval.</div>
     <div class="dz" id="dropzone">Drop file here or click to choose<input type="file" id="file-input" style="display:none"></div>
   </div>
-  <div class="grid2">
-    <div class="card">
-      <h2>Documents</h2>
-      <div class="hint">Indexed documents available to the assistant.</div>
-      <table><thead><tr><th>Name</th><th>Added</th><th></th></tr></thead><tbody id="doc-rows"><tr><td class="empty" colspan="3">Loading&hellip;</td></tr></tbody></table>
-    </div>
-    <div class="card">
-      <h2>Ingestion sources</h2>
-      <div class="hint">Connected cloud sources (Google / Microsoft / Apple).</div>
-      <table><tbody id="src-rows"><tr><td class="empty">Loading&hellip;</td></tr></tbody></table>
-    </div>
+  <div class="card">
+    <h2>Documents</h2>
+    <div class="hint">Indexed documents available to the assistant.</div>
+    <table><thead><tr><th>Name</th><th>Added</th><th></th></tr></thead><tbody id="doc-rows"><tr><td class="empty" colspan="3">Loading&hellip;</td></tr></tbody></table>
   </div>
 </section>
 
@@ -325,7 +318,7 @@ tr:hover td{background:rgba(255,255,255,.4)}
 
 /* ---- helpers ---- */
 const $ = s => document.querySelector(s);
-const TEST_USERS = ['alpha','beta','charlie','delta'];
+let TEST_USERS = [{id:'test_alpha',label:'Alpha'},{id:'test_beta',label:'Beta'},{id:'test_charlie',label:'Charlie'},{id:'test_delta',label:'Delta'}];
 function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
 async function getJSON(path){ try{ const r=await api(path); if(r.status===401){location.href='/admin';return null;} return await r.json(); }catch(e){ return null; } }
 function toast(msg, kind){ const w=$('#toasts'); const t=document.createElement('div'); t.className='toast '+(kind||''); t.textContent=msg; w.appendChild(t); setTimeout(()=>t.remove(), 3200); }
@@ -344,7 +337,7 @@ document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
 function onTab(name){
   if(name==='testlab') loadLab();
   if(name==='monitor'){ loadConsent(); loadErrors(); }
-  if(name==='knowledge'){ loadDocs(); loadSources(); }
+  if(name==='knowledge'){ loadDocs(); }
   if(name==='manage'){ loadUsers(); loadArch(); }
 }
 
@@ -388,11 +381,11 @@ function buildLab(){
   const g=$('#lab-grid'); g.innerHTML='';
   TEST_USERS.forEach(u=>{
     const w=document.createElement('div'); w.className='chatwin';
-    w.innerHTML='<div class="hd"><span class="name">'+u+'</span>'
-      +'<button class="btn sm" data-reset="'+u+'">Reset</button></div>'
-      +'<div class="log" id="log-'+u+'"><div class="empty">No messages</div></div>'
-      +'<div class="composer"><input type="text" id="in-'+u+'" placeholder="Message as '+u+'…">'
-      +'<button class="btn primary sm" data-send="'+u+'">Send</button></div>';
+    w.innerHTML='<div class="hd"><span class="name">'+esc(u.label)+'</span>'
+      +'<button class="btn sm" data-reset="'+esc(u.id)+'">Reset</button></div>'
+      +'<div class="log" id="log-'+esc(u.id)+'"><div class="empty">No messages</div></div>'
+      +'<div class="composer"><input type="text" id="in-'+esc(u.id)+'" placeholder="Message as '+esc(u.label)+'…">'
+      +'<button class="btn primary sm" data-send="'+esc(u.id)+'">Send</button></div>';
     g.appendChild(w);
   });
   g.querySelectorAll('[data-send]').forEach(b=>b.addEventListener('click',()=>sendAs(b.dataset.send)));
@@ -402,14 +395,19 @@ function buildLab(){
 function renderLog(u, msgs){
   const el=$('#log-'+u); if(!el) return;
   if(!msgs || !msgs.length){ el.innerHTML='<div class="empty">No messages</div>'; return; }
-  el.innerHTML = msgs.map(m=>'<div class="msg '+(m.role==='user'?'user':'assistant')+'">'+esc(m.text)+'<span class="t">'+fmtTime(m.timestamp)+'</span></div>').join('');
+  el.innerHTML = msgs.map(m=>'<div class="msg '+(m.role==='user'?'user':'assistant')+'">'+esc(m.content!=null?m.content:m.text)+'<span class="t">'+fmtTime(m.timestamp)+'</span></div>').join('');
   el.scrollTop = el.scrollHeight;
 }
 async function loadUserLog(u){
   const data = await getJSON('/admin/api/chat/history?userId='+encodeURIComponent(u));
   renderLog(u, data && data.messages);
 }
-async function loadLab(){ if(!$('#lab-grid').children.length) buildLab(); for(const u of TEST_USERS) loadUserLog(u); }
+async function loadLab(){
+  const d=await getJSON('/admin/api/test/users');
+  if(d && Array.isArray(d.users) && d.users.length){ TEST_USERS = d.users.map(u=>({id:u.id, label:u.label||u.id})); }
+  buildLab();
+  for(const u of TEST_USERS) loadUserLog(u.id);
+}
 async function sendAs(u){
   const inp=$('#in-'+u); const text=(inp.value||'').trim(); if(!text) return;
   inp.value=''; inp.disabled=true;
@@ -437,7 +435,6 @@ async function loadErrors(){ const d=await getJSON('/admin/api/data/system-error
 
 /* ---- KNOWLEDGE BASE ---- */
 async function loadDocs(){ const d=await getJSON('/admin/api/data/documents'); const tb=$('#doc-rows'); const arr=(d&&(d.documents||d))||[]; const list=Array.isArray(arr)?arr:[]; if(!list.length){tb.innerHTML='<tr><td class="empty" colspan="3">No documents</td></tr>';return;} tb.innerHTML=list.map(x=>'<tr><td>'+esc(x.name||x.filename||x.key||x.id)+'</td><td>'+esc(fmtTime(x.uploadedAt||x.addedAt||x.timestamp))+'</td><td><button class="btn sm danger" data-deldoc="'+esc(x.id||x.key||x.name)+'">Delete</button></td></tr>').join(''); tb.querySelectorAll('[data-deldoc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete document?'))return; await api('/admin/api/data/documents/'+encodeURIComponent(b.dataset.deldoc),{method:'DELETE'}); toast('Deleted','success'); loadDocs(); })); }
-async function loadSources(){ const d=await getJSON('/admin/api/data/ingestion-sources'); const tb=$('#src-rows'); const arr=(d&&(d.sources||d))||[]; const list=Array.isArray(arr)?arr:[]; if(!list.length){tb.innerHTML='<tr><td class="empty">No sources connected</td></tr>';return;} tb.innerHTML=list.map(s=>'<tr><td>'+esc(s.name||s.type||s.source)+'</td><td><span class="badge '+(s.connected||s.enabled?'on':'off')+'">'+(s.connected||s.enabled?'connected':'off')+'</span></td></tr>').join(''); }
 const dz=$('#dropzone'), fi=$('#file-input');
 dz.addEventListener('click',()=>fi.click());
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
@@ -459,7 +456,7 @@ function initSse(){
   try{
     const es=new EventSource('/admin/sse');
     es.addEventListener('whatsapp', e=>{ try{renderWa(JSON.parse(e.data));}catch(_){} });
-    es.addEventListener('health', e=>{ try{ const h=JSON.parse(e.data); setDot('#st-sys', h.ok||h.healthy?'ok':'bad','system'); }catch(_){} });
+    es.addEventListener('health', e=>{ try{ const h=JSON.parse(e.data); const ok=(h.overallStatus||h.status)==='healthy'; setDot('#st-sys', ok?'ok':(h.overallStatus==='degraded'?'warn':'bad'),'system'); }catch(_){} });
     es.addEventListener('containers', e=>{ try{renderContainers(JSON.parse(e.data));}catch(_){} });
     es.addEventListener('stats', e=>{ try{renderStats(JSON.parse(e.data));}catch(_){} });
     es.onerror=()=>{ setDot('#st-sys','warn','system'); };
@@ -471,9 +468,17 @@ let errTimer=null;
 function startErrorPoll(){ if(errTimer)return; errTimer=setInterval(()=>{ if(document.querySelector('.panel[data-panel="monitor"]').classList.contains('active')) loadErrors(); }, 5000); }
 
 /* ---- boot ---- */
+async function checkTelegram(){
+  try{
+    const r=await api('/admin/api/settings/html'); const html=await r.text();
+    const m=html.match(/id="setting-setup\.telegram_bot_token"[^>]*value="([^"]*)"/);
+    const set = !!(m && m[1] && m[1].trim().length>5);
+    const b=$('#tg-badge'); b.className='badge '+(set?'on':'off'); b.textContent=set?'set ✓':'not set';
+    setDot('#st-tg', set?'ok':'warn','telegram');
+  }catch(_){ setDot('#st-tg','warn','telegram'); }
+}
 document.addEventListener('DOMContentLoaded', ()=>{
-  loadWa(); loadStats();
-  // telegram badge initial guess from health later; default off
+  loadWa(); loadStats(); checkTelegram();
   initSse(); startErrorPoll();
 });
 </script>
