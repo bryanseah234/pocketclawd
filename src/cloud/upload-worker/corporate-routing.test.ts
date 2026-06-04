@@ -38,7 +38,14 @@ function dispatchUpload(upload: PendingUpload): { targetUserId: string; message:
         s3Key = `corporate/${upload.uploadId}/${upload.filename}`;
     } else {
         userId = upload.userId || DEFAULT_USER_ID;
-        s3Key = upload.s3Key && upload.s3Key.startsWith(`${userId}/`)
+        // Mirrors src/cloud/upload-worker/index.ts: preserve the producer's real
+        // key when it is a valid per-user key in EITHER form (`<userId>/...` from the
+        // admin dashboard, or `users/<userId>/staging/...` from channel adapters).
+        const looksLikeUserKey =
+            upload.s3Key &&
+            (upload.s3Key.startsWith(`${userId}/`) ||
+                upload.s3Key.startsWith(`users/${userId}/`));
+        s3Key = looksLikeUserKey
             ? upload.s3Key
             : `${userId}/documents/${upload.filename}`;
     }
@@ -112,6 +119,22 @@ describe('Upload Worker — corporate routing', () => {
             s3Key: 'user-abc/documents/old.pdf',
         });
         expect(message.payload.s3Key).toBe('user-abc/documents/old.pdf');
+    });
+
+    it('corporate=false + real channel staging key (users/<userId>/staging/...): preserves it verbatim', () => {
+        // Regression: WhatsApp/Telegram adapters stage uploads under
+        // `users/<userId>/staging/<uploadId>/<file>`. The old guard checked
+        // startsWith(`${userId}/`) only, rejected this real key, and fabricated a
+        // non-existent `<userId>/documents/<file>` key -> indexer NoSuchKey crash.
+        const { message } = dispatchUpload({
+            ...BASE,
+            corporate: false,
+            userId: 'wa:6592348112@s.whatsapp.net',
+            s3Key: 'users/wa:6592348112@s.whatsapp.net/staging/wa-3AA34F090D85526BB300/image-1780537939297.jpg',
+        });
+        expect(message.payload.s3Key).toBe(
+            'users/wa:6592348112@s.whatsapp.net/staging/wa-3AA34F090D85526BB300/image-1780537939297.jpg',
+        );
     });
 
     it('corporate flag absent: defaults to non-corporate behavior', () => {

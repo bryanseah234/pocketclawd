@@ -32,7 +32,13 @@ function dispatchUpload(upload: PendingUpload) {
         s3Key = `corporate/${upload.uploadId}/${upload.filename}`;
     } else {
         userId = upload.userId || DEFAULT_USER_ID;
-        s3Key = upload.s3Key && upload.s3Key.startsWith(`${userId}/`)
+        // Mirrors src/cloud/upload-worker/index.ts: preserve the producer's real key
+        // when it is a valid per-user key in EITHER form.
+        const looksLikeUserKey =
+            upload.s3Key &&
+            (upload.s3Key.startsWith(`${userId}/`) ||
+                upload.s3Key.startsWith(`users/${userId}/`));
+        s3Key = looksLikeUserKey
             ? upload.s3Key
             : `${userId}/documents/${upload.filename}`;
     }
@@ -91,6 +97,27 @@ describe('Property 4: Non-corporate uploads always preserve the specified target
                 expect(result.targetUserId).toBe(userId);
                 expect(result.s3Key.startsWith(`${userId}/`)).toBe(true);
                 expect(result.corporate).toBe(false);
+            }),
+            { numRuns: 200 },
+        );
+    });
+
+    it('for any userId/uploadId/filename, a real users/<userId>/staging/... key is preserved verbatim', () => {
+        fc.assert(
+            fc.property(arbId, arbFilename, arbUserId, (uploadId, filename, userId) => {
+                const realKey = `users/${userId}/staging/${uploadId}/${filename}`;
+                const result = dispatchUpload({
+                    uploadId,
+                    filename,
+                    contentType: 'application/pdf',
+                    s3Key: realKey,
+                    bucket: 'b',
+                    timestamp: '2026-01-01',
+                    userId,
+                    corporate: false,
+                });
+                // Regression guard: must NOT fabricate <userId>/documents/<file>.
+                expect(result.s3Key).toBe(realKey);
             }),
             { numRuns: 200 },
         );

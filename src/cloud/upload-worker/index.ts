@@ -303,10 +303,23 @@ async function processNextUpload(services: CloudServices, config: UploadWorkerCo
 
             userId = upload.userId || config.defaultUserId;
 
-            s3Key = upload.s3Key && upload.s3Key.startsWith(`${userId}/`)
+            // Preserve the producer's real S3 key. Channel adapters (whatsapp.ts,
+            // telegram.ts) stage uploads under `users/<userId>/staging/<uploadId>/<file>`;
+            // the admin dashboard uses `<userId>/documents/<file>`. Both are valid and
+            // the object ALREADY EXISTS at that key. Only fabricate a key as a last
+            // resort when none was supplied. Previously this checked
+            // `startsWith(\`${userId}/\`)`, which rejected the real `users/...` staging
+            // prefix and invented a non-existent `<userId>/documents/<file>` key —
+            // causing the indexer's get_object to fail with NoSuchKey (image/doc
+            // "something went wrong indexing"). See indexer.py: it expects the
+            // staging key and moves it to documents/ itself after a successful index.
+            const looksLikeUserKey =
+                upload.s3Key &&
+                (upload.s3Key.startsWith(`${userId}/`) ||
+                    upload.s3Key.startsWith(`users/${userId}/`));
 
+            s3Key = looksLikeUserKey
                 ? upload.s3Key
-
                 : `${userId}/documents/${upload.filename}`;
 
         }
