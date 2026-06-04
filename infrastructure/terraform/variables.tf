@@ -208,3 +208,21 @@ variable "alb_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "aws_account_id" {
+  description = "AWS account ID (used to scope Lambda IAM policy to the exact instance ARN)"
+  type        = string
+  default     = "709609992277"
+}
+
+variable "orchestrator_instance_id" {
+  description = "EC2 instance ID of the orchestrator (start-clawd Lambda target)"
+  type        = string
+  default     = "i-0f9cd20350cfdc1a6"
+}
+
+variable "start_clawd_token" {
+  description = "Secret token for the start-clawd Lambda Function URL. Set in terraform.tfvars."
+  type        = string
+  sensitive   = true
+}

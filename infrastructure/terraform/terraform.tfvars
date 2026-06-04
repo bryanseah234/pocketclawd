@@ -49,3 +49,7 @@ tags = {
 #     --profile clawd-prod | python -c 'import sys,json;print(json.load(sys.stdin)["redis_password"])')
 redis_use_replication_group = true
 redis_replica_count         = 1
+
+# Secret token for the start-clawd Lambda webhook URL
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+start_clawd_token = "REPLACE_ME_BEFORE_APPLY"
