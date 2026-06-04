@@ -95,6 +95,13 @@ resource "aws_iam_role_policy" "sub_agent_task" {
           "s3:DeleteObject",
           "s3:ListBucket",
           "s3:GetObjectVersion",
+          # CopyObject (indexer staging->documents move) copies the source's
+          # object tags by default; without Put/GetObjectTagging the copy fails
+          # with AccessDenied even though Get/PutObject are allowed. The indexer
+          # also uses TaggingDirective=REPLACE to drop the staging-24h lifecycle
+          # tag on the moved object, which still requires PutObjectTagging.
+          "s3:GetObjectTagging",
+          "s3:PutObjectTagging",
         ]
         Resource = [
           aws_s3_bucket.data.arn,

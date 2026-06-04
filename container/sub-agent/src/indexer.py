@@ -199,11 +199,24 @@ async def index_file(message: dict) -> None:
             logger.warning("Could not clear no_docs cache for %s: %s", user_id, _cache_err)
 
         if not is_corporate and "/staging/" in s3_key:
+            # Canonical documents location is `<userId>/documents/<filename>` (bare
+            # userId, NO `users/` prefix) -- this is where the admin dashboard lists
+            # (src/cloud/admin-dashboard/index.ts `${uid}/documents/`) and where the
+            # dashboard upload path writes. Channel staging keys carry an extra
+            # `users/` segment + `<uploadId>/`, so derive the bare-userId target
+            # explicitly rather than string-swapping the prefix.
             documents_key = f"{user_id}/documents/{filename}"
             try:
+                # TaggingDirective=REPLACE with no Tagging drops the source's
+                # `lifecycle=staging-24h` tag so the moved object is NOT auto-expired
+                # by the 24h staging lifecycle rule. (Also: copying the source tag
+                # would require s3:PutObjectTagging and previously failed with
+                # AccessDenied -- see infrastructure/terraform/ecs.tf.)
                 s3.copy_object(Bucket=bucket,
                                CopySource={"Bucket": bucket, "Key": s3_key},
-                               Key=documents_key)
+                               Key=documents_key,
+                               TaggingDirective="REPLACE",
+                               Tagging="")
                 s3.delete_object(Bucket=bucket, Key=s3_key)
                 logger.info("Moved %s -> %s", s3_key, documents_key)
             except Exception as move_err:
