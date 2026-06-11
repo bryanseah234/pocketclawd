@@ -73,6 +73,14 @@ cp .env.example .env      # AWS creds, bot tokens, Redis URL
 pnpm install && pnpm build && pnpm start
 ```
 
+## Quickstart (AWS Deployment)
+
+To deploy the full architecture (ECS, EC2, OpenSearch, Redis, DynamoDB) to AWS, ensure Docker and Terraform are installed, and you have Admin credentials in your AWS CLI (default profile `clawd-prod`). Run this one-liner from the project root:
+
+```bash
+export AWS_PROFILE=clawd-prod && cd infrastructure/terraform && terraform init && terraform apply -auto-approve && cd ../../ && aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-1.amazonaws.com && docker build -t nanoclaw/orchestrator -f Dockerfile.orchestrator . && docker build -t nanoclaw/agent -f container/Dockerfile ./container && export ECR_BASE=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-1.amazonaws.com && docker tag nanoclaw/orchestrator:latest $ECR_BASE/nanoclaw/orchestrator:latest && docker tag nanoclaw/agent:latest $ECR_BASE/nanoclaw/agent:latest && docker push $ECR_BASE/nanoclaw/orchestrator:latest && docker push $ECR_BASE/nanoclaw/agent:latest && aws ecs update-service --cluster clawd-subagent-pool --service clawd-subagent-service --force-new-deployment
+```
+
 See [docs/setup.md](docs/setup.md) for full requirements.
 
 ## Tech stack
