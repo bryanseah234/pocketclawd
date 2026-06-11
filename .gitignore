@@ -186,7 +186,7 @@ x.tmp.txt
 package-lock.json
 
 
-# --- PocketClaw additions ---
+# --- PocketClawd additions ---
 .env
 .env.local
 .env.bak*

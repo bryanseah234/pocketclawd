@@ -17,7 +17,7 @@ db.prepare(`
   VALUES (?, ?, 'message', ?, 'pending', ?, 0, 'always', 'telegram:-1003849817923', 'telegram', ?, 0)
 `).run(id, nextSeq, now, now, JSON.stringify({
   type: 'text',
-  text: 'hello pocketclaw',
+  text: 'hello pocketclawd',
   sender: { id: 'telegram:bryan', name: 'Bryan' },
   destinations: [{ name: 'the prawn hub', channel: 'telegram', platformId: 'telegram:-1003849817923' }]
 }));

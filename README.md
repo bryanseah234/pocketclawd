@@ -24,7 +24,7 @@ No app to download — works in the WhatsApp or Telegram chat you already have.
 
 - AWS ap-southeast-1 / account 709609992277
 - Admin: http://3.0.132.150:3000/admin
-- WhatsApp + Telegram: `@pocketclaw234bot` (Baileys / long-poll)
+- WhatsApp + Telegram: `@pocketclawd234bot` (Baileys / long-poll)
 - Orchestrator: EC2 `i-0f9cd20350cfdc1a6`, Node.js port 3000
 - Sub-agent: ECS Fargate, cluster `nanoclaw-cluster`, service `nanoclaw-sub-agent`
 
@@ -67,8 +67,8 @@ docs/                   All documentation + diagrams/
 ## Quickstart (dev)
 
 ```bash
-git clone git@github.com:tokenlab42/pocketclaw.git
-cd pocketclaw
+git clone git@github.com:bryanseah234/pocketclawd.git
+cd pocketclawd
 cp .env.example .env      # AWS creds, bot tokens, Redis URL
 pnpm install && pnpm build && pnpm start
 ```

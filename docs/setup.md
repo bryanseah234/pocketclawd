@@ -12,8 +12,8 @@
 ## Clone and install
 
 ```bash
-git clone git@github.com:tokenlab42/pocketclaw.git
-cd pocketclaw
+git clone git@github.com:bryanseah234/pocketclawd.git
+cd pocketclawd
 pnpm install
 cd container/sub-agent && uv sync && cd ../..
 ```

@@ -7,7 +7,7 @@
 ---
 
 ## 1. Executive Summary
-The current **pocketclaw** infrastructure is heavily optimized for AWS ap-southeast-1. While robust, this "single-cloud" approach carries a high "Monthly Floor" cost (~$285/mo) regardless of user activity due to provisioned serverless and compute services.
+The current **pocketclawd** infrastructure is heavily optimized for AWS ap-southeast-1. While robust, this "single-cloud" approach carries a high "Monthly Floor" cost (~$285/mo) regardless of user activity due to provisioned serverless and compute services.
 
 This document outlines a strategy to **decouple the architecture** into a multi-cloud model. By moving to specialized, developer-first providers (Cloudflare, Supabase, DigitalOcean/Hetzner), we can reduce fixed overhead by **~85%** while increasing vendor independence and maintaining a high-quality experience for Singapore-based professionals.
 
