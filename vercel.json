@@ -1,0 +1,4 @@
+{
+  "buildCommand": "echo \"Skipping backend build - deploying static public directory\"",
+  "outputDirectory": "public"
+}
