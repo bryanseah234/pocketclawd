@@ -247,7 +247,7 @@ describe('unknown-channel registration flow', () => {
     // bounce the replay into sender-approval.
     const member = getDb()
       .prepare('SELECT 1 AS x FROM agent_group_members WHERE user_id = ? AND agent_group_id = ?')
-      .get('telegram:caller', 'ag-1');
+      .get('tg:caller', 'ag-1');
     expect(member).toBeDefined();
 
     // Pending row cleared and container woken via replay.
