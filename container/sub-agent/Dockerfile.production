@@ -1,0 +1,82 @@
+# syntax=docker/dockerfile:1
+# NanoClaw Sub-Agent — Production multi-stage build
+# Image: nanoclaw/agent (pushed to ECR with git-hash + latest tags)
+
+# ==============================================================================
+# Stage 1: Install dependencies
+# ==============================================================================
+FROM public.ecr.aws/docker/library/python:3.11-slim AS deps
+
+WORKDIR /app
+
+# Install system dependencies needed for OCR and document processing
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        poppler-utils \
+        libmagic1 \
+        libheif1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir . && \
+    pip install --no-cache-dir \
+        pytesseract \
+        pdf2image \
+        PyPDF2 \
+        python-docx \
+        openpyxl \
+        python-pptx \
+        pillow-heif \
+        beautifulsoup4 \
+        tiktoken \
+        boto3 \
+        Pillow
+
+# ==============================================================================
+# Stage 2: Production image
+# ==============================================================================
+FROM public.ecr.aws/docker/library/python:3.11-slim AS production
+
+# Install runtime dependencies only
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        poppler-utils \
+        libmagic1 \
+        libheif1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy installed packages from deps stage
+COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+# Copy application source
+COPY src/ ./src/
+
+# Labels
+LABEL org.opencontainers.image.title="nanoclaw-agent" \
+      org.opencontainers.image.description="NanoClaw Per-User AI Sub-Agent" \
+      org.opencontainers.image.vendor="NanoClaw"
+
+# Create non-root user
+RUN useradd -u 1000 -m -s /bin/sh agent && \
+    mkdir -p /app/tmp && \
+    chown -R agent:agent /app
+
+USER agent
+
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

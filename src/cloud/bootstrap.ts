@@ -1,0 +1,449 @@
+/**
+ * Cloud Bootstrap — initializes all cloud services in the correct order
+ * when running in cloud mode (NANOCLAW_ENV=cloud).
+ *
+ * Initialization order:
+ *   1. Secrets Manager config (all other services depend on credentials)
+ *   2. Data Gateway (DynamoDB, OpenSearch, S3)
+ *   3. Redis message queue
+ *   4. Rate limiter (depends on Redis)
+ *   5. CloudWatch logger
+ *   6. Health check aggregator
+ *   7. Scheduler service
+ *
+ * Exports a singleton `cloudServices` object that holds references to all
+ * initialized services. Components check `isCloudMode()` before accessing
+ * cloud services.
+ *
+ * Requirements: REQ-4.1, REQ-4.2, REQ-4.3, REQ-9.1
+ */
+
+import { Redis } from 'ioredis';
+
+import { log, setErrorSink } from '../log.js';
+
+import { DataGateway } from './data-gateway/index.js';
+import { HealthCheckAggregator } from './health/index.js';
+import { CloudWatchLogger } from './logging/index.js';
+import { METRIC_NAMES } from './logging/types.js';
+import { RateLimiter } from './rate-limiter/index.js';
+import { MessageQueue } from './redis-queue/index.js';
+import { SchedulerService } from './scheduler/index.js';
+import { SecretsLoader } from './secrets/index.js';
+import { RedisPdpaFlowStore } from './pdpa/index.js';
+import { RedisDistributedLock } from './redis-lock.js';
+
+import type { PdpaFlowStore } from './pdpa/index.js';
+
+import type { NanoClawCloudConfig } from './secrets/index.js';
+import type { IMessageQueue, AgentResponse } from './redis-queue/index.js';
+
+// ioredis named export — Redis is the class directly
+type RedisClient = Redis;
+
+// ── Environment detection ──
+
+/**
+ * Returns true when the orchestrator is running in cloud mode.
+ * Cloud mode is activated by setting NANOCLAW_ENV=cloud.
+ */
+export function isCloudMode(): boolean {
+    return process.env.NANOCLAW_ENV === 'cloud';
+}
+
+/**
+ * t4-24: hard guard for local-mode-only entrypoints.
+ *
+ * Local mode (file-watcher ingestion, pgvector KB, Telegram MTProto, the
+ * clawd cron driver, the Google/Microsoft/Apple ingesters) is DEPRECATED and
+ * not part of the cloud deployment surface. These modules still compile and
+ * are reachable for local dev, but they must never run inside a cloud
+ * container. Call this at the top of any local-only side-effecting entrypoint
+ * so an accidental cloud invocation fails loudly instead of silently doing
+ * local-only work against cloud infra. See docs/LOCAL-MODE-DEPRECATED.md.
+ */
+export function assertLocalMode(feature: string): void {
+    if (isCloudMode()) {
+        throw new Error(
+            `${feature} is a deprecated local-mode-only feature and cannot run in cloud mode ` +
+            `(NANOCLAW_ENV=cloud). See docs/LOCAL-MODE-DEPRECATED.md.`,
+        );
+    }
+}
+
+// ── Cloud services singleton ──
+
+export interface CloudServices {
+    config: NanoClawCloudConfig;
+    secretsLoader: SecretsLoader;
+    dataGateway: DataGateway;
+    messageQueue: IMessageQueue;
+    rateLimiter: RateLimiter;
+    logger: CloudWatchLogger;
+    healthCheck: HealthCheckAggregator;
+    scheduler: SchedulerService;
+    pdpaFlowStore: PdpaFlowStore;
+    redis: RedisClient;
+}
+
+let _services: CloudServices | null = null;
+
+/**
+ * Get the initialized cloud services. Returns null if not in cloud mode
+ * or if bootstrap hasn't completed yet.
+ */
+export function getCloudServices(): CloudServices | null {
+    return _services;
+}
+
+// ── Response poll state ──
+
+let responsePollRunning = false;
+let responsePollTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Bootstrap all cloud services. Called from src/index.ts when NANOCLAW_ENV=cloud.
+ *
+ * Initialization is sequential to respect dependency ordering.
+ * Failures in non-critical services (scheduler, health) are logged but don't
+ * prevent startup — the orchestrator degrades gracefully.
+ */
+export async function bootstrapCloudServices(): Promise<CloudServices> {
+    log.info('Cloud bootstrap: starting initialization');
+
+    // 1. Secrets Manager config
+    log.info('Cloud bootstrap: loading secrets');
+    const secretsLoader = new SecretsLoader();
+    const config = await secretsLoader.loadConfig();
+    secretsLoader.startAutoRefresh();
+    log.info('Cloud bootstrap: secrets loaded');
+
+    // 2. Data Gateway
+    log.info('Cloud bootstrap: initializing Data Gateway');
+    const dataGateway = DataGateway.createWithConfig({
+        region: 'ap-southeast-1',
+        dynamoDb: config.dynamoDb,
+        openSearch: config.openSearch,
+        s3: config.s3,
+    });
+    log.info('Cloud bootstrap: Data Gateway ready');
+
+    // Wire log.error/log.fatal -> nanoclaw-system-errors DDB. Errors not
+    // tied to a specific user are bucketed under 'system'. Sink failures
+    // are swallowed by setErrorSink itself, but we still wrap defensively.
+    setErrorSink((level, msg, data) => {
+      // Fire-and-forget: do NOT await; logging should never block.
+      const userId = (data && typeof data.userId === 'string' ? data.userId : 'system');
+      const errVal = data && data.err;
+      const stackTrace = errVal instanceof Error
+        ? errVal.stack
+        : (typeof errVal === 'object' && errVal && 'stack' in errVal ? String((errVal as { stack: unknown }).stack) : undefined);
+      void dataGateway.logSystemError(userId, {
+        errorType: level,
+        message: msg,
+        stackTrace,
+      }).catch(() => {/* silent */});
+    });
+
+    // Ensure OpenSearch index exists with proper mappings
+    try {
+        await dataGateway.ensureIndex();
+        log.info('Cloud bootstrap: OpenSearch index verified');
+    } catch (err) {
+        log.error('Cloud bootstrap: OpenSearch index creation failed (non-critical)', { err });
+    }
+
+    // 3. Redis connection (shared between queue and rate limiter)
+    log.info('Cloud bootstrap: connecting to Redis');
+    const redis = new Redis({
+        host: config.redis.host,
+        port: config.redis.port,
+        password: config.redis.password,
+        tls: config.redis.tls ? {} : undefined,
+        lazyConnect: true,
+        maxRetriesPerRequest: 3,
+    });
+    await redis.connect();
+    log.info('Cloud bootstrap: Redis connected');
+
+    // Distributed lock / idempotency helper shared by scheduler + crons.
+    const lock = new RedisDistributedLock(redis);
+
+    // 4. Message queue
+    log.info('Cloud bootstrap: initializing message queue');
+    const messageQueue = new MessageQueue({
+        host: config.redis.host,
+        port: config.redis.port,
+        password: config.redis.password,
+        tls: config.redis.tls,
+    });
+    await messageQueue.connect();
+    log.info('Cloud bootstrap: message queue ready');
+
+    // 5. Rate limiter
+    log.info('Cloud bootstrap: initializing rate limiter');
+    // Env-configurable caps (defaults preserve prod: 20/min, 200/hr). Lets load/
+    // integration tests raise the ceiling without a code change.
+    const _rlUser = process.env.RATE_LIMIT_USER_PER_MIN
+        ? parseInt(process.env.RATE_LIMIT_USER_PER_MIN, 10) : undefined;
+    const _rlGlobal = process.env.RATE_LIMIT_GLOBAL_PER_HOUR
+        ? parseInt(process.env.RATE_LIMIT_GLOBAL_PER_HOUR, 10) : undefined;
+    const rateLimiter = new RateLimiter(redis, {
+        ...(Number.isFinite(_rlUser as number) ? { userLimitPerMinute: _rlUser as number } : {}),
+        ...(Number.isFinite(_rlGlobal as number) ? { globalLimitPerHour: _rlGlobal as number } : {}),
+    });
+    log.info('Cloud bootstrap: rate limiter ready');
+
+    // 6. CloudWatch logger
+    log.info('Cloud bootstrap: initializing CloudWatch logger');
+    const logger = new CloudWatchLogger({ region: 'ap-southeast-1' });
+    log.info('Cloud bootstrap: CloudWatch logger ready');
+
+    // t5-30: emit a restart marker so the OrchestratorRestart alarm can detect
+    // crash-loops / unexpected respawns. One data point per boot.
+    logger.emitMetric({ name: METRIC_NAMES.OrchestratorRestart, value: 1, unit: 'Count' });
+
+    // t5-30: sample the shared dispatch-queue depth every 60s and publish it as
+    // a CloudWatch metric so the QueueDepth alarm can fire on backlog. Best-
+    // effort, fire-and-forget; never blocks or throws into the boot path.
+    const queueDepthTimer = setInterval(() => {
+        void messageQueue
+            .getDispatchQueueDepth()
+            .then((depth) => {
+                logger.emitMetric({ name: METRIC_NAMES.QueueDepth, value: depth, unit: 'Count' });
+            })
+            .catch(() => {
+                // Swallow — metrics are best-effort.
+            });
+    }, 60_000);
+    // Don't keep the event loop alive solely for metrics sampling.
+    if (typeof queueDepthTimer.unref === 'function') queueDepthTimer.unref();
+
+    // 7. Health check aggregator (non-critical — graceful degradation)
+    let healthCheck: HealthCheckAggregator;
+    try {
+        log.info('Cloud bootstrap: initializing health check aggregator');
+        healthCheck = new HealthCheckAggregator({
+            checkRedis: async () => {
+                const pong = await redis.ping();
+                return pong === 'PONG';
+            },
+            checkDynamoDB: async () => {
+                // Simple connectivity check — DataGateway handles actual operations
+                return dataGateway.isInitialized;
+            },
+            checkOpenSearch: async () => {
+                return dataGateway.isInitialized;
+            },
+            checkWhatsAppSession: async () => ({
+                valid: true,
+                lastChecked: new Date().toISOString(),
+                message: 'Session check delegated to channel adapter',
+            }),
+            getActiveContainerCount: () => 0, // Updated by container manager
+            getQuarantinedCount: () => 0,
+            sendAdminAlert: async (message, severity) => {
+                log.warn(`Admin alert [${severity}]: ${message}`);
+            },
+        });
+        healthCheck.start();
+        log.info('Cloud bootstrap: health check aggregator started');
+    } catch (err) {
+        log.error('Cloud bootstrap: health check aggregator failed (non-critical)', { err });
+        // Create a minimal stub so the rest of the system works
+        healthCheck = new HealthCheckAggregator({
+            checkRedis: async () => false,
+            checkDynamoDB: async () => false,
+            checkOpenSearch: async () => false,
+            checkWhatsAppSession: async () => ({ valid: false, lastChecked: new Date().toISOString() }),
+            getActiveContainerCount: () => 0,
+            getQuarantinedCount: () => 0,
+            sendAdminAlert: async () => { /* no-op */ },
+        });
+    }
+
+    // 8. Scheduler service (non-critical — graceful degradation)
+    let scheduler: SchedulerService;
+    try {
+        log.info('Cloud bootstrap: initializing scheduler');
+        scheduler = new SchedulerService({
+            dataGateway,
+            messageQueue,
+            lock,
+            getActiveUserIds: async () => {
+                // In production, this would query DynamoDB for active users.
+                // For now, return empty — the scheduler will be wired to the
+                // container manager's active user list.
+                return [];
+            },
+        });
+        scheduler.start();
+        log.info('Cloud bootstrap: scheduler started');
+    } catch (err) {
+        log.error('Cloud bootstrap: scheduler failed (non-critical)', { err });
+        scheduler = new SchedulerService({
+            dataGateway,
+            messageQueue,
+            lock,
+            getActiveUserIds: async () => [],
+        });
+    }
+
+    // PDPA flow store — Redis-backed so consent/deletion flows survive
+    // orchestrator restarts (improvement t2-9). Shares the bootstrap Redis
+    // connection.
+    const pdpaFlowStore = new RedisPdpaFlowStore(redis);
+
+    _services = {
+        config,
+        secretsLoader,
+        dataGateway,
+        messageQueue,
+        rateLimiter,
+        logger,
+        healthCheck,
+        scheduler,
+        pdpaFlowStore,
+        redis,
+    };
+
+    log.info('Cloud bootstrap: all services initialized');
+
+    // Start the upload worker (processes admin dashboard uploads → sub-agent queues)
+    try {
+        const { startUploadWorker } = await import('./upload-worker/index.js');
+        startUploadWorker(_services);
+        log.info('Cloud bootstrap: upload worker started');
+    } catch (err) {
+        log.error('Cloud bootstrap: upload worker failed (non-critical)', { err });
+    }
+
+    // Start the DataGateway worker (executes persistence ops on behalf of sub-agents)
+    try {
+        const { startDataGatewayWorker } = await import('./data-gateway-worker/index.js');
+        startDataGatewayWorker(_services);
+        log.info('Cloud bootstrap: DataGateway worker started');
+    } catch (err) {
+        log.error('Cloud bootstrap: DataGateway worker failed (non-critical)', { err });
+    }
+
+    // Note: in cloud mode the orchestrator does NOT spawn Docker containers.
+    // Sub-agent lifecycle is managed by ECS (N workers pull from the Redis
+    // dispatch queue). The per-user Docker spawn path (container-manager/
+    // lifecycle.ts) is local/on-prem only and is driven from index.ts, gated on
+    // NANOCLAW_ENV !== 'cloud'. We deliberately do not initContainerManager()
+    // here — doing so previously started an idle sweep timer that never had any
+    // containers to manage. The former CloudContainerManager class (per-user
+    // Docker with ECR auth / health / quarantine) was removed: it was dead code
+    // fully superseded by ECS task management.
+
+    return _services;
+}
+
+/**
+ * Start polling the Redis response queue for sub-agent responses.
+ * Dequeues responses and invokes the provided callback for delivery.
+ *
+ * This replaces the SQLite outbound.db polling in cloud mode.
+ */
+export function startResponsePoll(
+    onResponse: (response: AgentResponse) => Promise<void>,
+): void {
+    if (responsePollRunning) return;
+    if (!_services) {
+        log.warn('Cannot start response poll — cloud services not initialized');
+        return;
+    }
+
+    responsePollRunning = true;
+    pollResponses(onResponse);
+    log.info('Cloud response poll started');
+}
+
+async function pollResponses(
+    onResponse: (response: AgentResponse) => Promise<void>,
+): Promise<void> {
+    if (!responsePollRunning || !_services) return;
+
+    try {
+        // Use a short timeout (2s) so we can check the running flag frequently
+        const response = await _services.messageQueue.dequeueResponse(2);
+        if (response) {
+            try {
+                await onResponse(response);
+            } catch (err) {
+                log.error('Failed to handle agent response', {
+                    responseId: response.id,
+                    userId: response.userId,
+                    err,
+                });
+            }
+        }
+    } catch (err) {
+        log.error('Response poll error', { err });
+        // Brief pause on error to avoid tight error loops
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    // Schedule next poll iteration (non-blocking)
+    responsePollTimer = setTimeout(() => pollResponses(onResponse), 0);
+}
+
+/**
+ * Stop the response poll loop.
+ */
+export function stopResponsePoll(): void {
+    responsePollRunning = false;
+    if (responsePollTimer) {
+        clearTimeout(responsePollTimer);
+        responsePollTimer = null;
+    }
+}
+
+/**
+ * Graceful shutdown of all cloud services.
+ */
+export async function shutdownCloudServices(): Promise<void> {
+    if (!_services) return;
+
+    log.info('Cloud shutdown: stopping services');
+
+    stopResponsePoll();
+
+    // Stop upload worker
+    try {
+        const { stopUploadWorker } = await import('./upload-worker/index.js');
+        stopUploadWorker();
+    } catch { /* upload worker may not have been started */ }
+
+    // Stop DataGateway worker
+    try {
+        const { stopDataGatewayWorker } = await import('./data-gateway-worker/index.js');
+        stopDataGatewayWorker();
+    } catch { /* worker may not have been started */ }
+
+    // Stop container manager
+    try {
+        const { stopContainerManager } = await import('./container-manager/lifecycle.js');
+        stopContainerManager();
+    } catch { /* may not have been started */ }
+
+    _services.scheduler.stop();
+    _services.healthCheck.stop();
+    _services.secretsLoader.stopAutoRefresh();
+
+    try {
+        await _services.messageQueue.disconnect();
+    } catch (err) {
+        log.error('Cloud shutdown: message queue disconnect failed', { err });
+    }
+
+    try {
+        await _services.redis.quit();
+    } catch (err) {
+        log.error('Cloud shutdown: Redis disconnect failed', { err });
+    }
+
+    _services = null;
+    log.info('Cloud shutdown: complete');
+}

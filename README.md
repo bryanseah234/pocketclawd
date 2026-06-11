@@ -1,99 +1,92 @@
-# [PROJECT TITLE]
+# Clawd
 
-## Table of Contents
+WhatsApp and Telegram AI assistant for busy professionals in Singapore and
+Southeast Asia. Deployed on AWS ap-southeast-1, built on the NanoClaw v2 agent
+harness.
 
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Create a Virtual Environment](#create-a-virtual-environment)
-  - [Install Dependencies](#install-dependencies)
-  - [Install Git Hooks](#install-git-hooks)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
+**New here? Start with [docs/00-overview.md](docs/00-overview.md)** — a
+plain-English explanation with a system diagram. For a slide-ready visual,
+open [docs/diagrams/system-overview.html](docs/diagrams/system-overview.html)
+in a browser.
 
-## Getting Started <a id="getting-started"></a>
+## What it does
 
-## Prerequisites <a id="prerequisites"></a>
+- Remembers what you tell it across sessions
+- Summarises documents and URLs you send
+- Answers from your personal knowledge base
+- Web search, weather, live prices, maps, news
+- Generates images, PDFs and DOCX files
+- Reminders fired to the right platform; 07:00 SGT morning digest
 
-TODO.
+No app to download — works in the WhatsApp or Telegram chat you already have.
 
-### Create a Virtual Environment <a id="create-a-virtual-environment"></a>
+## Live system
 
-**uv (Recommended)**
+- AWS ap-southeast-1 / account 709609992277
+- Admin: http://3.0.132.150:3000/admin
+- WhatsApp + Telegram: `@pocketclaw234bot` (Baileys / long-poll)
+- Orchestrator: EC2 `i-0f9cd20350cfdc1a6`, Node.js port 3000
+- Sub-agent: ECS Fargate, cluster `nanoclaw-cluster`, service `nanoclaw-sub-agent`
 
-To manage our project dependencies, we are using uv which is an extremely fast Python package and project manager, written in Rust. For more information on how to get started with uv, please visit the [uv documentation](https://docs.astral.sh/uv/).
+## Documentation
 
-To create a virtual environment, run the following command:
+| # | Doc | Audience |
+|---|---|---|
+| 00 | [Overview](docs/00-overview.md) | everyone (start here) |
+| 01 | [Architecture](docs/01-architecture.md) | engineers |
+| 02 | [AI Sub-agent](docs/02-sub-agent.md) | engineers |
+| 03 | [Deployment](docs/03-deployment.md) | engineers / ops |
+| 04 | [AWS Resources](docs/04-aws-resources.md) | ops |
+| 05 | [Security](docs/05-security.md) | ops / review |
+| 06 | [Operations & Runbooks](docs/06-operations.md) | ops |
+| 07 | [Persona](docs/07-persona.md) | engineers |
+| 08 | [API & Interfaces](docs/08-api.md) | engineers |
+| — | [Local dev setup](docs/setup.md) | engineers |
+| — | [Terraform infrastructure](infrastructure/README.md) | ops |
+| — | [Contributing](CONTRIBUTING.md) | contributors |
+
+Diagrams (vector SVG, zoom freely) live in
+[docs/diagrams/](docs/diagrams/).
+
+## Repo layout
+
+```
+src/                    Orchestrator (Node.js / TypeScript)
+  channels/             WhatsApp and Telegram adapters
+  cloud/                Redis queue, admin dashboard, data gateway, scheduler
+  modules/              Approvals, self-mod, morning digest
+container/sub-agent/    Python sub-agent (FastAPI + Bedrock)
+  src/llm/              Bedrock Converse client + tool loop
+  src/tools/            Web search, maps, weather, image/doc gen, news
+  src/rag/              Embed + OpenSearch pipeline
+  src/persona/          system_prompt_template.json
+infrastructure/         Terraform (ECS, EC2, DynamoDB, S3, AOSS, Redis, ECR)
+docs/                   All documentation + diagrams/
+```
+
+## Quickstart (dev)
 
 ```bash
-uv venv
+git clone git@github.com:tokenlab42/pocketclaw.git
+cd pocketclaw
+cp .env.example .env      # AWS creds, bot tokens, Redis URL
+pnpm install && pnpm build && pnpm start
 ```
 
-Once you have created a virtual environment, you may activate it.
+## Quickstart (AWS Deployment)
 
-On Linux or macOS, run the following command:
+To deploy the full architecture (ECS, EC2, OpenSearch, Redis, DynamoDB) to AWS, ensure Docker and Terraform are installed, and you have Admin credentials in your AWS CLI (default profile `clawd-prod`). Run this one-liner from the project root:
 
 ```bash
-source .venv/bin/activate
+export AWS_PROFILE=clawd-prod && cd infrastructure/terraform && terraform init && terraform apply -auto-approve && cd ../../ && aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-1.amazonaws.com && docker build -t nanoclaw/orchestrator -f Dockerfile.orchestrator . && docker build -t nanoclaw/agent -f container/Dockerfile ./container && export ECR_BASE=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.ap-southeast-1.amazonaws.com && docker tag nanoclaw/orchestrator:latest $ECR_BASE/nanoclaw/orchestrator:latest && docker tag nanoclaw/agent:latest $ECR_BASE/nanoclaw/agent:latest && docker push $ECR_BASE/nanoclaw/orchestrator:latest && docker push $ECR_BASE/nanoclaw/agent:latest && aws ecs update-service --cluster clawd-subagent-pool --service clawd-subagent-service --force-new-deployment
 ```
 
-On Windows, run:
+See [docs/setup.md](docs/setup.md) for full requirements.
 
-```powershell
-.venv/Scripts/activate
-```
+## Tech stack
 
-### Install Dependencies <a id="install-dependencies"></a>
-
-```bash
-uv sync
-```
-
-### Install Git Hooks <a id="install-git-hooks"></a>
-
-There are three main Git hooks used in this project:
-
-- [`pre-push`](.githooks/pre-push): Ensures branches follow proper naming convention before pushing. See the [Git Branching Strategy](CONTRIBUTING.md#git-branching-strategy-) section for more details.
-- [`commit-msg`](.githooks/commit-msg): Ensures commit messages follow our conventions. See the [Issue Tracking & Commit Message Conventions](CONTRIBUTING.md#issue-tracking--commit-message-conventions-) section for more details.
-- [`pre-commit`](.pre-commit-config.yaml): Runs linting and formatting checks before committing. For more information, refer to the [pre-commit docs](https://pre-commit.com/). To see what hooks are used, refer to the [`.pre-commit-config.yaml`](.pre-commit-config.yaml) YAML file.
-
-To set up Git hooks, run the following commands for Linux or Windows users respectively:
-
-```bash
-./scripts/setup_hooks.sh
-```
-
-or
-
-```powershell
-./scripts/setup_hooks.ps1
-```
-
-You should see the following upon successful installation:
-
-![Git Hooks Installation](./media/git-hooks.png)
-
-_Successful Git Hooks Installation_
-
-> [!TIP]
-> You can manually run the command `pre-commit run --all-files` to lint and reformat your code. It is generally recommended to run the hooks against all of the files when working on your changes or fixes (usually `pre-commit` will only run on the changed files during commits).
->
-> The `pre-commit` will run regardless if you forget to explicitly call it. Nonetheless, it is recommended to call it explicitly so you can make any necessary changes in advanced.
-
-> [!NOTE]
-> You should ensure that all `pre-commit` cases are satisfied before you push to GitHub (you should see that all have passed). If not, please debug accordingly or your pull request may be rejected and closed.
->
-> The [`run-checks.yml`](.github/workflows/run-checks.yml) is a GitHub Action workflow that kicks off several GitHub Actions when a pull request is made. These actions check that your code have been properly linted and formatted before it is passed for review. Once all actions have passed and the PR approved, your changes will be merged to the `main` branch.
-
-## Project Structure <a id="project-structure"></a>
-
-For more information on our project structure, please refer to the [Project Structure](./docs/PROJECT_STRUCTURE.md) guide.
-
-## Development <a id="development"></a>
-
-For more information on development, you may find the following documentations useful:
-
-- [Data Management](./docs/DATA_MANAGEMENT.md) - Instructions and guidelines on retrieving and managing version-controlled datasets using DVC integrated with Azure Blob Storage.
-
-## Contributing <a id="contributing"></a>
-
-Please refer to the [Contributing](CONTRIBUTING.md) guide for detailed guidelines on contributing and the process for submitting pull requests.
+- Orchestrator: Node.js 22, TypeScript, Baileys (WhatsApp), Telegram Bot API
+- Sub-agent: Python 3.12, FastAPI, boto3, httpx, lxml, reportlab, python-docx
+- LLM: Claude Sonnet 4.5 via AWS Bedrock Converse · Embeddings: Titan Embed v2
+- Vector store: OpenSearch Serverless · Cache/queues: ElastiCache Redis 7.1
+- Storage: DynamoDB + S3 · Infra: Terraform, ECS Fargate, ECR, SSM, Secrets Manager

@@ -1,0 +1,17 @@
+# .gitleaks.toml - detect secrets before they reach git
+title = "NanoClaw Gitleaks Config"
+
+[allowlist]
+  description = "Allow non-secret patterns"
+  regexes = [
+    # Test/example values
+    '''example\.com''',
+    # Placeholder env var references
+    '''<your-''',
+    '''PLACEHOLDER''',
+  ]
+  paths = [
+    '''.env.sample''',
+    '''docs/.*''',
+    '''infrastructure/terraform/.*\.example''',
+  ]

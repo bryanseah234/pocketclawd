@@ -1,0 +1,369 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, staging]
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AWS_REGION: ap-southeast-1
+  ECR_ORCHESTRATOR: nanoclaw/orchestrator
+  ECR_AGENT: nanoclaw/agent
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10"
+
+jobs:
+  # ─── Quality Gates (must pass before build) ────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+  test:
+    name: Test (coverage gate)
+    runs-on: ubuntu-latest
+    env:
+      COVERAGE_THRESHOLD: 80
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: pnpm exec vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(node -e "
+            const summary = require('./coverage/coverage-summary.json');
+            const { lines, statements, branches, functions } = summary.total;
+            const avg = (lines.pct + statements.pct + branches.pct + functions.pct) / 4;
+            console.log(Math.floor(avg));
+          ")
+          echo "Coverage: ${COVERAGE}%"
+          if [ "$COVERAGE" -lt "$COVERAGE_THRESHOLD" ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the required ${COVERAGE_THRESHOLD}%"
+            exit 1
+          fi
+
+  security-scan:
+    name: Security Scan (tfsec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: infrastructure/terraform
+          soft_fail: false
+
+  # ─── Build & Push Docker Images ────────────────────────────────────────
+  build-and-push:
+    name: Build & Push to ECR
+    needs: [lint, typecheck, test, security-scan]
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+      orchestrator-image: ${{ steps.meta.outputs.orchestrator-image }}
+      agent-image: ${{ steps.meta.outputs.agent-image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: meta
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          TAG="${GITHUB_SHA::8}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "orchestrator-image=${ECR_REGISTRY}/${ECR_ORCHESTRATOR}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "agent-image=${ECR_REGISTRY}/${ECR_AGENT}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push orchestrator image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.orchestrator
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.orchestrator-image }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: container/sub-agent
+          file: container/sub-agent/Dockerfile.production
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.agent-image }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_AGENT }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Deploy to Staging ─────────────────────────────────────────────────
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to staging via SSM
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+          INSTANCE_ID: ${{ secrets.STAGING_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'set -e',
+              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${IMAGE_TAG}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${IMAGE_TAG}',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${IMAGE_TAG} nanoclaw-orchestrator:current',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${IMAGE_TAG} nanoclaw-agent:current',
+              'sudo systemctl restart nanoclaw-orchestrator'
+            ]" \
+            --output text \
+            --query "Command.CommandId"
+
+      - name: Wait for deployment to stabilize
+        run: sleep 30
+
+  # ─── Smoke Test ────────────────────────────────────────────────────────
+  smoke-test:
+    name: Smoke Test (Staging)
+    needs: [deploy-staging]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Health check
+        env:
+          STAGING_HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
+        run: |
+          echo "Checking staging health endpoint..."
+          for i in $(seq 1 10); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${STAGING_HEALTH_URL}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ Health check passed (attempt ${i})"
+              exit 0
+            fi
+            echo "  Attempt ${i}: status=${STATUS}, retrying in 15s..."
+            sleep 15
+          done
+          echo "::error::Smoke test failed — health endpoint did not return 200 after 10 attempts"
+          exit 1
+
+  # ─── Promote to Production ─────────────────────────────────────────────
+  deploy-production:
+    name: Deploy to Production
+    needs: [smoke-test, build-and-push]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Store rollback reference
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+        run: |
+          # Save previous tag for rollback
+          PREV_TAG=$(aws ssm get-parameter \
+            --name "/nanoclaw/production/current-image-tag" \
+            --query "Parameter.Value" --output text 2>/dev/null || echo "none")
+
+          aws ssm put-parameter \
+            --name "/nanoclaw/production/previous-image-tag" \
+            --value "$PREV_TAG" \
+            --type String --overwrite
+
+          aws ssm put-parameter \
+            --name "/nanoclaw/production/current-image-tag" \
+            --value "$IMAGE_TAG" \
+            --type String --overwrite
+
+      - name: Deploy to production via SSM
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
+          INSTANCE_ID: ${{ secrets.PRODUCTION_INSTANCE_ID }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'set -e',
+              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${IMAGE_TAG}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${IMAGE_TAG}',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${IMAGE_TAG} nanoclaw-orchestrator:current',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${IMAGE_TAG} nanoclaw-agent:current',
+              'sudo systemctl restart nanoclaw-orchestrator'
+            ]" \
+            --output text \
+            --query "Command.CommandId"
+
+      - name: Health check with automatic rollback
+        env:
+          INSTANCE_ID: ${{ secrets.PRODUCTION_INSTANCE_ID }}
+          PRODUCTION_HEALTH_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          echo "Monitoring production health (5 consecutive passes required)..."
+          CHECKS_PASSED=0
+          CHECKS_REQUIRED=5
+
+          for i in $(seq 1 20); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "${PRODUCTION_HEALTH_URL}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              CHECKS_PASSED=$((CHECKS_PASSED + 1))
+              echo "  Check ${i}/20: PASS (${CHECKS_PASSED}/${CHECKS_REQUIRED})"
+            else
+              echo "  Check ${i}/20: FAIL (status=${STATUS})"
+              CHECKS_PASSED=0
+            fi
+
+            if [ "$CHECKS_PASSED" -ge "$CHECKS_REQUIRED" ]; then
+              echo "✓ Production deployment healthy"
+              exit 0
+            fi
+            sleep 30
+          done
+
+          echo "::error::Production health check failed — initiating rollback"
+
+          PREV_TAG=$(aws ssm get-parameter \
+            --name "/nanoclaw/production/previous-image-tag" \
+            --query "Parameter.Value" --output text)
+
+          if [ "$PREV_TAG" = "none" ] || [ -z "$PREV_TAG" ]; then
+            echo "::error::No previous image tag available for rollback"
+            exit 1
+          fi
+
+          echo "Rolling back to: ${PREV_TAG}"
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'set -e',
+              'aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${ECR_REGISTRY}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${PREV_TAG}',
+              'docker pull ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${PREV_TAG}',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_ORCHESTRATOR }}:${PREV_TAG} nanoclaw-orchestrator:current',
+              'docker tag ${ECR_REGISTRY}/${{ env.ECR_AGENT }}:${PREV_TAG} nanoclaw-agent:current',
+              'sudo systemctl restart nanoclaw-orchestrator'
+            ]" \
+            --output text
+
+          aws ssm put-parameter \
+            --name "/nanoclaw/production/current-image-tag" \
+            --value "$PREV_TAG" \
+            --type String --overwrite
+
+          exit 1
+
+  # ─── t6-45: k6 Post-Deploy Smoke Test (Production, main only) ───────────
+  k6-smoke:
+    name: k6 Smoke Test (Production)
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 smoke test against production
+        env:
+          TARGET_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
+        run: |
+          if [ -z "${TARGET_URL}" ]; then
+            echo "::error::PRODUCTION_HEALTH_URL secret is not set"
+            exit 1
+          fi
+          # k6 exits non-zero if any threshold (p95<5s, error rate<1%) fails,
+          # which fails the job and surfaces a post-deploy regression.
+          k6 run tests/load/k6-smoke.js

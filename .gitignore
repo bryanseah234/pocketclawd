@@ -176,3 +176,97 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# pnpm/build temp files
+gyp.tmp.txt
+x.tmp.txt
+*.tmp.txt
+
+# npm lockfile (project uses pnpm)
+package-lock.json
+
+
+# --- PocketClaw additions ---
+.env
+.env.local
+.env.bak*
+.env.env.bak*
+secrets/
+wa-session/
+*.wa-session
+vault/
+logs/
+.photo-cache/
+
+data/
+
+
+# --- Added: sensitive/runtime ---
+store/
+*.credentials.json
+**/creds.json
+**/auth_info*/
+host.pid
+host-job.id
+
+
+# Auto-generated service wrappers (per-machine, not portable)
+scripts/service/.run-host.cmd
+scripts/service/.run-host-task.cmd
+scripts/service/.run-and-watch.ps1
+scripts/service/.start-and-watch.ps1
+scripts/service/.run-install-task-once.ps1
+
+# --- AI agent / scratch workspace ---
+.omo/
+_q*.cjs
+
+# --- Claude Code runtime state ---
+.claude/settings.json
+.claude/scheduled_tasks.lock
+
+
+# Hermes local agent context (never commit)
+.hermes/
+
+# impeccable live runtime state (machine-local)
+.impeccable/live/annotations/
+.impeccable/live/sessions/
+.impeccable/live/server.json
+
+# build/deploy artifacts
+*.tar.gz
+dist-*
+orch-*
+NUL
+
+# Terraform secret var files (never commit auth tokens)
+*.auto.tfvars
+*.tfvars.json
+cutover.auto.tfvars
+
+# --- test harness run output (disposable; runners are tracked, outputs are not) ---
+test/*_log.txt
+test/*_err.txt
+test/full_suite_log.txt
+test/full_suite_err.txt
+test/r1_log.txt
+test/r2_log.txt
+test/*_results.json
+test/beta_v2_round1_results.json
+test/beta_v2_round2_results.json
+test/beta_v2_round2_CONTAMINATED.json
+test/full_suite_results.json
+test/retest_results.json
+test/retest2_results.json
+test/_partials.json
+test/_flush_oneshot.txt
+test/_flusher_args.txt
+test/_probe.py
+test/_smoke.py
+test/run_retest.bat
+test/run_suite.bat
+test/beta_runner.py
+test/beta_send.py
+test/full_suite_runner.py
+test/retest2.py

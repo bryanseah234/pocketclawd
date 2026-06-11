@@ -1,0 +1,317 @@
+name: Deploy Feature Branch
+
+# Fires on every push to feature/nanoclaw-aws-deployment.
+
+on:
+  push:
+    branches:
+      - "feature/nanoclaw-aws-deployment"
+
+concurrency:
+  group: deploy-feature-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  AWS_REGION: ap-southeast-1
+  ECR_ORCHESTRATOR: nanoclaw/orchestrator
+  ECR_AGENT: nanoclaw/agent
+  INSTANCE_ID: ${{ secrets.STAGING_INSTANCE_ID }}
+  NODE_VERSION: "22"
+
+jobs:
+  check:
+    name: Typecheck + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm exec vitest run src/cloud
+
+  build:
+    name: Build & Push to ECR
+    needs: check
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - id: meta
+        run: echo "tag=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build & push orchestrator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.orchestrator
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:feature-latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_ORCHESTRATOR }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build & push agent
+        uses: docker/build-push-action@v6
+        with:
+          context: container/sub-agent
+          file: container/sub-agent/Dockerfile.production
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:feature-latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_AGENT }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload deploy script to S3
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+          ECR: ${{ secrets.ECR_REGISTRY }}
+        run: |
+          cat > /tmp/deploy.sh << DEPLOY_EOF
+          #!/bin/bash
+          set -e
+          ECR="${ECR}"
+          TAG="${IMAGE_TAG}"
+
+          # ── Pre-pull new image while old container is still serving ──
+          echo "=== [1/4] Pre-pull image \$TAG (old container still running) ==="
+          aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin "\$ECR"
+          docker pull "\$ECR/nanoclaw/orchestrator:\$TAG"
+          docker tag "\$ECR/nanoclaw/orchestrator:\$TAG" nanoclaw-orchestrator:next
+          echo "  image staged as :next (old :current still running)"
+
+          # ── Verify new image starts cleanly on a sidecar port BEFORE swap ──
+          # Port 3001 = staging port for blue/green-style health check.
+          # Network host is needed for prod (WhatsApp + admin), but for the smoke
+          # test we run with bridge network on 3001 to avoid colliding with old.
+          echo "=== [2/4] Smoke test on :3001 (bridge network) ==="
+          docker rm -f nanoclaw-orchestrator-smoke 2>/dev/null || true
+          docker run -d \
+            --name nanoclaw-orchestrator-smoke \
+            -p 3001:3000 \
+            -e NANOCLAW_ENV=cloud \
+            -e AWS_REGION=ap-southeast-1 \
+            -e AWS_EC2_METADATA_DISABLED=false \
+            -e WHATSAPP_ENABLED=false \
+            -e ASSISTANT_NAME=Clawd \
+            -e DATA_BUCKET=nanoclaw-data-709609992277 \
+            -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
+            nanoclaw-orchestrator:next >/dev/null
+
+          # Bridge network containers CAN reach IMDS at 169.254.169.254 by
+          # default on EC2 — the Docker bridge gateway routes 169.254.0.0/16
+          # via the host. The previous failure was likely due to IMDSv2 hop
+          # limit, not network reachability. Set hop limit to 2 on the EC2
+          # instance once (idempotent) so containers can reach IMDSv2.
+          for i in \$(seq 1 12); do
+            sleep 4
+            SMOKE=\$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3001/health 2>/dev/null || echo 000)
+            echo "  smoke \$i: \$SMOKE"
+            [ "\$SMOKE" = "200" ] && SMOKE_OK=1 && break
+          done
+          docker logs nanoclaw-orchestrator-smoke --tail 30 2>&1 | tail -30 || true
+          docker rm -f nanoclaw-orchestrator-smoke 2>/dev/null || true
+          if [ "\${SMOKE_OK:-0}" != "1" ]; then
+            echo "=== SMOKE FAILED — keeping old container running ==="
+            docker rmi nanoclaw-orchestrator:next || true
+            exit 1
+          fi
+          echo "  smoke passed"
+
+          # ── Reset circuit breaker on every deploy (G_4) ──
+          # The orchestrator persists circuit-breaker state at /opt/nanoclaw-data/circuit-breaker.json.
+          # If the previous deploy crashed during smoke (e.g. EACCES from
+          # unconditional fs.mkdirSync), the breaker can stay open across
+          # deploys and cascade into a 75s probe timeout. Clear it so a
+          # successful deploy starts with a clean slate.
+          echo "=== [2.5/4] Reset circuit breaker (G_4) ==="
+          rm -f /opt/nanoclaw-data/circuit-breaker.json 2>/dev/null || true
+
+          # ── Atomic swap: stop old, start new — under 5s ──
+          echo "=== [3/4] Atomic swap (old container down for ~5s) ==="
+          mkdir -p /opt/nanoclaw-data/whatsapp /opt/nanoclaw-data/logs /opt/nanoclaw-data/db
+          docker stop -t 10 nanoclaw-orchestrator 2>/dev/null || true
+          docker rm   nanoclaw-orchestrator 2>/dev/null || true
+          docker tag nanoclaw-orchestrator:next nanoclaw-orchestrator:current
+          docker run -d \
+            --name nanoclaw-orchestrator \
+            --restart unless-stopped \
+            --network host \
+            --user root \
+            -e NANOCLAW_ENV=cloud \
+            -e AWS_REGION=ap-southeast-1 \
+            -e WHATSAPP_ENABLED=true \
+            -e WHATSAPP_AUTH_DIR=/app/data/whatsapp \
+            -e ASSISTANT_NAME=Clawd \
+            -e DATA_BUCKET=nanoclaw-data-709609992277 \
+            -e LOG_PATH=/app/data/logs \
+            -e USE_SUBAGENT=1 \
+            -e CLAWD_CRON_DIGEST=true \
+            -e CLAWD_CRON_WIKI=true \
+            -e CLAWD_GOOGLE_SECRET_ID=nanoclaw/google-secrets \
+            -e SKIP_CONTAINER_RUNTIME_CHECK=1 \
+            --env-file /etc/nanoclaw/orchestrator.env \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "\$(which docker)":/usr/local/bin/docker:ro \
+            -v /opt/nanoclaw-data:/app/data \
+            nanoclaw-orchestrator:current
+
+          echo "=== [4/4] Wait for production health (up to 75s) ==="
+          for i in \$(seq 1 15); do
+            sleep 5
+            HTTP=\$(curl -sf -o /dev/null -w "%{http_code}" http://localhost:3000/health 2>/dev/null || echo 000)
+            echo "  attempt \$i: \$HTTP"
+            [ "\$HTTP" = "200" ] && echo "HEALTHY" && exit 0
+          done
+          echo "=== FAILED — container logs ==="
+          docker logs nanoclaw-orchestrator --tail 50 2>&1
+          exit 1
+          DEPLOY_EOF
+
+          aws s3 cp /tmp/deploy.sh "s3://nanoclaw-data-709609992277/ci-deploy/deploy-${IMAGE_TAG}.sh"
+          echo "Script uploaded"
+
+      - name: Run deploy via SSM
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ env.INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[\"aws s3 cp s3://nanoclaw-data-709609992277/ci-deploy/deploy-${IMAGE_TAG}.sh /tmp/deploy.sh && chmod +x /tmp/deploy.sh && bash /tmp/deploy.sh\"]" \
+            --timeout-seconds 600 \
+            --region ${{ env.AWS_REGION }} \
+            --output text \
+            --query "Command.CommandId")
+
+          echo "SSM Command ID: $COMMAND_ID"
+          for i in $(seq 1 60); do
+            sleep 10
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "${{ env.INSTANCE_ID }}" \
+              --region ${{ env.AWS_REGION }} \
+              --query "Status" --output text 2>/dev/null || echo Pending)
+            echo "  [$i/60] $STATUS"
+            [ "$STATUS" = "Success" ] && echo "Deploy OK" && break
+            if [[ "$STATUS" == "Failed" || "$STATUS" == "TimedOut" || "$STATUS" == "Cancelled" ]]; then
+              echo "=== stdout ==="
+              aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ env.INSTANCE_ID }}" \
+                --region ${{ env.AWS_REGION }} --query "StandardOutputContent" --output text
+              echo "=== stderr ==="
+              aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "${{ env.INSTANCE_ID }}" \
+                --region ${{ env.AWS_REGION }} --query "StandardErrorContent" --output text
+              exit 1
+            fi
+          done
+
+      - name: Force ECS sub-agent redeployment (G_1)
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          # The sub-agent ECS service does NOT auto-pick-up new image digests
+          # when only the :latest tag changes (task definition references
+          # :latest by name, ECS only re-pulls on task definition change).
+          # Force a new deployment so the new image is picked up immediately.
+          echo "Forcing nanoclaw-sub-agent ECS redeployment..."
+          aws ecs update-service \
+            --cluster nanoclaw-cluster \
+            --service nanoclaw-sub-agent \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }} \
+            --query "service.deployments[0].{Id:id,Status:status,RolloutState:rolloutState}" \
+            --output table
+
+          # Optionally wait for rollout to complete (capped at 5min).
+          echo "Waiting for rollout (up to 5 min)..."
+          for i in $(seq 1 30); do
+            sleep 10
+            STATE=$(aws ecs describe-services \
+              --cluster nanoclaw-cluster \
+              --services nanoclaw-sub-agent \
+              --region ${{ env.AWS_REGION }} \
+              --query "services[0].deployments[0].rolloutState" \
+              --output text 2>/dev/null || echo UNKNOWN)
+            echo "  [$i/30] rolloutState=$STATE"
+            [ "$STATE" = "COMPLETED" ] && echo "Rollout complete" && exit 0
+            [ "$STATE" = "FAILED" ] && echo "Rollout FAILED" && exit 1
+          done
+          echo "Rollout still in progress after 5min — letting it continue async."
+
+      - name: Force ECS indexer redeployment (Wave 5)
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          # The dedicated indexer service shares the agent image. Force a new
+          # deployment so it picks up the new image too. Tolerate the service
+          # not existing yet (created by `terraform apply` of indexer.tf) so a
+          # code-only deploy never fails on a not-yet-provisioned service.
+          if aws ecs describe-services --cluster nanoclaw-cluster \
+               --services nanoclaw-indexer --region ${{ env.AWS_REGION }} \
+               --query "services[0].status" --output text 2>/dev/null | grep -q ACTIVE; then
+            echo "Forcing nanoclaw-indexer ECS redeployment..."
+            aws ecs update-service \
+              --cluster nanoclaw-cluster \
+              --service nanoclaw-indexer \
+              --force-new-deployment \
+              --region ${{ env.AWS_REGION }} \
+              --query "service.deployments[0].{Id:id,Status:status,RolloutState:rolloutState}" \
+              --output table
+          else
+            echo "nanoclaw-indexer service not provisioned yet (run terraform apply) — skipping."
+          fi
+
+      - name: External health check
+        run: |
+          for i in $(seq 1 8); do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "http://3.0.132.150:3000/health" || echo 000)
+            [ "$STATUS" = "200" ] && echo "Health OK (attempt $i)" && exit 0
+            echo "  attempt $i: $STATUS — waiting 15s"; sleep 15
+          done
+          echo "Health check failed" && exit 1
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## Deployed to EC2" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag: \`${{ needs.build.outputs.image-tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Admin: http://3.0.132.150:3000/admin" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup S3 script
+        if: always()
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+        run: |
+          aws s3 rm "s3://nanoclaw-data-709609992277/ci-deploy/deploy-${IMAGE_TAG}.sh" || true

@@ -1,0 +1,65 @@
+# Dependencies (reinstalled in Docker)
+node_modules
+
+# Build output (rebuilt in Docker)
+dist
+
+# Git
+.git
+.gitignore
+.gitattributes
+.githooks
+
+# IDE and editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+
+# Documentation and media
+docs/
+media/
+*.md
+!README.md
+
+# Tests
+tests/
+**/*.test.ts
+**/*.spec.ts
+vitest.config.*
+coverage/
+
+# CI/CD
+.github/
+
+# Scripts not needed in container
+scripts/
+
+# Kiro specs
+.kiro/
+
+# Python / sub-agent (separate build context)
+container/
+__pycache__/
+*.py
+*.pyc
+uv.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Terraform
+infrastructure/
+
+# Misc
+.omo/
+.markdownlint.jsonc
+commitlint.config.cjs
+
+# WhatsApp session state (managed via S3, never in image)
+store/

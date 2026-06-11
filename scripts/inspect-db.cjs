@@ -1,0 +1,12 @@
+const Database = require('better-sqlite3');
+const db = new Database('./data/v2.db', { readonly: true });
+console.log('=== Tables ===');
+console.log(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all().map(r => r.name).join('\n'));
+console.log('\n=== agent_groups ===');
+console.log(db.prepare('SELECT id, name, folder FROM agent_groups').all());
+console.log('\n=== messaging_groups ===');
+console.log(db.prepare('SELECT id, channel_type, platform_id, display_name FROM messaging_groups').all());
+console.log('\n=== messaging_group_agents ===');
+console.log(db.prepare('SELECT * FROM messaging_group_agents').all());
+console.log('\n=== users ===');
+console.log(db.prepare('SELECT id, kind, display_name FROM users').all());

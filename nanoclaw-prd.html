@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NanoClaw WhatsApp Assistant - Technical PRD v2.1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#ffffff',
+                primaryTextColor: '#333333',
+                primaryBorderColor: '#cbd5e1',
+                lineColor: '#64748b',
+                secondaryColor: '#f1f5f9',
+                tertiaryColor: '#e2e8f0'
+            }
+        });
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .mermaid-container { width: 100%; display: flex; justify-content: center; overflow-x: auto; padding: 1rem 0; }
+        .mermaid { min-width: 600px; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-8 flex flex-col items-center">
+
+    <div class="w-full max-w-6xl bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
+
+        <!-- Header -->
+        <div class="border-b border-slate-200 pb-6 mb-10">
+            <h1 class="text-3xl font-bold text-slate-800">NanoClaw WhatsApp Assistant</h1>
+            <p class="text-slate-500 mt-2 text-lg">Technical Product Requirements Document (PRD) v2.1</p>
+            <p class="text-slate-400 mt-1 text-sm">Complete Specification for Automated Build — Minimum Human Interaction</p>
+        </div>
+
+        <!-- Revision History -->
+        <div class="mb-8 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <h3 class="font-bold text-slate-700 mb-3">Document Revision History</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-slate-200">
+                        <th class="text-left py-2 px-2">Version</th>
+                        <th class="text-left py-2 px-2">Date</th>
+                        <th class="text-left py-2 px-2">Author</th>
+                        <th class="text-left py-2 px-2">Changes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="border-b border-slate-100">
+                        <td class="py-2 px-2">2.1</td>
+                        <td class="py-2 px-2">2026-05-25</td>
+                        <td class="py-2 px-2">MiniMax Agent</td>
+                        <td class="py-2 px-2">Fixed erDiagram syntax, expanded Sections 11-15, added session affinity architecture, measurable success criteria</td>
+                    </tr>
+                    <tr class="border-b border-slate-100">
+                        <td class="py-2 px-2">2.0</td>
+                        <td class="py-2 px-2">2026-05-25</td>
+                        <td class="py-2 px-2">MiniMax Agent</td>
+                        <td class="py-2 px-2">Initial complete specification with all decisions incorporated</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Section 1: Executive Summary -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm">1</span>
+                Executive Summary
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">1.1 Project Overview</h3>
+            <p class="text-slate-600 mb-4">NanoClaw WhatsApp Assistant is a cloud-native AI-powered WhatsApp assistant system built on Azure infrastructure. The system provides personalized AI assistance to users through WhatsApp messaging, featuring document processing, corporate knowledge retrieval, and automated daily notifications.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">1.2 Key Objectives</h3>
+            <ul class="list-disc pl-6 text-slate-600 mb-4 space-y-1">
+                <li>Enterprise-grade AI assistance through WhatsApp with complete data isolation per user</li>
+                <li>Seamless document processing and knowledge base management</li>
+                <li>Automated daily briefings based on user preferences</li>
+                <li>Slide generation capabilities for presentations</li>
+            </ul>
+
+            <h3 class="font-bold text-slate-800 mb-2">1.3 Target Users</h3>
+            <p class="text-slate-600 mb-4">The system targets corporate employees in Singapore who require AI-assisted document processing and knowledge retrieval through their personal WhatsApp devices. Users range from knowledge workers who need quick access to corporate information to administrative staff who benefit from automated daily briefings.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">1.4 Success Criteria (Measurable Thresholds)</h3>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Metric</th>
+                            <th class="text-left py-2">Target</th>
+                            <th class="text-left py-2">Measurement Method</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">P95 Response Latency</td>
+                            <td class="py-2 font-mono text-green-700">≤ 30 seconds</td>
+                            <td class="py-2">Azure Monitor Application Insights</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Document Text Extraction Accuracy</td>
+                            <td class="py-2 font-mono text-green-700">≥ 98%</td>
+                            <td class="py-2">Benchmark against 100 sample documents</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">OCR Accuracy (scanned PDFs)</td>
+                            <td class="py-2 font-mono text-green-700">≥ 80%</td>
+                            <td class="py-2">Benchmark against 50 scanned document samples</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Monthly Uptime</td>
+                            <td class="py-2 font-mono text-green-700">99.5% (≤ 3.6h downtime/month)</td>
+                            <td class="py-2">Azure Monitor availability metrics</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Cross-User Data Leakage</td>
+                            <td class="py-2 font-mono text-green-700">Zero incidents in security audits</td>
+                            <td class="py-2">Quarterly security penetration testing</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2">Concurrent User Capacity</td>
+                            <td class="py-2 font-mono text-green-700">≥ 50 users</td>
+                            <td class="py-2">Load testing with k6 (50 concurrent users, 5min sustained)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 2: System Architecture -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">2</span>
+                System Architecture
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">2.1 High-Level Architecture Overview</h3>
+            <p class="text-slate-600 mb-4">The system follows a microservices architecture deployed on a single Azure Virtual Machine, with containerized sub-agents providing isolated processing environments for each user. The orchestrator manages the lifecycle of sub-agents and handles all communication between WhatsApp users and the AI backend.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200">
+                <pre class="mermaid">
+graph TB
+    subgraph External["External Services"]
+        WA["WhatsApp Users"]
+        LLM["Azure AI Foundry<br/>(GPT-4o)"]
+        VS["Azure AI Search<br/>(Vector Store)"]
+        KV["Azure Key Vault"]
+    end
+
+    subgraph AzureVM["Azure Virtual Machine - E16s_v3"]
+        subgraph Orchestrator["NanoClaw Orchestrator"]
+            WH["WhatsApp Handler"]
+            CM["Container Manager"]
+            MQ["Redis Message Queue"]
+            SCH["Scheduler Service"]
+        end
+
+        subgraph Docker["Docker Environment (Rootless + Socket Proxy)"]
+            SA1["Sub-Agent User A"]
+            SA2["Sub-Agent User B"]
+            SA3["Sub-Agent User N"]
+        end
+
+        subgraph Storage["Local Storage"]
+            SESSION["Baileys Sessions<br/>(Azure Blob)"]
+        end
+    end
+
+    subgraph DataStores["Azure Data Services"]
+        CDB["Azure Cosmos DB"]
+        BLOB["Azure Blob Storage"]
+    end
+
+    WA -->|"WhatsApp Protocol"| WH
+    WH --> CM
+    CM -->|"Spawn/Manage"| SA1
+    CM -->|"Spawn/Manage"| SA2
+    CM -->|"Spawn/Manage"| SA3
+
+    SA1 -->|"Queue"| MQ
+    SA2 -->|"Queue"| MQ
+    SA3 -->|"Queue"| MQ
+
+    MQ -->|"Process"| SA1
+    MQ -->|"Process"| SA2
+    MQ -->|"Process"| SA3
+
+    SA1 -->|"Read/Write"| CDB
+    SA2 -->|"Read/Write"| CDB
+    SA3 -->|"Read/Write"| CDB
+
+    SA1 -->|"RAG Query"| VS
+    SA2 -->|"RAG Query"| VS
+    SA3 -->|"RAG Query"| VS
+
+    SA1 -->|"LLM Calls"| LLM
+    SA2 -->|"LLM Calls"| LLM
+    SA3 -->|"LLM Calls"| LLM
+
+    SA1 -->|"File Upload/Download"| BLOB
+    SA2 -->|"File Upload/Download"| BLOB
+    SA3 -->|"File Upload/Download"| BLOB
+
+    WH -->|"Session Persist"| SESSION
+    SESSION -.->|"Restore"| WH
+
+    CM -->|"Secrets"| KV
+    SA1 -->|"Secrets"| KV
+    SA2 -->|"Secrets"| KV
+    SA3 -->|"Secrets"| KV
+
+    style AzureVM fill:#e6f3ff,stroke:#0066cc
+    style Orchestrator fill:#fff0e6,stroke:#ff9900
+    style Docker fill:#f0fff0,stroke:#00cc66
+    style DataStores fill:#fff5e6,stroke:#cc6600
+    style External fill:#f5f5f5,stroke:#666666
+                </pre>
+            </div>
+
+            <h3 class="font-bold text-slate-800 mb-2 mt-6">2.2 Component Description</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">2.2.1 NanoClaw Orchestrator</h4>
+            <p class="text-slate-600 mb-3">The orchestrator serves as the central nervous system of the entire application. It handles incoming WhatsApp messages through the Baileys bridge, manages the lifecycle of sub-agent containers, maintains the Redis message queue for inter-service communication, and coordinates scheduled tasks such as daily notifications. The orchestrator runs as a systemd service and automatically restarts upon failure.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">2.2.2 Sub-Agent Containers</h4>
+            <p class="text-slate-600 mb-3">Each user is assigned a dedicated Docker container running a lightweight FastAPI application. Sub-agents are responsible for processing user requests, querying the vector store for RAG, communicating with the LLM, and handling document ingestion. Each container maintains isolated filesystem and network namespaces to ensure data security.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">2.2.3 Redis Message Queue</h4>
+            <p class="text-slate-600 mb-4">The Redis message queue handles asynchronous communication between the orchestrator and sub-agents. This decoupled architecture allows for graceful handling of high load scenarios and provides resilience against temporary service disruptions.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">2.3 Data Flow</h3>
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200">
+                <pre class="mermaid">
+sequenceDiagram
+    participant User as WhatsApp User
+    participant WH as WhatsApp Handler
+    participant CM as Container Manager
+    participant SA as Sub-Agent
+    participant MQ as Redis Queue
+    participant CDB as Cosmos DB
+    participant VS as Vector Store
+    participant LLM as Azure AI Foundry
+
+    User->>WH: Send message via WhatsApp
+    WH->>WH: Authenticate and validate message
+    WH->>CM: Forward message with user context
+    CM->>CM: Check if container exists for user
+    alt Container does not exist
+        CM->>CM: Spawn new container
+        CM->>CDB: Load user preferences
+        CM->>SA: Initialize with preferences
+    else Container exists
+        CM->>SA: Forward message to existing container
+    end
+
+    SA->>MQ: Enqueue processing task
+    MQ->>SA: Dequeue task
+
+    SA->>CDB: Store chat message
+    SA->>VS: Query relevant documents (RAG)
+    VS-->>SA: Return relevant chunks
+
+    SA->>LLM: Send query with context
+    LLM-->>SA: Return generated response
+
+    SA->>CDB: Store AI response
+    SA->>MQ: Enqueue response
+    MQ->>WH: Notify response ready
+    WH-->>User: Send response via WhatsApp
+                </pre>
+            </div>
+        </div>
+
+        <!-- Section 3: Infrastructure Specification -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm">3</span>
+                Infrastructure Specification
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">3.1 Azure Virtual Machine Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.1.1 VM Specifications</h4>
+            <p class="text-slate-600 mb-2">The production environment utilizes an Azure E16s_v3 virtual machine to accommodate current user load and provide headroom for growth. This configuration supports up to one hundred concurrent users under normal load conditions.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">VM Size</td><td class="py-2">E16s_v3</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">vCPUs</td><td class="py-2">16</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Memory</td><td class="py-2">128 GB</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Temporary Disk</td><td class="py-2">256 GB (ephemeral, not for persistent data)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">OS Disk</td><td class="py-2">Premium SSD LRS 64 GB</td></tr>
+                        <tr><td class="py-2 font-semibold">Network</td><td class="py-2">Standard SKU, 1 NIC, accelerated networking enabled</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.1.2 Network Configuration</h4>
+            <p class="text-slate-600 mb-3">The virtual machine is deployed within a dedicated virtual network with the following security configuration. All inbound traffic is blocked except for HTTPS port 443 for the admin web interface and SSH port 22 restricted to specific admin IP addresses. Outbound traffic is allowed for Azure services including Cosmos DB, Blob Storage, Azure AI Foundry, and Azure AI Search.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200">
+                <pre class="mermaid">
+graph LR
+    subgraph VNet["Virtual Network - NanoClaw-VNet"]
+        subgraph NSG["Network Security Group"]
+            subgraph Rules["Security Rules"]
+                ALLOW_HTTPS["Allow: 443 - Admin UI"]
+                ALLOW_SSH["Allow: 22 - Admin IPs Only"]
+                DENY_ALL["Deny: All Other Inbound"]
+            end
+        end
+
+        subgraph Subnet["Subnet - NanoClaw-Subnet"]
+            VM["NanoClaw VM<br/>E16s_v3"]
+        end
+    end
+
+    subgraph Public["Public Internet"]
+        ADMIN["Admin Users"]
+    end
+
+    ADMIN -->|"HTTPS 443"| ALLOW_HTTPS
+    ADMIN -->|"SSH 22"| ALLOW_SSH
+    DENY_ALL -.->|"All Others"| VM
+
+    style VNet fill:#e6f3ff,stroke:#0066cc
+    style NSG fill:#fff0e6,stroke:#ff9900
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1 mt-4">3.1.3 Disaster Recovery Configuration</h4>
+            <p class="text-slate-600 mb-4">For production deployments requiring high availability, the architecture supports deployment across multiple VMs in an availability set. The primary components requiring HA consideration include the orchestrator service which requires stateless design to run on multiple VMs, the Redis message queue which should be replaced with Azure Cache for Redis in HA mode, and the Docker containers which can be spawned on any healthy VM.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">3.2 Docker Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.2.1 Rootless Docker Setup</h4>
+            <p class="text-slate-600 mb-3">The system implements rootless Docker as the primary isolation mechanism, combined with a Docker socket proxy to reduce the attack surface of the Docker daemon. This dual-layer approach provides security without sacrificing functionality. Rootless Docker allows the Docker daemon to run as a non-root user, significantly reducing the impact of potential container escape vulnerabilities. The docker-socket-proxy further restricts the Docker API surface by blocking dangerous operations while allowing the necessary functionality for container lifecycle management.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.2.2 Container Resource Limits</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Memory</td><td class="py-2">512 MB</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Memory Swap</td><td class="py-2">512 MB (same as RAM, no swap)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">CPU Period</td><td class="py-2">100000 microseconds</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">CPU Quota</td><td class="py-2">50000 microseconds (50% of one core)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">PIDs Limit</td><td class="py-2">100 processes</td></tr>
+                        <tr><td class="py-2 font-semibold">Disk Quota</td><td class="py-2">2 GB per container</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.2.3 Container Network Isolation</h4>
+            <p class="text-slate-600 mb-3">Each sub-agent container operates within its own network namespace, providing complete network isolation between users. Containers can only communicate with the orchestrator through a management network and have outbound access to Azure services for API calls.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+graph TB
+    subgraph Management["Management Network - 172.20.0.0/16"]
+        ORCH["Orchestrator"]
+        ORCH -->|"172.20.0.1"| MGMT_SWITCH["Management Switch"]
+    end
+
+    subgraph User1["User A Network - 172.21.0.0/24"]
+        SA1["Sub-Agent A<br/>(172.21.0.2)"]
+    end
+
+    subgraph User2["User B Network - 172.22.0.0/24"]
+        SA2["Sub-Agent B<br/>(172.22.0.2)"]
+    end
+
+    subgraph UserN["User N Network - 172.2N.0.0/24"]
+        SAN["Sub-Agent N<br/>(172.2N.0.2)"]
+    end
+
+    MGMT_SWITCH -->|"172.20.0.x"| SA1
+    MGMT_SWITCH -->|"172.20.0.x"| SA2
+    MGMT_SWITCH -->|"172.20.0.x"| SAN
+
+    SA1 -.->|"Outbound Only"| Internet["Azure Services"]
+    SA2 -.->|"Outbound Only"| Internet
+    SAN -.->|"Outbound Only"| Internet
+
+    style Management fill:#e6f3ff
+    style User1 fill:#f0fff0
+    style User2 fill:#f0fff0
+    style UserN fill:#f0fff0
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.2.4 Container Security Hardening</h4>
+            <p class="text-slate-600 mb-4">Containers run as non-root user with UID 1000. The root filesystem is read-only except for explicitly mounted tmpfs volumes. All Linux capabilities are dropped, preventing containers from performing privileged operations. Seccomp filtering restricts available system calls to a minimal safe set. New privileges are disabled, preventing any subsequent privilege escalation.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">3.3 Storage Architecture</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.3.1 Local Storage</h4>
+            <p class="text-slate-600 mb-3">The VM maintains local storage for Docker images, container writable layers, and temporary processing files. Docker data is stored at /var/lib/docker on a dedicated data disk to prevent OS disk exhaustion. Temporary files generated during document processing are stored in tmpfs mounts with a maximum size of one hundred megabytes per container. All temporary files are automatically cleaned up upon container termination.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">3.3.2 Azure Blob Storage</h4>
+            <p class="text-slate-600">All user-uploaded files are streamed directly to Azure Blob Storage, bypassing local VM storage entirely. This approach prevents storage exhaustion on the VM and provides built-in redundancy through Azure's geo-replicated storage. Files are organized under the following container structure: staging (newly uploaded files pending malware scanning), documents (files that have passed security checks and are ready for processing), corporate (corporate documents accessible to all users), and sessions (Baileys authentication sessions for session persistence across VM restarts).</p>
+        </div>
+
+        <!-- Section 4: Data Storage Architecture -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-teal-100 text-teal-700 px-3 py-1 rounded-full text-sm">4</span>
+                Data Storage Architecture
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">4.1 Azure Cosmos DB Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.1.1 Database Schema (Flat Entity Relationship Diagram)</h4>
+            <p class="text-slate-600 mb-3">The system utilizes a single Cosmos DB database named nanoclaw-prod with the following containers. All containers use userId as the partition key except for webhook_tokens which uses tokenHash as the partition key.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+erDiagram
+    CHAT_MESSAGES {
+        string id PK
+        string userId PK
+        datetime timestamp
+        string role
+        string content
+        json metadata
+    }
+    WEBHOOK_TOKENS {
+        string id PK
+        string tokenHash PK
+        string userId
+        string status
+        string blobUrl
+        datetime createdAt
+        datetime expiresAt
+        string etag
+    }
+    USER_PREFERENCES {
+        string id PK
+        string userId PK
+        datetime createdAt
+        datetime updatedAt
+        json preferences
+    }
+    SYSTEM_ERRORS {
+        string id PK
+        string userId PK
+        datetime timestamp
+        string errorType
+        string errorMessage
+        string stackTrace
+        boolean resolved
+    }
+
+    CHAT_MESSAGES ||--o{ USER_PREFERENCES : belongs-to
+    WEBHOOK_TOKENS ||--o| CHAT_MESSAGES : records-for
+    SYSTEM_ERRORS ||--o| CHAT_MESSAGES : logged-for
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.1.2 Container Specifications</h4>
+            <p class="text-slate-600 mb-3">The chat_messages container stores all conversation history between users and the AI assistant. The partition key is userId, enabling efficient queries for individual user histories. The RU/s allocation is four hundred to accommodate the expected one thousand messages per day across all users. Time-to-live is set to ninety days for conversation retention.</p>
+
+            <p class="text-slate-600 mb-3">The webhook_tokens container manages one-time tokens for document save confirmations. Each token is hashed with SHA-256 and stored with its hash as the partition key. The TTL is fifteen minutes to automatically expire unused tokens.</p>
+
+            <p class="text-slate-600 mb-3">The user_preferences container stores all user configuration including notification settings, search preferences, and slide generation preferences. This container has no TTL as preferences are retained indefinitely.</p>
+
+            <p class="text-slate-600 mb-4">The system_errors container logs all application errors for debugging and monitoring. The TTL is thirty days to balance debugging needs with storage costs.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.1.3 Throughput Configuration</h4>
+            <p class="text-slate-600 mb-4">All containers are configured with provisioned throughput rather than serverless mode. This choice ensures consistent performance and eliminates the cold-start delays associated with serverless databases.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Container</th>
+                            <th class="text-left py-2">Provisioned RU/s</th>
+                            <th class="text-left py-2">Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">chat_messages</td><td class="py-2 font-mono">400</td><td class="py-2">High write volume from user messages</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">webhook_tokens</td><td class="py-2 font-mono">400</td><td class="py-2">Low volume but requires fast reads for token validation</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">user_preferences</td><td class="py-2 font-mono">200</td><td class="py-2">Read-heavy workload</td></tr>
+                        <tr><td class="py-2">system_errors</td><td class="py-2 font-mono">100</td><td class="py-2">Low volume logging</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h3 class="font-bold text-slate-800 mb-2">4.2 Azure AI Search Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.2.1 Index Schema</h4>
+            <p class="text-slate-600 mb-3">The system uses a single Azure AI Search index named documents with the following field definitions.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Field Name</th>
+                            <th class="text-left py-2">Type</th>
+                            <th class="text-left py-2">Searchable</th>
+                            <th class="text-left py-2">Filterable</th>
+                            <th class="text-left py-2">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">id</td><td class="py-2">Edm.String</td><td class="py-2">No</td><td class="py-2">Yes</td><td class="py-2">Unique document chunk identifier</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">userId</td><td class="py-2">Edm.String</td><td class="py-2">No</td><td class="py-2">Yes</td><td class="py-2">Owner of this chunk (userId or "CORPORATE")</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">docType</td><td class="py-2">Edm.String</td><td class="py-2">Yes</td><td class="py-2">Yes</td><td class="py-2">Document type (pdf, docx, csv, etc.)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">content</td><td class="py-2">Edm.String</td><td class="py-2">Yes</td><td class="py-2">No</td><td class="py-2">Text content of the chunk</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">contentVector</td><td class="py-2">Collection(Edm.Single)</td><td class="py-2">Yes</td><td class="py-2">No</td><td class="py-2">Embedding vector (1536 dimensions)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">filename</td><td class="py-2">Edm.String</td><td class="py-2">Yes</td><td class="py-2">Yes</td><td class="py-2">Original filename</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">sourceType</td><td class="py-2">Edm.String</td><td class="py-2">No</td><td class="py-2">Yes</td><td class="py-2">"personal" or "corporate"</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">ingestedAt</td><td class="py-2">Edm.DateTimeOffset</td><td class="py-2">No</td><td class="py-2">Yes</td><td class="py-2">Timestamp of ingestion</td></tr>
+                        <tr><td class="py-2">metadata</td><td class="py-2">Edm.String</td><td class="py-2">No</td><td class="py-2">Yes</td><td class="py-2">JSON metadata (pages, sections, etc.)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.2.2 Security Model</h4>
+            <p class="text-slate-600 mb-3">Data isolation is enforced through query-time filtering. Every search query automatically includes a filter clause that restricts results to the requesting user's documents or corporate documents. This approach eliminates the need for multiple indexes while maintaining strict data separation. The mandatory filter pattern is userId eq '{user_id}' OR userId eq 'CORPORATE'. This filter is applied programmatically and validated at the application layer to ensure it is never omitted.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.2.3 Search Configuration</h4>
+            <p class="text-slate-600 mb-4">The vector search configuration uses the text-embedding-3-large model from Azure OpenAI with one thousand five hundred thirty-six dimensions. The minimum similarity threshold is set to zero point seven to filter out irrelevant results while maintaining high recall.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+graph TB
+    subgraph Query["User Query Process"]
+        Q1["User asks question via WhatsApp"]
+        Q2["Sub-Agent generates query embedding"]
+        Q3["Sub-Agent searches with filter"]
+    end
+
+    subgraph Search["Azure AI Search"]
+        V["Vector Search<br/>Top 10 candidates"]
+        K["Keyword Search<br/>Top 10 candidates"]
+        C["Combine Results<br/>Vector 70% + Keyword 30%"]
+        R["Cross-Encoder Reranker<br/>Return Top 3"]
+    end
+
+    subgraph Response["LLM Response"]
+        CTX["Format context from Top 3 chunks"]
+        LLM["GPT-4o generates answer with citations"]
+        OUT["Send response to user via WhatsApp"]
+    end
+
+    Q1 --> Q2 --> Q3 --> V
+    Q3 --> K
+    V --> C
+    K --> C
+    C --> R
+    R --> CTX
+    CTX --> LLM
+    LLM --> OUT
+
+    style Query fill:#e6f3ff
+    style Search fill:#fff0e6
+    style Response fill:#f0fff0
+                </pre>
+            </div>
+
+            <h3 class="font-bold text-slate-800 mb-2">4.3 File Storage and Lifecycle</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.3.1 Blob Storage Organization</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Container</th>
+                            <th class="text-left py-2">Purpose</th>
+                            <th class="text-left py-2">Access</th>
+                            <th class="text-left py-2">Retention</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">staging</td><td class="py-2">Temporary file upload</td><td class="py-2">Sub-Agents write, Scanner reads</td><td class="py-2">24 hours</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">documents</td><td class="py-2">Processed user files</td><td class="py-2">Sub-Agents write, All read</td><td class="py-2">Forever (user controlled)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">corporate</td><td class="py-2">Corporate documents</td><td class="py-2">Admin write, All read</td><td class="py-2">Forever</td></tr>
+                        <tr><td class="py-2">sessions</td><td class="py-2">Baileys session data</td><td class="py-2">Orchestrator write/read</td><td class="py-2">30 days</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">4.3.2 File Lifecycle Management</h4>
+            <p class="text-slate-600">When a user uploads a file via WhatsApp, the file is first streamed to the staging container with a unique identifier. The file is then scanned for malware using Azure Defender for Storage. Upon successful scanning, the file is moved to the documents container with appropriate metadata including the userId, original filename, and upload timestamp. If malware is detected, the file is quarantined and the user is notified of the security concern.</p>
+        </div>
+
+        <!-- Section 5: Security Architecture -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm">5</span>
+                Security Architecture
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">5.1 WhatsApp Authentication</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.1.1 Session Management</h4>
+            <p class="text-slate-600 mb-3">The Baileys WhatsApp library is used to connect to WhatsApp as a standard client. The authentication session is persisted to Azure Blob Storage, allowing session restoration after VM restarts without requiring QR code rescanning.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-3">
+                <pre class="mermaid">
+graph TB
+    subgraph Init["Initialization Flow"]
+        I1["VM Starts"]
+        I2["Systemd starts NanoClaw Orchestrator"]
+        I3["Check for existing session in Blob"]
+        I4["Session exists?"]
+    end
+
+    subgraph Auth["Authentication Decision"]
+        A1["Yes: Restore session from Blob"]
+        A2["No: Generate QR code, show in Admin UI"]
+        A3["Admin scans QR with WhatsApp"]
+        A4["Save session to Blob"]
+    end
+
+    subgraph Ready["Ready State"]
+        R1["Baileys connected to WhatsApp"]
+        R2["Start listening for messages"]
+        R3["Forward messages to Orchestrator"]
+    end
+
+    I1 --> I2 --> I3 --> I4
+    I4 -->|"Yes"| A1
+    I4 -->|"No"| A2
+    A1 --> Ready
+    A2 --> A3 --> A4 --> Ready
+
+    style Init fill:#e6f3ff
+    style Auth fill:#fff0e6
+    style Ready fill:#f0fff0
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.1.2 Admin QR Code Interface</h4>
+            <p class="text-slate-600 mb-3">The admin web interface provides a secure location for QR code scanning during initial setup. When a new session is required, the orchestrator generates a QR code and displays it through the admin web interface. Admins are notified via email when manual intervention is required for authentication. QR codes are only valid for five minutes before expiring. Failed scan attempts are logged for security monitoring. Multiple failed scans trigger an alert for potential unauthorized access attempts.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.1.3 Session Refresh</h4>
+            <p class="text-slate-600 mb-4">WhatsApp sessions typically remain valid for thirty days or longer. The system monitors session validity daily and alerts administrators seven days before expected expiration. If session renewal is required, the admin receives an email notification with instructions to access the admin interface and scan a new QR code.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">5.2 Document Save Authorization</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.2.1 Webhook Token Security</h4>
+            <p class="text-slate-600 mb-3">Document save confirmations use cryptographically secure one-time tokens that expire after fifteen minutes. Token generation uses the secrets.token_urlsafe function with thirty-two bytes of randomness, providing two hundred fifty-six bits of entropy. The token hash is stored in Cosmos DB using SHA-256 hashing. Tokens are validated using constant-time comparison to prevent timing attacks. Each token is immediately invalidated after single use to prevent replay attacks.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+sequenceDiagram
+    participant User as WhatsApp User
+    participant SA as Sub-Agent
+    participant CDB as Cosmos DB
+    participant VS as Vector Store
+
+    User->>SA: Upload document via WhatsApp
+    SA->>SA: Process and index document
+    SA->>CDB: Generate UUIDv4 token, store hash
+    SA-->>User: "Save to KB? Link expires in 15m"
+
+    User->>Browser: Click save link
+    Browser->>CDB: Validate token hash
+    CDB-->>Browser: Token valid, lock acquired
+
+    Browser->>SA: Trigger permanent ingestion
+    SA->>VS: Upsert with userId metadata
+    SA->>CDB: Delete token
+    SA-->>User: WhatsApp: "Saved to your KB!"
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.2.2 User Data Isolation</h4>
+            <p class="text-slate-600 mb-4">Complete isolation between users is achieved through multiple layers of enforcement. At the container level, each user runs in an isolated Docker container with separate filesystem and network namespaces. At the storage level, Cosmos DB queries always include userId in the partition key, ensuring queries never cross user boundaries. At the search level, all Azure AI Search queries include mandatory userId filtering that is validated programmatically before execution.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">5.3 Secrets Management</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.3.1 Azure Key Vault Configuration</h4>
+            <p class="text-slate-600 mb-3">All secrets are stored in Azure Key Vault with the following structure. All data-plane secrets (Cosmos DB keys, Blob connection strings, AI Search keys) are rotated every ninety days using Azure Key Vault's built-in rotation policies with Event Grid triggers. Managed Identity is used where supported (Cosmos DB, Blob, AI Search all support it), eliminating key rotation entirely for those services.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Secret Name</th>
+                            <th class="text-left py-2">Purpose</th>
+                            <th class="text-left py-2">Rotation Policy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-cosmos-endpoint</td><td class="py-2">Cosmos DB connection endpoint</td><td class="py-2">Manual</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-cosmos-key</td><td class="py-2">Cosmos DB primary key</td><td class="py-2">90 days (automated)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-blob-connstr</td><td class="py-2">Blob storage connection string</td><td class="py-2">90 days (automated)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-search-key</td><td class="py-2">Azure AI Search admin key</td><td class="py-2">90 days (automated)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-foundry-key</td><td class="py-2">Azure AI Foundry API key</td><td class="py-2">90 days (automated)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw-redis-key</td><td class="py-2">Redis connection password</td><td class="py-2">90 days (automated)</td></tr>
+                        <tr><td class="py-2">nanoclaw-admin-password</td><td class="py-2">Admin web interface password</td><td class="py-2">90 days (automated)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.3.2 Secret Access Patterns</h4>
+            <p class="text-slate-600 mb-4">The orchestrator retrieves secrets from Azure Key Vault at startup and caches them in memory for performance. Sub-agents receive secrets as environment variables passed during container creation. Environment variables are not stored in Docker images but rather injected at runtime. All secret access is logged to Azure Monitor for security auditing. Access patterns that deviate from expected behavior trigger security alerts.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">5.4 File Security and Sanitization</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.4.1 Supported File Types and Validation</h4>
+            <p class="text-slate-600 mb-3">The system accepts the following file types through careful MIME type validation using magic byte detection.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Extension</th>
+                            <th class="text-left py-2">MIME Type</th>
+                            <th class="text-left py-2">Handler</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">.pdf</td><td class="py-2">application/pdf</td><td class="py-2">PyMuPDF</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.docx</td><td class="py-2">application/vnd.openxmlformats-officedocument.wordprocessingml.document</td><td class="py-2">python-docx</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.xlsx</td><td class="py-2">application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</td><td class="py-2">openpyxl</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.pptx</td><td class="py-2">application/vnd.openxmlformats-officedocument.presentationml.presentation</td><td class="py-2">python-pptx</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.txt</td><td class="py-2">text/plain</td><td class="py-2">Built-in</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.csv</td><td class="py-2">text/csv</td><td class="py-2">pandas</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.md</td><td class="py-2">text/markdown</td><td class="py-2">Built-in</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">.jpg</td><td class="py-2">image/jpeg</td><td class="py-2">GPT-4o Vision</td></tr>
+                        <tr><td class="py-2">.png</td><td class="py-2">image/png</td><td class="py-2">GPT-4o Vision</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="text-slate-600 mb-3">Files with extensions that do not match their detected MIME type are rejected with an error message explaining the security concern. Executable files and archive formats other than standard Office documents are blocked.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.4.2 Malware Scanning</h4>
+            <p class="text-slate-600 mb-3">All uploaded files are scanned by Azure Defender for Storage before being processed. The scanning process operates asynchronously with a timeout of five minutes. Files that exceed the timeout are held in quarantine until scanning completes. Files identified as malware are deleted and the uploading user is notified with guidance on safe computing practices.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.4.3 Content Sanitization</h4>
+            <p class="text-slate-600 mb-4">PDF files are checked for encryption and script content. Password-protected PDFs are rejected with instructions to remove the password before uploading. PDFs containing embedded JavaScript or automatic actions are stripped of these elements before processing. Office documents are checked for macros and external links. Documents with macros are processed but users are warned about the security implications of macro-enabled files.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">5.5 Prompt Injection Prevention</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.5.1 Input Sanitization</h4>
+            <p class="text-slate-600 mb-3">All user inputs and document content are sanitized before being processed by the LLM. The sanitization process removes common prompt injection patterns using regular expression matching against known attack signatures. Control characters and non-printable characters are stripped from all text inputs. Input length is capped at ten thousand characters to prevent buffer overflow attempts.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">5.5.2 LLM Guardrails</h4>
+            <p class="text-slate-600">Azure Content Safety is integrated into the processing pipeline to detect and block harmful content. Both user inputs and LLM outputs are scanned for policy violations including hate speech, violence, and sexually explicit content. Policy violations result in the affected message being blocked and the user receiving an explanatory error message.</p>
+        </div>
+
+        <!-- Section 6: WhatsApp Integration -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm">6</span>
+                WhatsApp Integration
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">6.1 Message Handling</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">6.1.1 Incoming Message Processing</h4>
+            <p class="text-slate-600 mb-3">Incoming WhatsApp messages are processed through the following pipeline. The Baileys library receives the message and forwards it to the orchestrator. The orchestrator validates the message format and extracts the sender's phone number as the userId. Messages are categorized as text, file, image, or command. Text messages are queued for LLM processing. File and image messages are queued for document processing. Commands starting with a forward slash are processed as system commands.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">6.1.2 Message Rate Limiting</h4>
+            <p class="text-slate-600 mb-3">WhatsApp imposes rate limits on outgoing messages to prevent spam. The system implements a message queue with rate limiting to comply with these constraints. The rate limiter enforces a maximum of twenty messages per minute to any single user and two hundred messages per hour across all users. Messages exceeding these limits are queued and delivered when capacity becomes available. Users are not notified of queuing delays as the delays are typically minimal.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">6.1.3 Daily Notification Batching</h4>
+            <p class="text-slate-600 mb-4">Daily notifications are sent in batches with a three-second gap between each recipient to avoid triggering WhatsApp rate limits. The batch processor runs during off-peak hours to minimize the impact on regular message processing.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">6.2 Supported Message Types</h3>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Type</th>
+                            <th class="text-left py-2">Description</th>
+                            <th class="text-left py-2">Max Size</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">Text Messages</td><td class="py-2">Plain text processed by LLM with conversation history and knowledge base access</td><td class="py-2">Unlimited</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">File Messages</td><td class="py-2">PDF, DOCX, XLSX, PPTX, TXT, CSV, MD - downloaded, validated, and processed</td><td class="py-2">25 MB</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Image Messages</td><td class="py-2">JPG, PNG - processed using GPT-4o Vision for text extraction</td><td class="py-2">25 MB</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Voice Messages</td><td class="py-2">Not supported - users informed to send text instead</td><td class="py-2">N/A</td></tr>
+                        <tr><td class="py-2">Group Messages</td><td class="py-2">Not supported - only direct messages to admin account</td><td class="py-2">N/A</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 7: Document Processing Pipeline -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm">7</span>
+                Document Processing Pipeline
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">7.1 Upload Flow</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.1.1 Immediate Session Chat</h4>
+            <p class="text-slate-600 mb-3">When a user uploads a document via WhatsApp, the system immediately begins a temporary processing session. The document is streamed directly from WhatsApp to Azure Blob Storage staging area. The user receives an immediate acknowledgment message indicating that processing has started. During this phase, the document content is loaded into the sub-agent's temporary memory context. The user can immediately start chatting about the document while processing continues in the background.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.1.2 Document Processing Steps</h4>
+            <p class="text-slate-600 mb-3">Document processing follows a defined sequence of steps ensuring consistent handling and proper security validation.</p>
+            <ol class="list-decimal pl-6 text-slate-600 mb-4 space-y-1">
+                <li><strong>File Validation:</strong> File downloaded from WhatsApp and validated for format and size. Files exceeding 25 MB are rejected.</li>
+                <li><strong>MIME Type Validation:</strong> Magic byte validation confirms file type matches declared extension. Mismatched files are rejected.</li>
+                <li><strong>Malware Scanning:</strong> Azure Defender scans the file. File remains in staging until scanning completes successfully.</li>
+                <li><strong>Text Extraction:</strong> Document content converted to plain text using type-specific extractors.</li>
+                <li><strong>OCR (if needed):</strong> For image-based PDFs, GPT-4o Vision generates text descriptions of each page.</li>
+                <li><strong>Chunking:</strong> Extracted text split into chunks of 512 tokens with 50-token overlap between chunks.</li>
+                <li><strong>Embedding:</strong> Each chunk converted to vector embedding using text-embedding-3-large with 1536 dimensions.</li>
+                <li><strong>Indexing:</strong> Chunks uploaded to Azure AI Search with userId, filename, document type, and ingestion timestamp metadata.</li>
+            </ol>
+
+            <h3 class="font-bold text-slate-800 mb-2">7.2 Document Ingestion Pipeline</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.2.1 Text Extraction</h4>
+            <p class="text-slate-600 mb-3">The text extraction process uses specialized handlers for each file type to maximize extraction quality. For PDF files, PyMuPDF is used for text-based PDFs while GPT-4o Vision handles image-based PDFs. For DOCX files, python-docx extracts text with formatting preservation. For XLSX files, openpyxl extracts cell values and sheet names. For PPTX files, python-pptx extracts text from shapes and notes.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.2.2 Chunking Strategy</h4>
+            <p class="text-slate-600 mb-3">Documents are chunked using a recursive character splitter with the following parameters. The chunk size is 512 tokens, optimized for semantic coherence and LLM context efficiency. The overlap between chunks is 50 tokens (approximately 200 characters at 4 chars/token average), ensuring context continuity at chunk boundaries. Separators are applied in priority order: double newlines, single newlines, spaces, and individual characters.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.2.3 Embedding and Indexing</h4>
+            <p class="text-slate-600 mb-4">Each chunk is converted to a vector embedding using text-embedding-3-large with 1536 dimensions. Embedding generation uses batch processing with a batch size of 50 chunks per API call. Rate limiting is applied with exponential backoff to handle Azure AI Foundry token-per-minute limits. Failed batches are retried up to five times with delays of 1, 2, 4, 8, and 16 seconds.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">7.3 Knowledge Base Management</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.3.1 Permanent Storage Options</h4>
+            <p class="text-slate-600 mb-3">After initial processing, users are offered the option to permanently save documents to their knowledge base. The confirmation is delivered as a clickable link that expires after 15 minutes. When the user clicks the confirmation link, a webhook request is sent to the orchestrator. The orchestrator validates the token from the URL against the stored hash. If valid, the document is marked as permanent in the vector store. The temporary staging copy is deleted after successful permanent storage.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.3.2 Auto-Save Configuration</h4>
+            <p class="text-slate-600 mb-3">Users can configure automatic permanent storage through their preference settings. When auto-save is enabled, documents are automatically indexed without requiring confirmation clicks. This option is recommended for users who trust the documents they upload.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.3.3 Document Management Commands</h4>
+            <p class="text-slate-600 mb-4">Users can manage their knowledge base through natural language commands. The /list command shows all indexed documents with file names and dates. The /delete [filename] command removes a specific document from the knowledge base. The /update command re-processes and updates an existing document with the latest version.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">7.4 Slide Generation</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.4.1 Template System</h4>
+            <p class="text-slate-600 mb-3">The slide generation feature produces PowerPoint presentations from document summaries and user requests. The system includes four pre-built templates that users can select from.</p>
+            <ul class="list-disc pl-6 text-slate-600 mb-3 space-y-1">
+                <li><strong>Corporate:</strong> Professional design with blue color scheme, company-appropriate fonts, structured layouts suitable for business presentations.</li>
+                <li><strong>Modern:</strong> Emphasizes clean lines and contemporary aesthetics with bold colors and minimal clutter.</li>
+                <li><strong>Elegant:</strong> Uses refined typography and subtle animations for high-end presentations.</li>
+                <li><strong>Informative:</strong> Prioritizes data visualization with charts, graphs, and structured information hierarchy.</li>
+            </ul>
+
+            <h4 class="font-semibold text-slate-700 mb-1">7.4.2 User Template Selection</h4>
+            <p class="text-slate-600 mb-3">Users can select their preferred template through natural language commands such as "create slides using the modern template" or "make a presentation with the corporate style." The system remembers the selected template in user preferences for future use. Users can also upload custom PowerPoint templates through the admin interface. Custom templates must follow the standard PowerPoint template format and are validated before being made available to users.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+graph TB
+    subgraph Trigger["Slide Generation Trigger"]
+        T1["User requests slides via WhatsApp"]
+        T2["System extracts document context"]
+    end
+
+    subgraph Generation["Content Generation"]
+        G1["LLM generates summary structure"]
+        G2["LLM creates slide content"]
+        G3["User confirms or modifies outline"]
+    end
+
+    subgraph Assembly["Slide Assembly"]
+        A1["Load selected template"]
+        A2["Generate slide objects"]
+        A3["Apply formatting and styles"]
+        A4["Export to PPTX format"]
+    end
+
+    subgraph Delivery["Delivery"]
+        D1["Upload PPTX to Blob Storage"]
+        D2["Send document via WhatsApp"]
+        D3["Save to chat history"]
+    end
+
+    T1 --> T2 --> G1 --> G2 --> G3 --> A1 --> A2 --> A3 --> A4 --> D1 --> D2 --> D3
+
+    style Trigger fill:#e6f3ff
+    style Generation fill:#fff0e6
+    style Assembly fill:#f0fff0
+    style Delivery fill:#fff5e6
+                </pre>
+            </div>
+        </div>
+
+        <!-- Section 8: AI and RAG Configuration -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-sm">8</span>
+                AI and RAG Configuration
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">8.1 Large Language Model Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.1.1 Model Selection</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Model</td><td class="py-2">gpt-4o</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Context Window</td><td class="py-2">128,000 tokens</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Max Output</td><td class="py-2">4,096 tokens</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Default Temperature</td><td class="py-2">0.5 (balanced creativity and precision)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Summary Temperature</td><td class="py-2">0.3 (more factual, less creative)</td></tr>
+                        <tr><td class="py-2 font-semibold">Creative Temperature</td><td class="py-2">0.8 (used for slide generation)</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.1.2 Task-Specific Configuration</h4>
+            <p class="text-slate-600 mb-3">For conversational chat, the temperature is set to 0.5 with a maximum of 4,096 output tokens. The system prompt emphasizes concise responses under 500 words and clear citation of sources. For document summarization, the temperature is set to 0.3 to prioritize accuracy over creativity. The system prompt instructs the model to extract key points and organize them logically. For slide generation, the temperature is set to 0.8 to enable creative formatting suggestions. The system prompt emphasizes structure and visual hierarchy. For question answering with RAG, the temperature is set to 0.2 to minimize hallucination and maximize factual accuracy. The system prompt instructs the model to answer only from provided context and to clearly indicate when information is not available.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.1.3 System Prompts</h4>
+            <p class="text-slate-600 mb-4">The default system prompt establishes the assistant's identity and behavioral guidelines. You are NanoClaw, an AI assistant helping users through WhatsApp. Keep responses concise and under 500 words unless detailed explanations are requested. Always cite sources when using information from retrieved documents using the format Source: filename.pdf, page X. If the retrieved information does not contain the answer, clearly state that you could not find the information. Never make up facts or cite documents that were not actually retrieved. Use bullet points for lists and numbered lists for sequences. When generating code, include comments and ensure the code is complete and functional.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">8.2 RAG Pipeline Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.2.1 Retrieval Strategy</h4>
+            <p class="text-slate-600 mb-3">The retrieval system uses a hybrid approach combining vector similarity search with keyword matching. Vector search uses cosine similarity with a minimum threshold of 0.7. The top candidate chunks are retrieved based on embedding similarity. Keyword search uses Azure AI Search's built-in BM25 ranking for exact term matching. Results from both methods are combined with vector results weighted at 70% and keyword results at 30%. A cross-encoder reranker is applied to the combined results to improve relevance ordering. The top 3 chunks after reranking are provided to the LLM as context.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.2.2 Context Formatting</h4>
+            <p class="text-slate-600 mb-3">Retrieved chunks are formatted for the LLM with clear attribution and source information. The context block includes the chunk text, the original document filename, the page number if available, and the relevance score as an indication of confidence. This formatting allows the LLM to accurately cite sources and understand the provenance of information.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.2.3 Long-Term Memory</h4>
+            <p class="text-slate-600 mb-4">The system maintains conversation history in Cosmos DB, enabling the agent to reference discussions from previous days and weeks. The retrieval process includes the user's conversation history when generating responses. The system retrieves the last 30 messages in chronological order, providing up to 3,000 tokens of conversation context. This history enables the agent to maintain context across multiple sessions and reference previous discussions when relevant.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">8.3 Embedding Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.3.1 Embedding Model</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Model</td><td class="py-2">text-embedding-3-large</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Dimensions</td><td class="py-2">1536</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Max Input</td><td class="py-2">8,191 tokens</td></tr>
+                        <tr><td class="py-2 font-semibold">Cost per 1M tokens</td><td class="py-2">$0.13</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.3.2 Chunking Strategy</h4>
+            <p class="text-slate-600 mb-4">Documents are chunked using a recursive character splitter with the following parameters. The chunk size is 512 tokens, optimized for semantic coherence and LLM context efficiency. The overlap between chunks is 50 tokens, ensuring context continuity at chunk boundaries. Separators are applied in priority order: double newlines, single newlines, spaces, and individual characters.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">8.3.3 Batch Processing</h4>
+            <p class="text-slate-600">Embedding generation uses batch processing to optimize throughput and reduce API call overhead. The batch size is 50 chunks per API call. Rate limiting is applied with exponential backoff to handle Azure AI Foundry token-per-minute limits. Failed batches are retried up to 5 times with delays of 1, 2, 4, 8, and 16 seconds.</p>
+        </div>
+
+        <!-- Section 9: Operations and Monitoring -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full text-sm">9</span>
+                Operations and Monitoring
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">9.1 Azure Monitor Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.1.1 Metrics Collection</h4>
+            <p class="text-slate-600 mb-3">The system collects and reports the following metrics to Azure Monitor for real-time monitoring and historical analysis.</p>
+            <ul class="list-disc pl-6 text-slate-600 mb-3 space-y-1">
+                <li><strong>Container metrics:</strong> Count of active sub-agent containers, memory usage per container, CPU usage per container, and container restart events.</li>
+                <li><strong>Application metrics:</strong> Messages processed per minute, average message processing time, document processing time by file type, LLM API call latency, and vector search latency.</li>
+                <li><strong>Infrastructure metrics:</strong> VM CPU utilization, VM memory utilization, disk I/O, and network traffic.</li>
+                <li><strong>Azure service metrics:</strong> Cosmos DB request units consumed, Cosmos DB throttle events, Azure AI Search query count, and Azure AI Foundry token usage.</li>
+            </ul>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.1.2 Alert Rules</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Alert Name</th>
+                            <th class="text-left py-2">Condition</th>
+                            <th class="text-left py-2">Severity</th>
+                            <th class="text-left py-2">Notification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">High Error Rate</td><td class="py-2">>10 errors in 5 minutes</td><td class="py-2">Warning</td><td class="py-2">Email</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Sub-Agent OOM</td><td class="py-2">Container exits with code 137</td><td class="py-2">Critical</td><td class="py-2">SMS + Email</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Cosmos Throttling</td><td class="py-2">RU/s > 80% consumed</td><td class="py-2">Warning</td><td class="py-2">Email</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Docker Down</td><td class="py-2">Docker daemon unreachable</td><td class="py-2">Critical</td><td class="py-2">SMS + Email</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">High Latency</td><td class="py-2">Message processing > 60 seconds</td><td class="py-2">Warning</td><td class="py-2">Email</td></tr>
+                        <tr><td class="py-2">Session Expiring</td><td class="py-2">WhatsApp session < 7 days</td><td class="py-2">Warning</td><td class="py-2">Email</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.1.3 Dashboard</h4>
+            <p class="text-slate-600 mb-4">The operations dashboard provides a real-time overview of system health. The dashboard includes a system overview panel showing active users, messages per minute, and error rate. A container health panel showing the status of all sub-agent containers with resource utilization. An Azure services health panel showing the status of connected Azure services. A recent alerts panel showing the most recent system alerts with timestamps and resolution status.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">9.2 Logging Configuration</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.2.1 Log Categories</h4>
+            <p class="text-slate-600 mb-3">The system generates logs at multiple levels with different purposes. INFO level logs capture normal operational events including message receipts, processing completions, and scheduled task executions. These logs are retained for 30 days and used for operational monitoring and user support. WARNING level logs capture non-critical issues including rate limit activations, retry attempts, and degraded performance. These logs are retained for 60 days and trigger monitoring alerts. ERROR level logs capture failures including API errors, container crashes, and security events. These logs are retained for 90 days and trigger immediate alerts.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.2.2 Log Storage</h4>
+            <p class="text-slate-600 mb-3">All logs are written to multiple destinations for redundancy and analysis. Local files on the VM provide fast access for troubleshooting and are rotated daily with 30-day retention. Azure Monitor Application Insights provides centralized aggregation and alerting. Azure Blob Storage archives logs for long-term retention and compliance purposes.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">9.2.3 Sensitive Data Handling</h4>
+            <p class="text-slate-600 mb-4">The logging system automatically redacts sensitive information from log entries. Fields including passwords, tokens, API keys, and session data are replaced with placeholder text before logging. Chat message content is logged as metadata including message length and type without the actual content.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">9.3 Scheduled Tasks</h3>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Task</th>
+                            <th class="text-left py-2">Schedule</th>
+                            <th class="text-left py-2">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Daily Notification Job</td>
+                            <td class="py-2">9:00 AM SGT daily</td>
+                            <td class="py-2">Generates personalized briefings and sends via WhatsApp with 3-second delay between recipients</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Session Health Check</td>
+                            <td class="py-2">Hourly</td>
+                            <td class="py-2">Verifies WhatsApp connection remains active, alerts admin if session expired</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Dead Letter Queue</td>
+                            <td class="py-2">Every 6 hours</td>
+                            <td class="py-2">Retries failed document ingestion jobs up to 3 times</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2">Log Cleanup</td>
+                            <td class="py-2">Daily</td>
+                            <td class="py-2">Removes log files older than retention period</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 10: Deployment and CI/CD -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-sm">10</span>
+                Deployment and CI/CD
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">10.1 Infrastructure as Code</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.1.1 Azure Resource Manager Templates</h4>
+            <p class="text-slate-600 mb-3">All Azure resources are deployed using Azure Resource Manager (ARM) templates. This approach ensures consistent, repeatable deployments with version control for infrastructure changes. The ARM templates include: virtual network with subnets and network security groups, virtual machine with all required configurations, managed disks for data storage, Azure Cosmos DB with containers and throughput settings, Azure AI Search service with index definitions, Azure Blob Storage with containers and access policies, Azure Key Vault with secret definitions and access policies, and Azure Monitor with alert rules and dashboard configuration.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.1.2 Terraform Alternative</h4>
+            <p class="text-slate-600 mb-3">If Terraform is preferred over ARM templates, the same infrastructure can be defined using Terraform configuration files. The Terraform approach provides additional flexibility for multi-cloud deployments and more sophisticated state management. All Terraform configurations are stored in the infrastructure/ directory and version controlled alongside application code.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.1.3 Deployment Process</h4>
+            <p class="text-slate-600 mb-4">The infrastructure deployment process follows a defined sequence to ensure dependencies are satisfied. First, the virtual network and network security groups are deployed. Second, the Azure Key Vault is deployed to enable secret storage. Third, the Cosmos DB and Azure AI Search are deployed. Fourth, the virtual machine is deployed with all required configurations. Fifth, the nanoClaw application is deployed and configured.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">10.2 GitHub Actions CI/CD Pipeline</h3>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+flowchart LR
+    subgraph PR["Pull Request"]
+        LINT["Lint<br/>(ruff, black)"]
+        TEST["Unit Tests<br/>(pytest)"]
+        SCAN["Security Scan<br/>(bandit, safety)"]
+    end
+
+    subgraph MAIN["Merge to Main"]
+        BUILD["Build Image<br/>(docker build)"]
+        PUSH["Push to ACR<br/>(az acr push)"]
+    end
+
+    subgraph STAGING["Deploy Staging"]
+        DEPLOY_STG["Deploy to Staging<br/>(terraform apply)"]
+        SMOKE["Smoke Tests<br/>(k6)"]
+    end
+
+    subgraph PROD["Promote to Production"]
+        DEPLOY_PROD["Deploy to Production<br/>(rolling update)"]
+        MONITOR["Monitor 10min"]
+        ROLLBACK{"Health OK?"}
+    end
+
+    PR --> LINT --> TEST --> SCAN -->|"Pass"| BUILD
+    BUILD --> PUSH --> DEPLOY_STG --> SMOKE -->|"Pass"| DEPLOY_PROD
+    DEPLOY_PROD --> MONITOR --> ROLLBACK
+    ROLLBACK -->|"No"| ROLLBACK_IMG["Rollback to<br/>previous image"]
+    ROLLBACK -->|"Yes"| DONE["Done"]
+
+    style PR fill:#e6f3ff
+    style MAIN fill:#fff0e6
+    style STAGING fill:#f0fff0
+    style PROD fill:#fff5e6
+                </pre>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.2.1 Pipeline Stages</h4>
+            <ol class="list-decimal pl-6 text-slate-600 mb-3 space-y-1">
+                <li><strong>Test Stage (on PR):</strong> Linting with ruff and black, unit tests with pytest (80% coverage required), security scanning with Bandit and Safety.</li>
+                <li><strong>Build Stage (on merge to main):</strong> Docker image builds for orchestrator and agent, image tagging with git commit hash, push to Azure Container Registry.</li>
+                <li><strong>Deploy Staging Stage:</strong> Terraform applies infrastructure changes, application deployment to staging environment, smoke tests with k6.</li>
+                <li><strong>Promote to Production Stage:</strong> Manual approval required, rolling update deployment, 10-minute monitoring period, automatic rollback on health check failure.</li>
+            </ol>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.2.2 Rollback Procedure</h4>
+            <p class="text-slate-600 mb-3">If a deployment fails health checks, automatic rollback restores the previous version. The rollback process stops the failed deployment and starts containers with the last known good image tag. Rollback verification ensures the system returns to a healthy state. Rollback can also be triggered manually via GitHub Actions UI.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">10.2.3 Environment Configuration</h4>
+            <p class="text-slate-600 mb-4">Each environment has its own configuration file with environment-specific values. The staging environment uses reduced resource allocations and isolated Azure resources. The production environment uses full resource allocations and high-availability configurations. Secrets are managed through GitHub Actions secrets for CI/CD operations and Azure Key Vault for runtime operations. No secrets are stored in configuration files or source code.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">10.3 Container Registry</h3>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Image</th>
+                            <th class="text-left py-2">Description</th>
+                            <th class="text-left py-2">Tag Convention</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">nanoclaw/orchestrator</td><td class="py-2">Main orchestrator service</td><td class="py-2">{git-hash}, latest</td></tr>
+                        <tr><td class="py-2">nanoclaw/agent</td><td class="py-2">Sub-agent container image</td><td class="py-2">{git-hash}, latest</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 11: Testing Strategy -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm">11</span>
+                Testing Strategy
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">11.1 Unit Testing</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.1.1 Coverage Requirements</h4>
+            <p class="text-slate-600 mb-3">All code modules must have unit tests achieving at least 80% code coverage. Coverage is measured using coverage.py and reported in the CI/CD pipeline. New features require accompanying unit tests before merging.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.1.2 Test Categories and Tools</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Category</th>
+                            <th class="text-left py-2">Tool</th>
+                            <th class="text-left py-2">Coverage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">Container Manager</td><td class="py-2">pytest + pytest-mock</td><td class="py-2">Lifecycle operations, spawn/kill logic</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">File Sanitizer</td><td class="py-2">pytest + hypothesis</td><td class="py-2">MIME validation, malware detection</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Rate Limiter</td><td class="py-2">pytest-asyncio</td><td class="py-2">Throttling behavior, queue overflow</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Token Generator</td><td class="py-2">pytest</td><td class="py-2">Cryptographic randomness, hash verification</td></tr>
+                        <tr><td class="py-2">Preferences</td><td class="py-2">pytest</td><td class="py-2">Storage, retrieval, defaults</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.1.3 Pass Criteria</h4>
+            <p class="text-slate-600 mb-4">All unit tests must pass with 100% pass rate. Coverage must not decrease below 80% on any module. Linting must pass with zero errors. Type checking (mypy) must pass with zero errors.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">11.2 Integration Testing</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.2.1 Service Integration Tests</h4>
+            <p class="text-slate-600 mb-3">Integration tests verify correct operation of service-to-service communication. Cosmos DB integration tests verify read and write operations with the actual database service using test containers. Blob storage integration tests verify file upload, download, and deletion operations using Azurite (local emulator). Azure AI Search integration tests verify indexing and search operations using a test index.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.2.2 Mock Strategy</h4>
+            <p class="text-slate-600 mb-4">Integration tests use test doubles for external services that are expensive or unavailable in the test environment. Azure OpenAI is mocked using predefined responses for consistent testing. WhatsApp Baileys is mocked for unit and integration tests, with real testing performed only in E2E environments. HTTP calls are intercepted using responses or vcrpy for replay.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">11.3 End-to-End Testing</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.3.1 Test Scenarios</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Scenario</th>
+                            <th class="text-left py-2">Description</th>
+                            <th class="text-left py-2">Expected Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">WhatsApp Message Flow</td><td class="py-2">Send message, receive response</td><td class="py-2">Response within 30 seconds, correct content</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Document Upload Flow</td><td class="py-2">Upload file, process, query content</td><td class="py-2">File indexed, queries return correct results</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Notification Flow</td><td class="py-2">Daily briefing generation and delivery</td><td class="py-2">Notification sent at scheduled time</td></tr>
+                        <tr><td class="py-2">Slide Generation Flow</td><td class="py-2">Request presentation from document</td><td class="py-2">PPTX generated and delivered via WhatsApp</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.3.2 Test Account Management</h4>
+            <p class="text-slate-600 mb-4">E2E tests use a dedicated WhatsApp test account that is separate from production. The test account is configured with test users and test documents. Test execution can be scheduled or triggered manually via GitHub Actions. Test data is cleaned up after each test run to maintain consistency.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">11.4 Load Testing</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.4.1 Load Testing with k6</h4>
+            <p class="text-slate-600 mb-3">The load testing script simulates concurrent WhatsApp messages to verify system behavior under load. The test starts with 5 concurrent users and increases by 5 users every 5 minutes until reaching 50 users. Metrics collected include response time percentiles (P50, P95, P99), error rate, and resource utilization.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Stage</th>
+                            <th class="text-left py-2">Users</th>
+                            <th class="text-left py-2">Duration</th>
+                            <th class="text-left py-2">Pass Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">Baseline</td><td class="py-2">5</td><td class="py-2">5 min</td><td class="py-2">P95 latency < 10s</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Ramp</td><td class="py-2">5 → 25</td><td class="py-2">20 min</td><td class="py-2">P95 latency < 20s, error rate < 1%</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Peak</td><td class="py-2">50</td><td class="py-2">5 min</td><td class="py-2">P95 latency < 30s, error rate < 5%</td></tr>
+                        <tr><td class="py-2">Sustain</td><td class="py-2">50</td><td class="py-2">10 min</td><td class="py-2">No memory leaks, containers stable</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.4.2 Stress Testing</h4>
+            <p class="text-slate-600 mb-4">Stress testing pushes the system beyond normal capacity to identify failure modes. CPU is stressed to 100% to verify graceful degradation. Memory is stressed by spawning maximum allowed containers. Network is stressed by sending burst message patterns. All stress tests must complete without data corruption or state leakage between users.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">11.5 Security Testing</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.5.1 Security Scanning Tools</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Tool</th>
+                            <th class="text-left py-2">Purpose</th>
+                            <th class="text-left py-2">Frequency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">Bandit</td><td class="py-2">Python security linter</td><td class="py-2">Every PR</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Safety</td><td class="py-2">Dependency vulnerability scanner</td><td class="py-2">Every PR</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">OWASP ZAP</td><td class="py-2">Web API penetration testing</td><td class="py-2">Weekly</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Trivy</td><td class="py-2">Container image vulnerability scanning</td><td class="py-2">Every build</td></tr>
+                        <tr><td class="py-2">Semgrep</td><td class="py-2">Static application security testing (SAST)</td><td class="py-2">Every PR</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">11.5.2 Penetration Testing</h4>
+            <p class="text-slate-600 mb-4">Quarterly penetration testing is conducted by an external security firm. Tests include: container escape attempts, data isolation verification between users, webhook token security validation, and prompt injection attack simulation. All critical findings must be remediated within 30 days. High findings within 60 days.</p>
+        </div>
+
+        <!-- Section 12: Compliance and Legal -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-sm">12</span>
+                Compliance and Legal
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">12.1 WhatsApp Terms of Service</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.1.1 Risk Acknowledgment</h4>
+            <p class="text-slate-600 mb-3">The use of Baileys for WhatsApp integration represents a ToS risk that has been acknowledged and accepted by the project stakeholders. WhatsApp prohibits automated messaging through unofficial clients and may ban accounts found violating this policy.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.1.2 Mitigation Measures</h4>
+            <p class="text-slate-600 mb-3">The following measures are implemented to minimize the risk of account termination. The system uses a dedicated WhatsApp account that is not used for personal messaging. Message rates are kept well below suspicious thresholds. The system follows WhatsApp's official API capabilities as closely as possible within the constraints of Baileys.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.1.3 Contingency Planning</h4>
+            <p class="text-slate-600 mb-4">If the WhatsApp account is banned, the system can be migrated to WhatsApp Business API with minimal code changes. The architecture supports swapping the Baileys bridge for official API integration without affecting other components. Migration timeline is estimated at 2 weeks for full integration.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">12.2 Data Protection (PDPA Compliance)</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.2.1 Consent Collection</h4>
+            <p class="text-slate-600 mb-3">User consent is obtained before storing personal information. The consent mechanism includes: clear explanation of data collected and purpose of collection, opt-in consent checkbox during user registration, ability to withdraw consent at any time via /privacy command, and annual consent renewal reminders via WhatsApp notification.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.2.2 Data Subject Access Requests (DSAR)</h4>
+            <p class="text-slate-600 mb-3">Users can request access to their personal data through the /export command. The system generates a complete export of: all chat messages, uploaded documents (as links), preference settings, and notification history. Export is delivered via WhatsApp within 24 hours. Users can also request correction of inaccurate personal data through the /help command.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.2.3 Breach Notification (72-Hour Rule)</h4>
+            <p class="text-slate-600 mb-3">In the event of a data breach, the following procedures are followed. The incident is reported to the Data Protection Officer within 24 hours of discovery. Assessment of breach severity is completed within 48 hours. If the breach poses significant risk, affected users are notified via WhatsApp within 72 hours of discovery. The PDPC (Personal Data Protection Commission) is notified if required under PDPA obligations.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.2.4 Data Retention Justification</h4>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Data Type</th>
+                            <th class="text-left py-2">Retention Period</th>
+                            <th class="text-left py-2">Justification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">Chat messages</td><td class="py-2">90 days</td><td class="py-2">Conversation continuity for user experience</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">User preferences</td><td class="py-2">Until user deletion</td><td class="py-2">Service functionality</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">Uploaded documents</td><td class="py-2">Until user deletion</td><td class="py-2">User-controlled knowledge base</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">System errors</td><td class="py-2">30 days</td><td class="py-2">Debugging and security monitoring</td></tr>
+                        <tr><td class="py-2">Audit logs</td><td class="py-2">1 year</td><td class="py-2">Compliance and forensic analysis</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.2.5 Right to be Forgotten</h4>
+            <p class="text-slate-600 mb-4">Users can request complete deletion of their data through the /deleteaccount command. The deletion process removes: all chat messages from Cosmos DB, all user preferences, all indexed documents from Azure AI Search, all uploaded files from Blob Storage, and the user's WhatsApp session data. Deletion is completed within 30 days of request. User receives confirmation message upon completion.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">12.3 Data Residency</h3>
+            <p class="text-slate-600 mb-3">All data is stored in the Southeast Asia region (Singapore) to ensure data residency compliance for Singapore-based deployments. Azure services are configured with the Singapore Southeast Asia region as the primary location. No data is transferred outside the region except for Azure AI Foundry calls which remain within the Azure boundary.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">12.4 Audit Trails</h3>
+            <p class="text-slate-600 mb-4">All data access is logged with timestamps, user identification, and action type. Audit logs are retained for one year for compliance purposes. Audit log access is restricted to authorized personnel only. Quarterly audit reports are generated and reviewed by the Data Protection Officer.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">12.5 Corporate Compliance</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.5.1 Document Classification</h4>
+            <p class="text-slate-600 mb-3">Corporate documents are not classified by sensitivity level in the initial implementation. Administrators are responsible for not uploading sensitive documents to the corporate knowledge base. Users are responsible for not uploading sensitive documents to their personal knowledge bases. Future iterations may include document classification functionality.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">12.5.2 User Training</h4>
+            <p class="text-slate-600">Before accessing the system, users receive training on appropriate use including what types of documents can be uploaded and what information should not be shared via WhatsApp. Training materials are delivered via the admin web interface and are mandatory before first use.</p>
+        </div>
+
+        <!-- Section 13: Scaling Strategy -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-sm">13</span>
+                Scaling Strategy
+            </h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">13.1 Current Capacity</h3>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.1.1 User Capacity</h4>
+            <p class="text-slate-600 mb-3">The E16s_v3 VM configuration supports up to 100 concurrent users under normal load conditions. This capacity assumes average message processing requiring moderate LLM calls and document processing limited to typical file sizes.</p>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-3">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">User Count</th>
+                            <th class="text-left py-2">Memory Required</th>
+                            <th class="text-left py-2">CPU Load</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2">5</td><td class="py-2">5 GB</td><td class="py-2">Light</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">20</td><td class="py-2">12 GB</td><td class="py-2">Moderate</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2">50</td><td class="py-2">28 GB</td><td class="py-2">High</td></tr>
+                        <tr><td class="py-2">100</td><td class="py-2">56 GB</td><td class="py-2">Maximum</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.1.2 Scaling Triggers</h4>
+            <p class="text-slate-600 mb-4">The following conditions trigger capacity review and potential scaling actions. Active user count exceeds 70% of current capacity for 5 consecutive minutes. Average message processing time exceeds 30 seconds. Container count frequently reaches the configured maximum.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.1.3 Vertical Scaling</h4>
+            <p class="text-slate-600 mb-4">Vertical scaling to a larger VM instance provides the simplest capacity increase path. The recommended progression is E16s_v3 to E20s_v3 for additional headroom and to E32s_v3 for maximum single-VM capacity.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">13.2 Horizontal Scaling Strategy</h3>
+
+            <div class="bg-red-50 p-4 rounded-lg border border-red-200 mb-4">
+                <p class="text-red-800 font-semibold mb-2">Important Architectural Constraint — WhatsApp Session Affinity</p>
+                <p class="text-red-700 text-sm">The Baileys WebSocket connection is stateful and bound to a single phone number. In a horizontal scaling scenario with multiple VMs behind a load balancer, WhatsApp traffic must be routed to the correct VM that holds the active Baileys session. Without session affinity, routing WhatsApp traffic to a second VM will break the connection.</p>
+            </div>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.2.1 Sticky Sessions (Load Balancer Configuration)</h4>
+            <p class="text-slate-600 mb-3">For horizontal scaling, configure the Azure Load Balancer with sticky sessions based on source IP address. This ensures all traffic from a given WhatsApp user is routed to the same VM for the duration of their session. The load balancer configuration includes: Rule for WhatsApp traffic with source IP affinity, session persistence duration of 8 hours (matches WhatsApp session timeout), and health probe on port 443 with 3-second interval.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.2.2 Alternative: Dedicated Baileys VM</h4>
+            <p class="text-slate-600 mb-3">As an alternative to sticky sessions, designate one VM as the dedicated Baileys host while scaling sub-agent traffic horizontally across other VMs. The WhatsApp handler runs only on the designated Baileys VM, which forwards messages to sub-agents on the scaled VM pool via internal load balancing. This approach eliminates session affinity concerns but introduces a single point of failure for WhatsApp connectivity.</p>
+
+            <h4 class="font-semibold text-slate-700 mb-1">13.2.3 WhatsApp Cloud API Migration (Future)</h4>
+            <p class="text-slate-600 mb-4">For stateless horizontal scaling, migrate to WhatsApp Cloud API (Meta's official API). This eliminates the stateful Baileys session entirely as Cloud API is inherently stateless. Estimated migration effort is 2-4 weeks. The architecture is designed to support this migration with minimal code changes.</p>
+
+            <div class="mermaid-container bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <pre class="mermaid">
+graph TB
+    subgraph LB["Azure Load Balancer"]
+        LBP["Public IP:443"]
+        STICKY["Sticky Sessions<br/>(Source IP Affinity)"]
+    end
+
+    subgraph BaileysPool["WhatsApp Tier"]
+        BVM1["Baileys VM 1<br/>(E4s_v3)"]
+        BVM2["Baileys VM 2<br/>(E4s_v3)"]
+    end
+
+    subgraph AgentPool["Sub-Agent Tier"]
+        AVM1["Agent VM 1<br/>(E16s_v3)"]
+        AVM2["Agent VM 2<br/>(E16s_v3)"]
+    end
+
+    subgraph Services["Shared Services"]
+        REDIS["Azure Cache<br/>for Redis"]
+        COSMOS["Azure Cosmos DB"]
+        SEARCH["Azure AI Search"]
+    end
+
+    LBP --> STICKY
+    STICKY -->|"Route to correct Baileys VM"| BVM1
+    STICKY -->|"Same user stays on same VM"| BVM2
+
+    BVM1 -->|"Internal LB"| AVM1
+    BVM1 -->|"Internal LB"| AVM2
+    BVM2 -->|"Internal LB"| AVM1
+    BVM2 -->|"Internal LB"| AVM2
+
+    AVM1 -->|"Shared State"| REDIS
+    AVM2 -->|"Shared State"| REDIS
+
+    AVM1 --> COSMOS
+    AVM2 --> COSMOS
+
+    AVM1 --> SEARCH
+    AVM2 --> SEARCH
+
+    style LB fill:#e6f3ff
+    style BaileysPool fill:#fff0e6
+    style AgentPool fill:#f0fff0
+    style Services fill:#fff5e6
+                </pre>
+            </div>
+
+        <!-- Section 14: Implementation Phases -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-slate-200 text-slate-700 px-3 py-1 rounded-full text-sm">14</span>
+                Implementation Phases
+            </h2>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Phase</th>
+                            <th class="text-left py-2">Duration</th>
+                            <th class="text-left py-2">Key Deliverables</th>
+                            <th class="text-left py-2">Dependencies</th>
+                            <th class="text-left py-2">Exit Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2 font-semibold">Phase A: Core System</td>
+                            <td class="py-2">8 weeks</td>
+                            <td class="py-2">
+                                <ul class="list-disc pl-4 text-xs">
+                                    <li>Deployed Azure VM with all configs</li>
+                                    <li>NanoClaw orchestrator as systemd service</li>
+                                    <li>Sub-agent containers with FastAPI</li>
+                                    <li>Baileys WhatsApp integration with admin QR</li>
+                                    <li>Cosmos DB with 4 containers, provisioned RU/s</li>
+                                    <li>Azure AI Search with documents index</li>
+                                    <li>Basic monitoring dashboards</li>
+                                </ul>
+                            </td>
+                            <td class="py-2 text-xs">Azure subscription, WhatsApp number, domain for admin UI</td>
+                            <td class="py-2 text-xs">
+                                <ul class="list-disc pl-4">
+                                    <li>E2E test: Send message, receive response</li>
+                                    <li>Load test: 5 concurrent users, P95 < 10s</li>
+                                    <li>Security scan: Zero critical findings</li>
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2 font-semibold">Phase B: Personalization & Advanced Features</td>
+                            <td class="py-2">8 weeks</td>
+                            <td class="py-2">
+                                <ul class="list-disc pl-4 text-xs">
+                                    <li>User preference management with configurable notifications</li>
+                                    <li>Daily notification generation and delivery</li>
+                                    <li>PowerPoint generation with 4 templates</li>
+                                    <li>Conversation history retrieval (90-day context)</li>
+                                    <li>Admin CLI tool for corporate document ingestion</li>
+                                    <li>Document management commands (/list, /delete)</li>
+                                </ul>
+                            </td>
+                            <td class="py-2 text-xs">Phase A complete, Azure AI Foundry deployed</td>
+                            <td class="py-2 text-xs">
+                                <ul class="list-disc pl-4">
+                                    <li>E2E test: Notification sent and received</li>
+                                    <li>E2E test: Slide generated and delivered</li>
+                                    <li>Document processing: < 2 min for 10MB file</li>
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="py-2 font-semibold">Phase C: Optimization & Hardening</td>
+                            <td class="py-2">4 weeks</td>
+                            <td class="py-2">
+                                <ul class="list-disc pl-4 text-xs">
+                                    <li>Performance testing reports with optimization</li>
+                                    <li>Security assessment with remediation</li>
+                                    <li>Monitoring dashboards with all alerts</li>
+                                    <li>Disaster recovery documentation and tested procedures</li>
+                                    <li>PDPA compliance documentation</li>
+                                </ul>
+                            </td>
+                            <td class="py-2 text-xs">Phase A and B complete, production data</td>
+                            <td class="py-2 text-xs">
+                                <ul class="list-disc pl-4">
+                                    <li>Load test: 50 concurrent users, P95 < 30s</li>
+                                    <li>Penetration test: Zero critical/high findings</li>
+                                    <li>DR test: Recovery within 30 minutes</li>
+                                </ul>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section 15: Glossary and Terminology -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span class="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm">15</span>
+                Glossary and Terminology
+            </h2>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Term</th>
+                            <th class="text-left py-2">Definition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">NanoClaw Orchestrator</td><td class="py-2">The central service that manages sub-agents, handles WhatsApp messages via Baileys, and coordinates all system operations including scheduling and secret management.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Sub-Agent</td><td class="py-2">A containerized FastAPI service running in Docker that handles individual user requests. Each user gets their own isolated container with separate filesystem and network namespaces.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Baileys</td><td class="py-2">A Node.js WhatsApp client library that implements the WhatsApp Web protocol. Used for receiving and sending WhatsApp messages without official API.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Container Manager</td><td class="py-2">Component responsible for spawning, monitoring, and terminating sub-agent Docker containers based on user activity and resource constraints.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Message Queue</td><td class="py-2">Redis-based asynchronous queue for communication between the orchestrator and sub-agents. Decouples message handling from processing.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">RAG</td><td class="py-2">Retrieval-Augmented Generation. A technique combining vector similarity search with LLM to provide accurate, source-cited answers from indexed documents.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Embedding</td><td class="py-2">Converting text to vector representation (array of numbers) for semantic similarity search. Uses text-embedding-3-large model with 1536 dimensions.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Chunking</td><td class="py-2">Splitting documents into smaller pieces (chunks of 512 tokens) for efficient embedding and retrieval. Includes 50-token overlap between chunks.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Rate Limiting</td><td class="py-2">Controlling message throughput to stay within WhatsApp's imposed limits (20 msg/min per user, 200 msg/hour total). Uses queuing with backpressure.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Circuit Breaker</td><td class="py-2">Pattern for handling service failures gracefully. Prevents cascading failures by temporarily stopping calls to a failing service.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">PDPA</td><td class="py-2">Personal Data Protection Act. Singapore's data protection law governing collection, use, and disclosure of personal data.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">DSAR</td><td class="py-2">Data Subject Access Request. A formal request from an individual to access their personal data held by an organization.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">Azure Key Vault</td><td class="py-2">Azure service for secure storage of secrets, keys, and certificates with automated rotation policies.</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-semibold">ARM Templates</td><td class="py-2">Azure Resource Manager templates. JSON-based infrastructure-as-code for deploying Azure resources.</td></tr>
+                        <tr><td class="py-2 font-semibold">Sticky Sessions</td><td class="py-2">Load balancer configuration that routes requests from the same client to the same server. Required for stateful WhatsApp connections.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Appendix A: Mermaid Diagram Reference -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4">Appendix A: Mermaid Diagram Reference</h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">A.1 Architecture Diagrams</h3>
+            <p class="text-slate-600 mb-4">The main system architecture diagram in Section 2 provides an overview of all system components and their interactions. The sequence diagrams for message processing and webhook confirmation illustrate the timing of operations across services. The network topology diagram shows the isolation between user containers. The horizontal scaling diagram in Section 13 shows the load balancer configuration with sticky sessions for WhatsApp session affinity.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">A.2 Data Flow Diagrams</h3>
+            <p class="text-slate-600 mb-4">The RAG pipeline diagram in Section 4 shows the hybrid search and reranking process. The slide generation workflow in Section 7 shows the complete process from user request to delivery. The document upload sequence shows the processing steps from WhatsApp to permanent storage.</p>
+        </div>
+
+        <!-- Appendix B: Configuration Reference -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4">Appendix B: Configuration Reference</h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">B.1 Environment Variables</h3>
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Variable</th>
+                            <th class="text-left py-2">Description</th>
+                            <th class="text-left py-2">Source</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_COSMOS_ENDPOINT</td><td class="py-2">Cosmos DB endpoint URL</td><td class="py-2">Azure Key Vault</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_COSMOS_KEY</td><td class="py-2">Cosmos DB primary key</td><td class="py-2">Azure Key Vault (90-day rotation)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_BLOB_CONNSTR</td><td class="py-2">Blob storage connection string</td><td class="py-2">Azure Key Vault (90-day rotation)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_SEARCH_ENDPOINT</td><td class="py-2">AI Search endpoint URL</td><td class="py-2">Azure Key Vault</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_SEARCH_KEY</td><td class="py-2">AI Search admin key</td><td class="py-2">Azure Key Vault (90-day rotation)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_OPENAI_ENDPOINT</td><td class="py-2">Azure OpenAI endpoint URL</td><td class="py-2">Azure Key Vault</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">AZURE_OPENAI_KEY</td><td class="py-2">Azure OpenAI API key</td><td class="py-2">Azure Key Vault (90-day rotation)</td></tr>
+                        <tr class="border-b border-slate-100"><td class="py-2 font-mono text-xs">REDIS_CONNSTR</td><td class="py-2">Redis connection string</td><td class="py-2">Azure Key Vault (90-day rotation)</td></tr>
+                        <tr><td class="py-2 font-mono text-xs">WHATSAPP_SESSION_BLOB</td><td class="py-2">Blob container for session storage</td><td class="py-2">Azure Key Vault</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Appendix C: Security Considerations -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4">Appendix C: Security Considerations</h2>
+
+            <h3 class="font-bold text-slate-800 mb-2">C.1 Threat Model</h3>
+            <p class="text-slate-600 mb-3">The primary threats to the system include: unauthorized access to user data through API vulnerabilities, container escape through Docker vulnerabilities, data leakage through search filter bugs, WhatsApp account ban through ToS violations, and service disruption through resource exhaustion.</p>
+
+            <h3 class="font-bold text-slate-800 mb-2">C.2 Mitigations</h3>
+            <p class="text-slate-600 mb-4">Each threat has corresponding mitigations implemented in the system design. API vulnerabilities are mitigated through input validation, rate limiting, and security scanning. Container escape is mitigated through rootless Docker, seccomp filtering, and capability dropping. Data leakage is mitigated through mandatory query filters and security testing. WhatsApp ban is mitigated through rate limiting and contingency planning for Cloud API migration. Service disruption is mitigated through resource limits and monitoring.</p>
+        </div>
+
+        <!-- Document Approval -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold text-slate-700 mb-4">Document Approval</h2>
+
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Role</th>
+                            <th class="text-left py-2">Name</th>
+                            <th class="text-left py-2">Date</th>
+                            <th class="text-left py-2">Signature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Technical Lead / Author</td>
+                            <td class="py-2">MiniMax Agent</td>
+                            <td class="py-2">2026-05-25</td>
+                            <td class="py-2">Auto-generated</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Security Review</td>
+                            <td class="py-2">Pending</td>
+                            <td class="py-2">-</td>
+                            <td class="py-2">-</td>
+                        </tr>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">Operations Review</td>
+                            <td class="py-2">Pending</td>
+                            <td class="py-2">-</td>
+                            <td class="py-2">-</td>
+                        </tr>
+                        <tr>
+                            <td class="py-2">Project Sponsor</td>
+                            <td class="py-2">Pending</td>
+                            <td class="py-2">-</td>
+                            <td class="py-2">-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

@@ -1,0 +1,16 @@
+[Unit]
+Description=NanoClaw Orchestrator
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker start nanoclaw-orchestrator
+ExecStop=/usr/bin/docker stop nanoclaw-orchestrator
+ExecReload=/usr/bin/docker restart nanoclaw-orchestrator
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

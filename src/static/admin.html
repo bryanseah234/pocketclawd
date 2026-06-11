@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clawd Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%A6%89%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-oatmeal:#F5F0E8; --bg-card:rgba(255,255,255,0.7); --bg-card-hover:rgba(255,255,255,0.92);
+  --bg-sidebar:#EDE8DF; --border:rgba(61,43,31,0.12); --border-strong:rgba(61,43,31,0.22);
+  --text-primary:#3D2B1F; --text-secondary:rgba(61,43,31,0.7); --text-muted:rgba(61,43,31,0.45);
+  --accent:#C9973A; --accent-hover:#b08832; --success:#2d8a4e; --warning:#b57d2b; --danger:#c0392b;
+  --radius:8px; --radius-card:12px;
+  --font-heading:'Playfair Display',Georgia,serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --shadow-sm:0 1px 3px rgba(61,43,31,0.08); --shadow-md:0 4px 12px rgba(61,43,31,0.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg-oatmeal);color:var(--text-primary);font-family:var(--font-body);
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--font-heading);font-weight:800;letter-spacing:-.01em;color:var(--text-primary)}
+a{color:var(--accent);text-decoration:none}
+code{font-family:var(--font-mono);font-size:12px;background:rgba(61,43,31,0.06);padding:2px 6px;border-radius:5px}
+
+/* masthead */
+.masthead{display:flex;align-items:center;justify-content:space-between;
+  padding:20px 32px;border-bottom:1px solid var(--border);background:var(--bg-sidebar)}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .owl{font-size:26px}
+.brand h1{font-size:24px}
+.brand .sub{font-size:12px;color:var(--text-muted);font-family:var(--font-body);font-weight:500;margin-top:2px}
+.status-strip{display:flex;align-items:center;gap:18px;font-size:12px;font-weight:600}
+.dot{display:inline-flex;align-items:center;gap:7px;color:var(--text-secondary)}
+.dot::before{content:'';width:9px;height:9px;border-radius:50%;background:var(--text-muted)}
+.dot.ok::before{background:var(--success);box-shadow:0 0 0 0 rgba(45,138,78,.5);animation:pulse 2.2s infinite}
+.dot.warn::before{background:var(--warning)} .dot.bad::before{background:var(--danger)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,138,78,.5)}100%{box-shadow:0 0 0 10px rgba(45,138,78,0)}}
+.btn{font-family:var(--font-body);font-weight:600;font-size:13px;border:1px solid var(--border-strong);
+  background:var(--bg-card);color:var(--text-primary);padding:9px 16px;border-radius:var(--radius);
+  cursor:pointer;transition:transform .15s ease-out,background .15s,box-shadow .15s}
+.btn:hover{background:var(--bg-card-hover);transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.primary:hover{background:var(--accent-hover)}
+.btn.danger{color:var(--danger);border-color:rgba(192,57,43,.4)}
+.btn.sm{padding:5px 11px;font-size:12px}
+
+/* tab nav */
+.tabnav{display:flex;gap:6px;padding:14px 32px 0;background:var(--bg-sidebar);border-bottom:1px solid var(--border)}
+.tab{font-family:var(--font-body);font-weight:600;font-size:14px;color:var(--text-secondary);
+  background:transparent;border:none;border-bottom:2px solid transparent;
+  padding:10px 18px 14px;cursor:pointer;border-radius:8px 8px 0 0;transition:color .15s,border-color .15s,background .15s}
+.tab:hover{color:var(--text-primary);background:rgba(255,255,255,.4)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* layout */
+main{padding:28px 32px;max-width:1320px;margin:0 auto}
+.panel{display:none;animation:fade .25s ease-out}
+.panel.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-card);
+  padding:22px;box-shadow:var(--shadow-sm);backdrop-filter:blur(6px)}
+.card h2{font-size:18px;margin-bottom:4px}
+.card .hint{font-size:12.5px;color:var(--text-muted);margin-bottom:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+input[type=text],input[type=password],textarea,select{font-family:var(--font-body);font-size:13.5px;
+  width:100%;padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius);
+  background:#fff;color:var(--text-primary)}
+input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+label{font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:6px}
+
+/* connect */
+.qr-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:8px}
+.qr-box{width:240px;height:240px;border:1px solid var(--border);border-radius:12px;background:#fff;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.qr-box img{width:100%;height:100%;object-fit:contain}
+.qr-box .ph{color:var(--text-muted);font-size:13px;text-align:center;padding:20px}
+.statline{font-size:14px;font-weight:600}
+
+/* stat tiles */
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.tile{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.tile .v{font-family:var(--font-heading);font-size:30px;font-weight:800;line-height:1}
+.tile .k{font-size:12px;color:var(--text-muted);margin-top:6px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+
+/* test lab 2x2 */
+.lab{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:18px;height:calc(100vh - 250px);min-height:560px}
+.chatwin{display:flex;flex-direction:column;background:var(--bg-card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;box-shadow:var(--shadow-sm)}
+.chatwin .hd{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;
+  border-bottom:1px solid var(--border);background:rgba(255,255,255,.5)}
+.chatwin .hd .name{font-family:var(--font-heading);font-weight:800;font-size:15px;text-transform:capitalize}
+.log{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:9px;font-size:13px}
+.msg{max-width:82%;padding:8px 12px;border-radius:12px;white-space:pre-wrap;word-break:break-word;line-height:1.4}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.assistant{align-self:flex-start;background:rgba(61,43,31,.07);border-bottom-left-radius:4px}
+.msg .t{display:block;font-size:10px;opacity:.6;margin-top:3px;font-family:var(--font-mono)}
+.composer{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border);background:rgba(255,255,255,.5)}
+.composer input{flex:1}
+.empty{color:var(--text-muted);font-size:12.5px;text-align:center;margin:auto;padding:24px}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border)}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700}
+tr:hover td{background:rgba(255,255,255,.4)}
+.err-feed{max-height:340px;overflow-y:auto}
+.err-row{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px}
+.err-row .when{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px}
+.badge.on{background:rgba(45,138,78,.15);color:var(--success)}
+.badge.off{background:rgba(192,57,43,.12);color:var(--danger)}
+.accordion{border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;background:var(--bg-card)}
+.accordion summary{cursor:pointer;padding:14px 18px;font-family:var(--font-heading);font-weight:700;font-size:15px;list-style:none}
+.accordion summary::-webkit-details-marker{display:none}
+.accordion[open] summary{border-bottom:1px solid var(--border)}
+.accordion .body{padding:16px 18px}
+.section-title{font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:26px 0 12px}
+.dz{border:2px dashed var(--border-strong);border-radius:10px;padding:24px;text-align:center;color:var(--text-muted);cursor:pointer}
+.dz.over{border-color:var(--accent);background:rgba(201,151,58,.06)}
+.toast-wrap{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:10px;z-index:999}
+.toast{background:var(--text-primary);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;
+  box-shadow:var(--shadow-md);animation:fade .2s ease-out}
+.toast.success{background:var(--success)} .toast.error{background:var(--danger)}
+.dangerzone{border:1px solid rgba(192,57,43,.35);background:rgba(192,57,43,.05);border-radius:12px;padding:20px;margin-top:20px}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="brand">
+    <span class="owl">🦉</span>
+    <div><h1>Clawd Admin</h1><div class="sub">personal AI assistant &middot; control room</div></div>
+  </div>
+  <div class="status-strip">
+    <span class="dot" id="st-sys">system</span>
+    <span class="dot" id="st-wa">whatsapp</span>
+    <span class="dot" id="st-tg">telegram</span>
+    <button class="btn sm" id="btn-logout">⏻ Logout</button>
+  </div>
+</header>
+
+<nav class="tabnav">
+  <button class="tab active" data-tab="connect">Connect</button>
+  <button class="tab" data-tab="testlab">Test Lab</button>
+  <button class="tab" data-tab="monitor">Monitor</button>
+  <button class="tab" data-tab="knowledge">Knowledge Base</button>
+  <button class="tab" data-tab="manage">Manage</button>
+</nav>
+
+<main>
+
+<!-- ============ 1 CONNECT ============ -->
+<section class="panel active" data-panel="connect">
+  <div class="grid2">
+    <div class="card">
+      <h2>WhatsApp (admin line)</h2>
+      <div class="hint">Scan this QR with the admin phone's WhatsApp &rarr; Linked Devices to bring Clawd online.</div>
+      <div class="qr-wrap">
+        <div class="qr-box" id="qr-box"><div class="ph">Loading status&hellip;</div></div>
+        <div class="statline" id="wa-statline">&mdash;</div>
+        <div class="row">
+          <button class="btn sm" id="btn-wa-reconnect">Reconnect</button>
+          <button class="btn sm danger" id="btn-wa-disconnect">Disconnect</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:20px">
+        <h2>Telegram bot</h2>
+        <div class="hint">Paste the bot token from @BotFather. Saved straight to the running service.</div>
+        <label>Bot token</label>
+        <input type="password" id="tg-token" placeholder="123456789:AA..." autocomplete="off">
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btn-tg-save">Save token</button>
+          <span id="tg-badge" class="badge off">not set</span>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Onboarding</h2>
+        <div class="hint">When on, new senders are auto-approved without manual review.</div>
+        <div class="row">
+          <label style="margin:0">Auto-approve new users</label>
+          <input type="checkbox" id="auto-approve" style="width:auto;transform:scale(1.3);margin-left:8px">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2 TEST LAB ============ -->
+<section class="panel" data-panel="testlab">
+  <div class="row" style="justify-content:space-between;margin-bottom:16px">
+    <div><h2 style="font-size:20px">Test Lab</h2><div class="hint" style="margin:0">Four canonical test users &mdash; drive live messages and watch replies land. Used for beta-suite rounds.</div></div>
+    <div class="row">
+      <button class="btn sm" id="btn-lab-refresh">Refresh all</button>
+      <button class="btn sm danger" id="btn-lab-clearlimits">Clear rate limits</button>
+    </div>
+  </div>
+  <div class="lab" id="lab-grid"><!-- 4 windows injected --></div>
+</section>
+
+<!-- ============ 3 MONITOR ============ -->
+<section class="panel" data-panel="monitor">
+  <div class="tiles" id="stat-tiles">
+    <div class="tile"><div class="v" id="m-users">&mdash;</div><div class="k">Users</div></div>
+    <div class="tile"><div class="v" id="m-msgs">&mdash;</div><div class="k">Messages 24h</div></div>
+    <div class="tile"><div class="v" id="m-queue">&mdash;</div><div class="k">Queue depth</div></div>
+    <div class="tile"><div class="v" id="m-spend">&mdash;</div><div class="k">Spend (mo)</div></div>
+  </div>
+
+  <div class="grid2" style="margin-top:22px">
+    <div class="card">
+      <h2>Services</h2>
+      <div class="hint">Live via the dashboard event stream (5s).</div>
+      <table><tbody id="svc-rows"><tr><td class="empty">Loading&hellip;</td></tr></tbody></table>
+    </div>
+    <div class="card">
+      <h2>System errors <span class="badge on" id="err-live">live</span></h2>
+      <div class="hint">Most recent errors, auto-refreshing every 5s.</div>
+      <div class="err-feed" id="err-feed"><div class="empty">Loading&hellip;</div></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:22px">
+    <h2>PDPA consent log</h2>
+    <div class="hint">Who has consented and when (compliance record).</div>
+    <table><thead><tr><th>User</th><th>Consent</th><th>When</th></tr></thead><tbody id="consent-rows"><tr><td class="empty" colspan="3">Loading&hellip;</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- ============ 4 KNOWLEDGE BASE ============ -->
+<section class="panel" data-panel="knowledge">
+  <div class="card" style="margin-bottom:20px">
+    <h2>Upload a document</h2>
+    <div class="hint">Drop a file or click to browse. Ingested into the knowledge base for retrieval.</div>
+    <div class="dz" id="dropzone">Drop file here or click to choose<input type="file" id="file-input" style="display:none"></div>
+  </div>
+  <div class="card">
+    <h2>Documents</h2>
+    <div class="hint">Indexed documents available to the assistant.</div>
+    <table><thead><tr><th>Name</th><th>Added</th><th></th></tr></thead><tbody id="doc-rows"><tr><td class="empty" colspan="3">Loading&hellip;</td></tr></tbody></table>
+  </div>
+</section>
+
+<!-- ============ 5 MANAGE ============ -->
+<section class="panel" data-panel="manage">
+  <div class="card">
+    <h2>Users</h2>
+    <div class="hint">All known users and message counts.</div>
+    <table><thead><tr><th>User</th><th>Messages</th><th>Last seen</th><th></th></tr></thead><tbody id="user-rows"><tr><td class="empty" colspan="4">Loading&hellip;</td></tr></tbody></table>
+  </div>
+
+  <div class="section-title">Reference</div>
+  <details class="accordion"><summary>System architecture</summary><div class="body" id="arch-body">Loading&hellip;</div></details>
+  <details class="accordion"><summary>Public URLs &amp; API</summary><div class="body">
+    <table><tbody>
+      <tr><td><code>/admin</code></td><td>This dashboard</td></tr>
+      <tr><td><code>GET /admin/api/whatsapp/status</code></td><td>WhatsApp connection + QR</td></tr>
+      <tr><td><code>POST /admin/api/setup/telegram-token</code></td><td>Set Telegram bot token</td></tr>
+      <tr><td><code>GET /admin/api/test/users</code></td><td>List 4 test users</td></tr>
+      <tr><td><code>POST /admin/api/test/send</code></td><td>Inject message as test user</td></tr>
+      <tr><td><code>GET /admin/api/chat/history</code></td><td>Per-user transcript</td></tr>
+    </tbody></table>
+  </div></details>
+  <details class="accordion"><summary>WhatsApp slash commands</summary><div class="body">
+    <p style="color:var(--text-secondary)"><code>/help</code> &middot; <code>/forget</code> &middot; <code>/profile</code> &middot; <code>/consent</code> &mdash; as defined in the sub-agent command set.</p>
+  </div></details>
+  <details class="accordion"><summary>Settings</summary><div class="body">
+    <p style="color:var(--text-secondary)">Advanced settings: <a href="/admin/settings">open settings page &rarr;</a></p>
+  </div></details>
+
+  <div class="dangerzone">
+    <h2 style="color:var(--danger)">⚠️ Danger zone</h2>
+    <div class="hint">Permanently delete all user data (messages, consent, profiles). Cannot be undone.</div>
+    <button class="btn danger" id="btn-reset-all">Reset ALL user data</button>
+  </div>
+</section>
+
+</main>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* ---- CSRF auto-header (preserved verbatim from prior dashboard) ---- */
+(function installCsrfFetch() {
+            const CSRF_COOKIE_NAME = 'nanoclaw_admin_csrf';
+            const MUTATING = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+            function readCookie(name) {
+                const parts = (document.cookie || '').split(';');
+                for (const p of parts) {
+                    const [k, v] = p.trim().split('=');
+                    if (k === name) return v;
+                }
+                return '';
+            }
+            const origFetch = window.fetch.bind(window);
+            window.fetch = function (input, init) {
+                init = init || {};
+                const method = ((init.method || (typeof input === 'string' ? 'GET' : (input && input.method) || 'GET'))).toUpperCase();
+                if (MUTATING.has(method)) {
+                    const token = readCookie(CSRF_COOKIE_NAME);
+                    if (token) {
+                        const h = new Headers(init.headers || {});
+                        h.set('X-CSRF-Token', token);
+                        init.headers = h;
+                    }
+                }
+                return origFetch(input, init);
+            };
+        })();
+
+/* ---- helpers ---- */
+const $ = s => document.querySelector(s);
+let TEST_USERS = [{id:'test_alpha',label:'Alpha'},{id:'test_beta',label:'Beta'},{id:'test_charlie',label:'Charlie'},{id:'test_delta',label:'Delta'}];
+function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
+async function getJSON(path){ try{ const r=await api(path); if(r.status===401){location.href='/admin';return null;} return await r.json(); }catch(e){ return null; } }
+function toast(msg, kind){ const w=$('#toasts'); const t=document.createElement('div'); t.className='toast '+(kind||''); t.textContent=msg; w.appendChild(t); setTimeout(()=>t.remove(), 3200); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function fmtTime(ts){ if(!ts) return ''; const d=new Date(ts); return isNaN(d)? '' : d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function setDot(id, state, label){ const el=$(id); if(!el) return; el.className='dot '+(state||''); el.textContent=label; }
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelector('.panel[data-panel="'+t.dataset.tab+'"]').classList.add('active');
+  onTab(t.dataset.tab);
+}));
+function onTab(name){
+  if(name==='testlab') loadLab();
+  if(name==='monitor'){ loadConsent(); loadErrors(); }
+  if(name==='knowledge'){ loadDocs(); }
+  if(name==='manage'){ loadUsers(); loadArch(); }
+}
+
+/* ---- CONNECT: WhatsApp status (also fed by SSE) ---- */
+function renderWa(s){
+  const box=$('#qr-box'), line=$('#wa-statline');
+  if(!s){ box.innerHTML='<div class="ph">No status</div>'; return; }
+  const status = s.state || (s.connected?'connected':s.status) || 'disconnected';
+  if(status==='connected'){
+    box.innerHTML='<div class="ph" style="color:var(--success);font-size:48px">✓</div>';
+    line.innerHTML='<span style="color:var(--success)">● Connected</span> &middot; '+esc(s.phoneNumber||s.phone||'');
+    setDot('#st-wa','ok','whatsapp');
+  } else if((s.qr && s.qr.dataUrl) || s.qrDataUrl){
+    box.innerHTML='<img src="'+esc(s.qrDataUrl||s.qr.dataUrl)+'" alt="WhatsApp QR">';
+    line.innerHTML='<span style="color:var(--warning)">Scan to link</span>';
+    setDot('#st-wa','warn','whatsapp');
+  } else {
+    box.innerHTML='<div class="ph">'+(status==='connecting'?'Connecting&hellip;':'Disconnected &mdash; waiting for QR')+'</div>';
+    line.textContent = status;
+    setDot('#st-wa', status==='connecting'?'warn':'bad','whatsapp');
+  }
+}
+async function loadWa(){ renderWa(await getJSON('/admin/api/whatsapp/status')); }
+$('#btn-wa-reconnect').addEventListener('click', async()=>{ await api('/admin/api/whatsapp/reconnect',{method:'POST'}); toast('Reconnecting…'); setTimeout(loadWa,1200); });
+$('#btn-wa-disconnect').addEventListener('click', async()=>{ if(!confirm('Disconnect WhatsApp?'))return; const r=await(await api('/admin/api/whatsapp/disconnect',{method:'POST'})).json(); toast(r.message||'Disconnected', r.success?'success':'error'); setTimeout(loadWa,800); });
+
+/* ---- CONNECT: Telegram token + auto-approve ---- */
+$('#btn-tg-save').addEventListener('click', async()=>{
+  const token=$('#tg-token').value.trim(); if(!token){toast('Paste a bot token first','error');return;}
+  const r=await(await api('/admin/api/setup/telegram-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})})).json();
+  if(r.success!==false){ $('#tg-badge').className='badge on'; $('#tg-badge').textContent='live'; $('#tg-token').value=''; setDot('#st-tg','ok','telegram'); toast('Telegram token saved','success'); }
+  else toast(r.error||r.message||'Failed','error');
+});
+$('#auto-approve').addEventListener('change', async e=>{
+  await api('/admin/api/setup/auto-approve',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:e.target.checked})});
+  toast('Auto-approve '+(e.target.checked?'on':'off'),'success');
+});
+
+/* ---- TEST LAB: 2x2 windows ---- */
+function buildLab(){
+  const g=$('#lab-grid'); g.innerHTML='';
+  TEST_USERS.forEach(u=>{
+    const w=document.createElement('div'); w.className='chatwin';
+    w.innerHTML='<div class="hd"><span class="name">'+esc(u.label)+'</span>'
+      +'<button class="btn sm" data-reset="'+esc(u.id)+'">Reset</button></div>'
+      +'<div class="log" id="log-'+esc(u.id)+'"><div class="empty">No messages</div></div>'
+      +'<div class="composer"><input type="text" id="in-'+esc(u.id)+'" placeholder="Message as '+esc(u.label)+'…">'
+      +'<button class="btn primary sm" data-send="'+esc(u.id)+'">Send</button></div>';
+    g.appendChild(w);
+  });
+  g.querySelectorAll('[data-send]').forEach(b=>b.addEventListener('click',()=>sendAs(b.dataset.send)));
+  g.querySelectorAll('input[id^="in-"]').forEach(i=>i.addEventListener('keydown',e=>{ if(e.key==='Enter'){ sendAs(i.id.slice(3)); }}));
+  g.querySelectorAll('[data-reset]').forEach(b=>b.addEventListener('click',()=>resetUser(b.dataset.reset)));
+}
+function renderLog(u, msgs){
+  const el=$('#log-'+u); if(!el) return;
+  if(!msgs || !msgs.length){ el.innerHTML='<div class="empty">No messages</div>'; return; }
+  el.innerHTML = msgs.map(m=>'<div class="msg '+(m.role==='user'?'user':'assistant')+'">'+esc(m.content!=null?m.content:m.text)+'<span class="t">'+fmtTime(m.timestamp)+'</span></div>').join('');
+  el.scrollTop = el.scrollHeight;
+}
+async function loadUserLog(u){
+  const data = await getJSON('/admin/api/chat/history?userId='+encodeURIComponent(u));
+  renderLog(u, data && data.messages);
+}
+async function loadLab(){
+  const d=await getJSON('/admin/api/test/users');
+  if(d && Array.isArray(d.users) && d.users.length){ TEST_USERS = d.users.map(u=>({id:u.id, label:u.label||u.id})); }
+  buildLab();
+  for(const u of TEST_USERS) loadUserLog(u.id);
+}
+async function sendAs(u){
+  const inp=$('#in-'+u); const text=(inp.value||'').trim(); if(!text) return;
+  inp.value=''; inp.disabled=true;
+  const r=await api('/admin/api/test/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:u,text})});
+  inp.disabled=false; inp.focus();
+  if(!r.ok){ toast('Send failed for '+u,'error'); return; }
+  await loadUserLog(u);
+  setTimeout(()=>loadUserLog(u), 2500);
+  setTimeout(()=>loadUserLog(u), 6000);
+}
+async function resetUser(u){ if(!confirm('Reset '+u+'? Clears their data.'))return; await api('/admin/api/data/users/'+encodeURIComponent(u),{method:'DELETE'}); toast(u+' reset','success'); loadUserLog(u); }
+$('#btn-lab-refresh').addEventListener('click', loadLab);
+$('#btn-lab-clearlimits').addEventListener('click', async()=>{ await api('/admin/api/actions/clear-rate-limits',{method:'POST'}); toast('Rate limits cleared','success'); });
+
+/* ---- MONITOR ---- */
+function renderStats(s){ if(!s)return;
+  if(s.users!=null)$('#m-users').textContent=s.users;
+  if(s.messages24h!=null)$('#m-msgs').textContent=s.messages24h;
+  if(s.totalUsers!=null)$('#m-users').textContent=s.totalUsers;
+}
+async function loadStats(){ renderStats(await getJSON('/admin/api/stats')); const q=await getJSON('/admin/api/queues'); if(q&&q.depth!=null)$('#m-queue').textContent=q.depth; else if(q&&Array.isArray(q.queues)){$('#m-queue').textContent=q.queues.reduce((a,x)=>a+(x.depth||x.length||0),0);} const sp=await getJSON('/admin/api/spend'); if(sp&&(sp.month!=null||sp.total!=null))$('#m-spend').textContent='$'+(sp.month??sp.total); }
+function renderContainers(list){ const tb=$('#svc-rows'); if(!list||!list.length){tb.innerHTML='<tr><td class="empty">No services</td></tr>';return;} tb.innerHTML=list.map(c=>'<tr><td>'+esc(c.name||c.service||'service')+'</td><td><span class="badge '+((c.status==='running'||c.healthy||c.running)?'on':'off')+'">'+esc(c.status||(c.running?'running':'stopped'))+'</span></td></tr>').join(''); }
+async function loadConsent(){ const d=await getJSON('/admin/api/data/consent'); const tb=$('#consent-rows'); const rows=(d&&(d.consents||d.users||d))||[]; const arr=Array.isArray(rows)?rows:[]; if(!arr.length){tb.innerHTML='<tr><td class="empty" colspan="3">No consent records</td></tr>';return;} tb.innerHTML=arr.map(c=>'<tr><td>'+esc(c.userId||c.user||'')+'</td><td><span class="badge '+(c.consentGiven||c.consented?'on':'off')+'">'+(c.consentGiven||c.consented?'yes':'no')+'</span></td><td>'+esc(fmtTime(c.consentedAt||c.timestamp))+'</td></tr>').join(''); }
+async function loadErrors(){ const d=await getJSON('/admin/api/data/system-errors?limit=50'); const el=$('#err-feed'); const arr=(d&&(d.errors||d))||[]; const list=Array.isArray(arr)?arr:[]; if(!list.length){el.innerHTML='<div class="empty">No recent errors 🎉</div>';return;} el.innerHTML=list.map(e=>'<div class="err-row"><div class="when">'+esc(fmtTime(e.timestamp||e.time))+'</div>'+esc(e.message||e.error||e.msg||JSON.stringify(e))+'</div>').join(''); }
+
+/* ---- KNOWLEDGE BASE ---- */
+async function loadDocs(){ const d=await getJSON('/admin/api/data/documents'); const tb=$('#doc-rows'); const arr=(d&&(d.documents||d))||[]; const list=Array.isArray(arr)?arr:[]; if(!list.length){tb.innerHTML='<tr><td class="empty" colspan="3">No documents</td></tr>';return;} tb.innerHTML=list.map(x=>'<tr><td>'+esc(x.name||x.filename||x.key||x.id)+'</td><td>'+esc(fmtTime(x.uploadedAt||x.addedAt||x.timestamp))+'</td><td><button class="btn sm danger" data-deldoc="'+esc(x.id||x.key||x.name)+'">Delete</button></td></tr>').join(''); tb.querySelectorAll('[data-deldoc]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete document?'))return; await api('/admin/api/data/documents/'+encodeURIComponent(b.dataset.deldoc),{method:'DELETE'}); toast('Deleted','success'); loadDocs(); })); }
+const dz=$('#dropzone'), fi=$('#file-input');
+dz.addEventListener('click',()=>fi.click());
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');if(e.dataTransfer.files[0])upload(e.dataTransfer.files[0]);});
+fi.addEventListener('change',e=>{if(e.target.files[0])upload(e.target.files[0]);});
+async function upload(file){ const fd=new FormData(); fd.append('file',file); toast('Uploading '+file.name+'…'); const r=await api('/admin/api/upload',{method:'POST',body:fd}); if(r.ok){toast('Uploaded','success');loadDocs();}else toast('Upload failed','error'); }
+
+/* ---- MANAGE ---- */
+async function loadUsers(){ const d=await getJSON('/admin/api/data/users'); const tb=$('#user-rows'); const arr=(d&&(d.users||d))||[]; const list=Array.isArray(arr)?arr:[]; if(!list.length){tb.innerHTML='<tr><td class="empty" colspan="4">No users</td></tr>';return;} tb.innerHTML=list.map(u=>'<tr><td>'+esc(u.userId||u.id)+'</td><td>'+esc(u.messageCount??u.messages??'')+'</td><td>'+esc(fmtTime(u.lastMessageAt||u.lastSeen))+'</td><td><button class="btn sm danger" data-deluser="'+esc(u.userId||u.id)+'">Delete</button></td></tr>').join(''); tb.querySelectorAll('[data-deluser]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm('Delete '+b.dataset.deluser+'?'))return; await api('/admin/api/data/users/'+encodeURIComponent(b.dataset.deluser),{method:'DELETE'}); toast('User deleted','success'); loadUsers(); })); }
+async function loadArch(){ const d=await getJSON('/admin/api/architecture/state'); $('#arch-body').innerHTML = d ? '<pre style="font-family:var(--font-mono);font-size:12px;white-space:pre-wrap">'+esc(JSON.stringify(d,null,2))+'</pre>' : 'Unavailable'; }
+$('#btn-reset-all').addEventListener('click', async()=>{ if(!confirm('Permanently delete ALL user data? This cannot be undone.'))return; if(!confirm('Are you absolutely sure?'))return; const r=await api('/admin/api/data/users/reset-all',{method:'POST'}); toast(r.ok?'All user data reset':'Failed', r.ok?'success':'error'); loadUsers(); });
+
+/* ---- logout ---- */
+$('#btn-logout').addEventListener('click', async()=>{ await api('/admin/api/logout',{method:'POST'}); location.href='/admin/logged-out'; });
+
+/* ---- SSE: health/whatsapp/containers/stats every 5s ---- */
+function initSse(){
+  try{
+    const es=new EventSource('/admin/sse');
+    es.addEventListener('whatsapp', e=>{ try{renderWa(JSON.parse(e.data));}catch(_){} });
+    es.addEventListener('health', e=>{ try{ const h=JSON.parse(e.data); const ok=(h.overallStatus||h.status)==='healthy'; setDot('#st-sys', ok?'ok':(h.overallStatus==='degraded'?'warn':'bad'),'system'); }catch(_){} });
+    es.addEventListener('containers', e=>{ try{renderContainers(JSON.parse(e.data));}catch(_){} });
+    es.addEventListener('stats', e=>{ try{renderStats(JSON.parse(e.data));}catch(_){} });
+    es.onerror=()=>{ setDot('#st-sys','warn','system'); };
+  }catch(_){}
+}
+
+/* ---- live system-errors poll (no SSE event for errors) ---- */
+let errTimer=null;
+function startErrorPoll(){ if(errTimer)return; errTimer=setInterval(()=>{ if(document.querySelector('.panel[data-panel="monitor"]').classList.contains('active')) loadErrors(); }, 5000); }
+
+/* ---- boot ---- */
+async function checkTelegram(){
+  try{
+    const r=await api('/admin/api/settings/html'); const html=await r.text();
+    const m=html.match(/id="setting-setup\.telegram_bot_token"[^>]*value="([^"]*)"/);
+    const set = !!(m && m[1] && m[1].trim().length>5);
+    const b=$('#tg-badge'); b.className='badge '+(set?'on':'off'); b.textContent=set?'set ✓':'not set';
+    setDot('#st-tg', set?'ok':'warn','telegram');
+  }catch(_){ setDot('#st-tg','warn','telegram'); }
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  loadWa(); loadStats(); checkTelegram();
+  initSse(); startErrorPoll();
+});
+</script>
+</body>
+</html>

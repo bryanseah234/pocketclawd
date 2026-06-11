@@ -1,0 +1,30 @@
+{
+    "_comment": "Deploy template \u2014 DO NOT hardcode credentials. Use GitHub Actions OIDC or SSM SecureString.",
+    "_usage": "Pass this to: aws ssm send-command --cli-input-json file://final-deploy.json",
+    "_credentials": "AWS credentials are injected by EC2 instance IAM role \u2014 do NOT embed AKI/SAK/TOK.",
+    "InstanceIds": [
+        "i-0f9cd20350cfdc1a6"
+    ],
+    "DocumentName": "AWS-RunShellScript",
+    "TimeoutSeconds": 300,
+    "Parameters": {
+        "commands": [
+            "ECR=709609992277.dkr.ecr.ap-southeast-1.amazonaws.com",
+            "aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin $ECR",
+            "docker pull $ECR/nanoclaw/orchestrator:latest",
+            "docker tag $ECR/nanoclaw/orchestrator:latest nanoclaw-orchestrator:current",
+            "docker stop nanoclaw-orchestrator 2>/dev/null || true",
+            "docker rm nanoclaw-orchestrator 2>/dev/null || true",
+            "DOCKER_BIN=$(which docker)",
+            "mkdir -p /opt/nanoclaw-data/store/auth",
+            "# Load env from SSM Parameter Store \u2014 no plaintext secrets in this file",
+            "ADMIN_USER=$(aws ssm get-parameter --name /nanoclaw/admin-user --with-decryption --query Parameter.Value --output text --region ap-southeast-1 2>/dev/null || echo admin)",
+            "ADMIN_PASS=$(aws ssm get-parameter --name /nanoclaw/admin-pass --with-decryption --query Parameter.Value --output text --region ap-southeast-1)",
+            "docker run -d --name nanoclaw-orchestrator --restart unless-stopped --network host --user root -e NANOCLAW_ENV=cloud -e AWS_REGION=ap-southeast-1 -e ADMIN_USER=$ADMIN_USER -e ADMIN_PASS=$ADMIN_PASS -v /var/run/docker.sock:/var/run/docker.sock -v $DOCKER_BIN:/usr/local/bin/docker:ro -v /opt/nanoclaw-data:/app/data nanoclaw-orchestrator:current",
+            "sleep 25",
+            "docker ps | grep nanoclaw-orchestrator && echo RUNNING || echo NOT_RUNNING",
+            "docker logs nanoclaw-orchestrator --tail 40 2>&1",
+            "echo DONE"
+        ]
+    }
+}

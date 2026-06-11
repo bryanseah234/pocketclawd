@@ -1,0 +1,97 @@
+# syntax=docker/dockerfile:1
+# NanoClaw Orchestrator — production multi-stage build
+# Image: nanoclaw/orchestrator (pushed to ECR with git-hash + latest tags)
+
+# ==============================================================================
+# Stage 1: Install dependencies
+# ==============================================================================
+FROM public.ecr.aws/docker/library/node:22-alpine AS deps
+
+# Build tools needed for native modules (better-sqlite3, etc.)
+RUN apk add --no-cache python3 make g++
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# Copy dependency manifests first for layer caching
+# NOTE: scripts/ is .dockerignore'd; the package.json preinstall guard
+# self-skips when scripts/check-node-version.mjs is absent (node:22-alpine
+# already pins the version, so the guard is a host-dev convenience only).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+
+# Install all dependencies (dev included — needed for TypeScript build)
+RUN pnpm install --frozen-lockfile
+
+# ==============================================================================
+# Stage 2: Build TypeScript
+# ==============================================================================
+FROM public.ecr.aws/docker/library/node:22-alpine AS build
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+WORKDIR /app
+
+# Copy deps from previous stage
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy source and config needed for compilation
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.json ./
+COPY src/ ./src/
+
+# Compile TypeScript to dist/
+RUN pnpm run build
+
+# Copy static HTML assets into dist/ so they survive the production COPY
+RUN mkdir -p dist/static && (cp -r src/static/* dist/static/ 2>/dev/null; true)
+
+# Install production-only dependencies for the final image
+RUN pnpm install --prod --ignore-scripts --frozen-lockfile
+
+# ==============================================================================
+# Stage 3: Production image — use slim (glibc) so mounted Docker binary works
+# ==============================================================================
+FROM public.ecr.aws/docker/library/node:20-slim AS production
+
+# Install curl for health check and tini for signal handling
+RUN apt-get update && apt-get install -y --no-install-recommends curl tini && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Labels for ECR tagging and image metadata
+LABEL org.opencontainers.image.title="nanoclaw-orchestrator" \
+      org.opencontainers.image.description="NanoClaw WhatsApp AI Assistant — Orchestrator" \
+      org.opencontainers.image.vendor="NanoClaw" \
+      org.opencontainers.image.source="https://github.com/clawd/clawd"
+
+# Copy compiled output and production dependencies
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./
+
+# Copy persona system prompt (used by cloud-responder for Clawd's identity/voice)
+COPY src/persona/system_prompt_template.json /app/persona/system_prompt_template.json
+
+# Rebuild native modules for glibc (better-sqlite3 was compiled for musl in build stage)
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && \
+    npm rebuild better-sqlite3 --build-from-source && \
+    apt-get remove -y python3 make g++ && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user, data directory, and switch to it
+RUN groupadd -g 1001 nanoclaw && \
+    useradd -u 1001 -g nanoclaw -s /bin/sh -M nanoclaw && \
+    mkdir -p /app/data && \
+    chown -R nanoclaw:nanoclaw /app
+
+USER nanoclaw
+
+EXPOSE 3000
+
+# Health check — verifies the /health endpoint responds
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# tini as PID 1 for proper signal handling
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/index.js"]
+

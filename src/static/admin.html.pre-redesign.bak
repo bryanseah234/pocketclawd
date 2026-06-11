@@ -1,0 +1,3389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clawd Admin</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 28 28'%3E%3Cellipse cx='14' cy='18' rx='8' ry='9' fill='%23C9973A'/%3E%3Cpolygon points='8,12 10.5,5 13,11' fill='%23C9973A'/%3E%3Cpolygon points='20,12 17.5,5 15,11' fill='%23C9973A'/%3E%3Ccircle cx='10' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='18' cy='16.5' r='3.5' fill='%23FDFAF4'/%3E%3Ccircle cx='10' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Ccircle cx='18' cy='16.5' r='2' fill='%233D2B1F'/%3E%3Cpolygon points='12,20 16,20 14,23' fill='%233D2B1F' opacity='0.7'/%3E%3C/svg%3E">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-oatmeal:     #F5F0E8;
+            --bg-card:        rgba(255, 255, 255, 0.7);
+            --bg-card-hover:  rgba(255, 255, 255, 0.9);
+            --bg-sidebar:     #EDE8DF;
+            --border:         rgba(61, 43, 31, 0.12);
+            --border-strong:  rgba(61, 43, 31, 0.22);
+            --text-primary:   #3D2B1F;
+            --text-secondary: rgba(61, 43, 31, 0.7);
+            --text-muted:     rgba(61, 43, 31, 0.45);
+            --accent:         #C9973A;
+            --accent-mustard: #C9973A;
+            --accent-hover:   #b08832;
+            --success:        #2d8a4e;
+            --warning:        #b57d2b;
+            --danger:         #c0392b;
+            --radius:         8px;
+            --radius-card:    12px;
+            --font-heading:   'Georgia', 'Times New Roman', serif;
+            --font-body:      -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            --shadow-sm:      0 1px 3px rgba(61,43,31,0.08);
+            --shadow-md:      0 4px 12px rgba(61,43,31,0.10);
+            /* Compatibility aliases for legacy var names used across components */
+            --bg:             var(--bg-oatmeal);
+            --bg-primary:     var(--bg-oatmeal);
+            --bg-elev:        var(--bg-card);
+            --surface:        var(--bg-card);
+            --text:           var(--text-primary);
+            --font-display:   var(--font-heading);
+        }
+
+        h1, h2, h3, .brand-font { font-family: var(--font-heading); }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-oatmeal);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 8px 0 36px;
+            padding-bottom: 22px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        header h1 {
+            font-family: var(--font-heading);
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        header h1 .logo {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(201,151,58,0.35);
+            flex-shrink: 0;
+        }
+        header h1 .logo svg { display: block; }
+
+        .connection-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.connected { background: var(--success); }
+        .status-dot.disconnected { background: var(--danger); }
+        .status-dot.connecting { background: var(--warning); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 8px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+            gap: 20px;
+        }
+        .grid.grid-overview-3 {
+            grid-template-columns: repeat(3, minmax(0,1fr));
+        }
+        @media (max-width: 1100px) {
+            .grid.grid-overview-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 720px) {
+            .grid.grid-overview-3 { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-card);
+            padding: 24px;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.25s cubic-bezier(0.22,1,0.36,1), transform 0.25s cubic-bezier(0.22,1,0.36,1);
+        }
+        .card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .card h2, .card h3 { font-family: var(--font-heading); letter-spacing: -0.01em; }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+
+        .card-full { grid-column: 1 / -1; }
+
+        /* WhatsApp Section */
+        .qr-container {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .qr-image {
+            width: 200px;
+            height: 200px;
+            background: white;
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .qr-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .qr-info {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .qr-status {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .qr-detail {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .qr-countdown {
+            color: var(--warning);
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+
+        .connected-check {
+            color: var(--success);
+            font-size: 3rem;
+            text-align: center;
+        }
+
+        /* Health Services */
+        .service-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .service-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(61,43,31,0.04);
+            border-radius: 6px;
+        }
+
+        .service-name {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .service-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+        }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-healthy { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .badge-unhealthy { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        .badge-degraded { background: rgba(234, 179, 8, 0.15); color: var(--warning); }
+        .badge-unknown { background: rgba(100, 116, 139, 0.15); color: var(--text-muted); }
+
+        /* Containers Table */
+        .table-wrapper { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        th {
+            text-align: left;
+            padding: 8px 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 12px;
+            background: rgba(61,43,31,0.04);
+            border-radius: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 12px rgba(201,151,58,0.4); }
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .btn-outline:hover { background: var(--bg-card-hover); }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Actions */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 12px 16px;
+            background: rgba(61,43,31,0.04);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+
+        .action-btn:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--accent);
+        }
+
+        .action-btn .action-icon { font-size: 1.2rem; margin-bottom: 4px; }
+        .action-btn .action-label { font-weight: 500; }
+        .action-btn .action-desc { color: var(--text-muted); font-size: 0.7rem; margin-top: 2px; }
+
+        /* Upload Zone */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(201, 151, 58, 0.06);
+        }
+
+        .upload-zone .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+        .upload-zone .upload-text { color: var(--text-secondary); font-size: 0.85rem; }
+        .upload-zone .upload-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 4px; }
+
+        .upload-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .upload-list {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .upload-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: rgba(61,43,31,0.04);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .upload-item-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .upload-item-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .upload-item-status.processing { color: var(--warning); }
+        .upload-item-status.completed { color: var(--success); }
+        .upload-item-status.failed { color: var(--danger); }
+        .upload-item-status.uploading { color: var(--accent); }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+
+        .empty-state {
+            text-align: center;
+            padding: 24px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        /* Tab Navigation */
+        .tab-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 32px;
+            padding: 6px;
+            background: rgba(255,255,255,0.45);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+        }
+
+        .tab-btn {
+            padding: 9px 18px;
+            background: none;
+            border: none;
+            border-radius: 9px;
+            color: var(--text-secondary);
+            font-family: var(--font-body);
+            font-size: 0.92rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.18s ease, background 0.18s ease;
+        }
+        .tab-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.6); }
+        .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-card);
+        }
+
+        .tab-btn.active {
+            color: #fff;
+            background: var(--accent);
+            box-shadow: 0 2px 8px rgba(201,151,58,0.32);
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+            .container { padding: 16px; }
+            .qr-container { flex-direction: column; align-items: flex-start; }
+        }
+
+        .btn:focus-visible,
+        .tab-btn:focus-visible,
+        .action-btn:focus-visible,
+        .doc-delete-btn:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        input:focus-visible,
+        select:focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 1px;
+            border-color: var(--accent);
+        }
+    
+        /* ─── Settings tab layout ─────────────────────────────── */
+        .settings-tab-inner {
+            max-width: 100%;
+            margin: 0;
+        }
+
+        
+        /* Toggle switch */
+        .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--border); border-radius: 26px; transition: .2s;
+        }
+        .toggle-slider:before {
+            position: absolute; content: ""; height: 20px; width: 20px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .2s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+
+        
+        /* ─── Data tab ───────────────────────────────────────── */
+        .stats-tile {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .stats-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .stats-value {
+            font-family: var(--font-heading, 'Playfair Display', serif);
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin-bottom: 6px;
+        }
+        .stats-detail {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .stats-detail .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        .doc-table th {
+            text-align: left;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-bottom: 2px solid var(--border);
+            font-weight: 600;
+        }
+        .doc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        .doc-table tr:hover { background: rgba(61,43,31,0.03); }
+        .doc-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 100px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .doc-badge-admin { background: rgba(201, 151, 58,0.15); color: var(--accent-mustard); }
+        .doc-badge-user { background: rgba(34,197,94,0.12); color: var(--success); }
+        .doc-delete-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--danger);
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: background 0.15s;
+        }
+        .doc-delete-btn:hover { background: rgba(192,57,43,0.08); }
+        .doc-delete-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ingestion-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .ingestion-row:last-child { border-bottom: none; }
+        .ingestion-name { font-weight: 500; }
+        .ingestion-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-left: 8px;
+        }
+
+        /* ─── Wave 10: Live Pulse Strip ─────────────────────── */
+        .pulse-strip {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        @media (max-width: 1100px) {
+            .pulse-strip { grid-template-columns: repeat(2, 1fr); }
+            #pulse-health { grid-column: span 2; }
+        }
+        @media (max-width: 600px) {
+            .pulse-strip { grid-template-columns: 1fr; }
+            #pulse-health { grid-column: auto; }
+        }
+        .pulse-tile {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 18px;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+            overflow: hidden;
+        }
+        .pulse-tile:hover {
+            box-shadow: 0 4px 16px rgba(61,43,31,0.08);
+            transform: translateY(-1px);
+        }
+        .pulse-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+        .pulse-value {
+            font-family: var(--font-heading);
+            font-size: 2.1rem;
+            font-weight: 800;
+            letter-spacing: -0.015em;
+            color: var(--text-primary);
+            line-height: 1.05;
+            margin: 6px 0 6px;
+            font-variant-numeric: tabular-nums;
+        }
+        .pulse-sub {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .pulse-spark {
+            position: absolute;
+            right: 12px;
+            top: 12px;
+            width: 86px;
+            height: 28px;
+            opacity: 0.95;
+            pointer-events: none;
+        }
+        .as-of {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
+        @keyframes pulse-flash {
+            0%   { background: rgba(201,151,58,0.18); }
+            100% { background: var(--surface); }
+        }
+        .pulse-tile.flash {
+            animation: pulse-flash 0.6s ease-out;
+        }
+
+
+        /* W2/W3/W4/W5/W6 additions */
+        .header-right { display:flex; align-items:center; gap:14px; }
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+        .btn-logout:hover { background: var(--bg-elev); border-color: var(--accent); color: var(--accent); }
+        .btn-primary {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn-primary:hover { filter: brightness(1.1); }
+        .btn-secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-secondary:hover { background: var(--bg-elev); border-color: var(--accent); }
+        .btn-danger {
+            background: #8b2e2e;
+            color: #fff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-danger:hover { background: #a13434; }
+        /* 3-card row: enforce 3 columns on overview & help */
+        .grid-cards-3 {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0,1fr));
+            gap: 16px;
+        }
+        @media (max-width: 1100px) {
+            .grid-cards-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 720px) {
+            .grid-cards-3 { grid-template-columns: 1fr; }
+        }
+        /* Architecture canvas */
+        .arch-toolbar { display:flex; gap:14px; align-items:center; }
+        .arch-canvas-wrap {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 540px;
+        }
+        .arch-canvas-wrap svg { width: 100%; height: auto; }
+        /* Architecture tab --------------------------------------------------------- */
+        .arch-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+        .arch-hero {
+            background: linear-gradient(135deg, oklch(0.14 0.012 250) 0%, oklch(0.12 0.018 270) 100%);
+            border: 1px solid oklch(0.28 0.02 250);
+            border-radius: 16px;
+            padding: 28px 32px 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .arch-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse 60% 50% at 80% 20%, oklch(0.35 0.08 250 / 0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .arch-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            position: relative;
+            z-index: 1;
+        }
+        .arch-title {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: oklch(0.97 0.005 250);
+            margin: 0 0 4px;
+            letter-spacing: -0.02em;
+        }
+        .arch-subtitle {
+            font-size: 0.82rem;
+            color: oklch(0.65 0.015 250);
+            margin: 0;
+        }
+        .arch-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .arch-controls label {
+            font-size: 0.78rem;
+            color: oklch(0.65 0.015 250);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .arch-timestamp {
+            font-size: 0.75rem;
+            color: oklch(0.55 0.01 250);
+        }
+        /* SVG diagram */
+        .arch-svg-container {
+            width: 100%;
+            overflow-x: auto;
+            position: relative;
+            z-index: 1;
+        }
+        #arch-svg {
+            display: block;
+            width: 100%;
+            min-height: 380px;
+            font-family: var(--font-body);
+        }
+        /* Node groups by color ------------------------------------------------ */
+        .an-edge    { fill: oklch(0.22 0.04 200); stroke: oklch(0.40 0.10 200); }
+        .an-core    { fill: oklch(0.20 0.04 270); stroke: oklch(0.38 0.12 270); }
+        .an-ai      { fill: oklch(0.22 0.04 300); stroke: oklch(0.42 0.14 300); }
+        .an-data    { fill: oklch(0.20 0.04 180); stroke: oklch(0.38 0.10 180); }
+        .an-healthy  { stroke: oklch(0.62 0.18 145) !important; stroke-width: 2px !important; }
+        .an-pending  { stroke: oklch(0.72 0.16 70)  !important; stroke-width: 2px !important; }
+        .an-down     { stroke: oklch(0.55 0.20 25)  !important; stroke-width: 2px !important; }
+        /* Pulse glow on healthy */
+        @keyframes arch-pulse { 0%,100%{opacity:0.5} 50%{opacity:1} }
+        .an-healthy .arch-glow { animation: arch-pulse 2.4s ease-in-out infinite; }
+        /* Edge paths */
+        .arch-edge {
+            fill: none;
+            stroke: oklch(0.35 0.04 250);
+            stroke-width: 1.5;
+            stroke-dasharray: 6 4;
+            animation: dash-march 18s linear infinite;
+        }
+        .arch-edge.active {
+            stroke: oklch(0.70 0.15 200);
+            stroke-dasharray: none;
+            stroke-width: 2;
+        }
+        @keyframes dash-march { to { stroke-dashoffset: -100; } }
+        /* Legend */
+        .arch-legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding-top: 16px;
+            border-top: 1px solid oklch(0.28 0.02 250);
+            position: relative;
+            z-index: 1;
+        }
+        .arch-legend-item {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            font-size: 0.76rem;
+            color: oklch(0.62 0.01 250);
+        }
+        .arch-legend-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .arch-legend-dot.healthy { background: oklch(0.62 0.18 145); box-shadow: 0 0 6px oklch(0.62 0.18 145 / 0.6); }
+        .arch-legend-dot.pending { background: oklch(0.72 0.16 70); }
+        .arch-legend-dot.down    { background: oklch(0.55 0.20 25); }
+        /* Group badges */
+        .arch-group-badge {
+            font-size: 8.5px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            fill: oklch(0.55 0.06 250);
+        }
+        /* Flow table */
+        .arch-flow-section {
+            background: oklch(0.12 0.008 250);
+            border: 1px solid oklch(0.22 0.015 250);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .arch-flow-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid oklch(0.22 0.015 250);
+        }
+        .arch-flow-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: oklch(0.88 0.005 250);
+            letter-spacing: -0.01em;
+        }
+        .arch-flow-live {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            color: oklch(0.62 0.15 145);
+        }
+        .arch-live-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: oklch(0.62 0.18 145);
+            box-shadow: 0 0 5px oklch(0.62 0.18 145 / 0.7);
+            animation: arch-pulse 1.8s ease-in-out infinite;
+        }
+        #arch-flow-body tr {
+            border-bottom: 1px solid oklch(0.18 0.01 250);
+            transition: background 0.15s;
+        }
+        #arch-flow-body tr:last-child { border-bottom: none; }
+        #arch-flow-body tr:hover { background: oklch(0.16 0.012 250); }
+        #arch-flow-body td {
+            padding: 9px 16px;
+            font-size: 0.8rem;
+            color: oklch(0.80 0.005 250);
+            vertical-align: middle;
+        }
+        #arch-flow-body td:first-child { color: oklch(0.55 0.01 250); font-variant-numeric: tabular-nums; }
+        .arch-role-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .arch-role-pill.user { background: oklch(0.25 0.06 250); color: oklch(0.80 0.08 250); }
+        .arch-role-pill.assistant { background: oklch(0.22 0.06 270); color: oklch(0.78 0.10 270); }
+        .arch-role-pill.system { background: oklch(0.22 0.04 180); color: oklch(0.72 0.08 180); }
+/* Test chat — 4-panel grid */
+        .testchat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            height: calc(100vh - 220px);
+            min-height: 480px;
+        }
+        @media (max-width: 900px) {
+            .testchat-grid { grid-template-columns: 1fr; height: auto; }
+        }
+        .testchat-panel {
+            display: flex;
+            flex-direction: column;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-elev);
+            overflow: hidden;
+            min-height: 360px;
+        }
+        .testchat-panel-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+        .testchat-panel-header .dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .testchat-panel-header .uid-label {
+            opacity: 0.55;
+            font-size: 0.72rem;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .testchat-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            scroll-behavior: smooth;
+        }
+        .testchat-msg {
+            max-width: 82%;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .testchat-msg.user {
+            align-self: flex-end;
+            background: var(--accent);
+            color: var(--bg);
+        }
+        .testchat-msg.bot {
+            align-self: flex-start;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+        }
+        .testchat-msg.error {
+            align-self: stretch;
+            background: rgba(161,52,52,0.18);
+            border: 1px solid rgba(220,60,60,0.35);
+            color: #f87171;
+            font-size: 0.78rem;
+        }
+        .testchat-msg.system {
+            align-self: center;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            background: transparent;
+            padding: 2px 8px;
+        }
+        .testchat-msg .msg-meta {
+            font-size: 0.66rem;
+            opacity: 0.45;
+            margin-top: 3px;
+        }
+        .testchat-msg img.thumb {
+            display: block;
+            max-width: 180px;
+            max-height: 140px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            object-fit: cover;
+        }
+        .testchat-input-row {
+            display: flex;
+            gap: 6px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--border);
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .testchat-input-row input[type=text] {
+            flex: 1;
+            padding: 9px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.83rem;
+        }
+        .testchat-input-row input[type=text]:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .testchat-attach-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-muted);
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: border-color 0.15s, color 0.15s;
+            flex-shrink: 0;
+        }
+        .testchat-attach-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .testchat-attach-btn.has-file { border-color: var(--accent); color: var(--accent); }
+        .testchat-send-btn {
+            background: var(--accent);
+            color: var(--bg);
+            border: none;
+            border-radius: 8px;
+            padding: 9px 16px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: opacity 0.15s;
+        }
+        .testchat-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .testchat-send-btn:hover:not(:disabled) { opacity: 0.85; }
+        .history-divider {
+            text-align: center;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            padding: 6px 0 4px;
+            letter-spacing: 0.05em;
+            opacity: 0.6;
+        }
+        img.generated {
+            max-height: 180px;
+            width: auto;
+            display: block;
+        }
+        /* Standardize all cards: same padding, same border, same radius */
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+        /* Settings tabs - coherent padding */
+        .settings-tab-inner { padding: 20px 24px; }
+
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>
+                <span class="logo"><svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true"><ellipse cx="14" cy="18" rx="8" ry="9" fill="#FDFAF4"/><polygon points="8,12 10.5,5 13,11" fill="#FDFAF4"/><polygon points="20,12 17.5,5 15,11" fill="#FDFAF4"/><circle cx="10" cy="16.5" r="3.3" fill="#FDFAF4"/><circle cx="18" cy="16.5" r="3.3" fill="#FDFAF4"/><circle cx="10" cy="16.5" r="1.9" fill="#3D2B1F"/><circle cx="18" cy="16.5" r="1.9" fill="#3D2B1F"/><polygon points="12,20 16,20 14,22.5" fill="#3D2B1F" opacity="0.75"/></svg></span>
+                Clawd Admin
+            </h1>
+            <div class="header-right">
+                <div class="connection-badge" id="sse-badge">
+                    <span class="status-dot connecting" id="sse-dot"></span>
+                    <span id="sse-label">Connecting...</span>
+                </div>
+                <button id="btn-logout" class="btn-logout" type="button" title="Sign out">Logout</button>
+            </div>
+        </header>
+
+        <nav class="tab-nav" id="tab-nav" role="tablist">
+            <button class="tab-btn active" data-tab="overview" role="tab" id="tab-btn-overview" aria-selected="true" aria-controls="tab-overview" onclick="switchTab('overview')">Overview</button>
+            <button class="tab-btn" data-tab="whatsapp" role="tab" id="tab-btn-whatsapp" aria-selected="false" aria-controls="tab-whatsapp" onclick="switchTab('whatsapp')">Set Up</button>
+            <button class="tab-btn" data-tab="data" role="tab" id="tab-btn-data" aria-selected="false" aria-controls="tab-data" onclick="switchTab('data')">Data</button>
+            <button class="tab-btn" data-tab="users" role="tab" id="tab-btn-users" aria-selected="false" aria-controls="tab-users" onclick="switchTab('users')">Users</button>
+            <button class="tab-btn" data-tab="system" role="tab" id="tab-btn-system" aria-selected="false" aria-controls="tab-system" onclick="switchTab('system')">System</button>
+            <button class="tab-btn" data-tab="consent" role="tab" id="tab-btn-consent" aria-selected="false" aria-controls="tab-consent" onclick="switchTab('consent')">Consent</button>
+            <button class="tab-btn" data-tab="architecture" role="tab" id="tab-btn-architecture" aria-selected="false" aria-controls="tab-architecture" onclick="switchTab('architecture')">Architecture</button>
+            <button class="tab-btn" data-tab="testchat" role="tab" id="tab-btn-testchat" aria-selected="false" aria-controls="tab-testchat" onclick="switchTab('testchat')">Test Chat</button>
+            <button class="tab-btn" data-tab="help" role="tab" id="tab-btn-help" aria-selected="false" aria-controls="tab-help" onclick="switchTab('help')">Help</button>
+            <button class="tab-btn" data-tab="settings" role="tab" id="tab-btn-settings" aria-selected="false" aria-controls="tab-settings" onclick="switchTab('settings')">Settings</button>
+        </nav>
+
+                <div class="tab-panel active" id="tab-overview" role="tabpanel" aria-labelledby="tab-btn-overview">
+
+        <!-- Wave 10: Live Pulse Strip -->
+        <div class="pulse-strip" id="pulse-strip">
+            <div class="pulse-tile" id="pulse-spend">
+                <div class="pulse-label">Bedrock Spend (24h)</div>
+                <div class="pulse-value" id="pulse-spend-value">—</div>
+                <div class="pulse-sub" id="pulse-spend-sub">7-day trend</div>
+                <svg class="pulse-spark" id="pulse-spend-spark" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+            </div>
+            
+            <div class="pulse-tile" id="pulse-tasks">
+                <div class="pulse-label">Live ECS tasks</div>
+                <div class="pulse-value" id="pulse-tasks-value">—</div>
+                <div class="pulse-sub" id="pulse-tasks-sub">orchestrator + sub-agent</div>
+            </div>
+            <div class="pulse-tile" id="pulse-queue">
+                <div class="pulse-label">Pending work</div>
+                <div class="pulse-value" id="pulse-queue-value">—</div>
+                <div class="pulse-sub" id="pulse-queue-sub">uploads · gateway · agents</div>
+            </div>
+            <div class="pulse-tile" id="pulse-health">
+                <div class="pulse-label">System Health</div>
+                <div class="pulse-value" id="pulse-health-value">—</div>
+                <div class="pulse-sub"><span class="as-of" id="pulse-asof">live</span></div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- System Health -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">System Health</span>
+                    <span class="badge badge-unknown" id="overall-status">—</span>
+                </div>
+                <div class="service-list" id="services-list">
+                    <div class="empty-state">Loading services...</div>
+                </div>
+            </div>
+
+            <!-- Rate Limiting Stats -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Rate Limiting</span>
+                </div>
+                <div class="stats-grid" id="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-rph">—</div>
+                        <div class="stat-label">msgs/hour</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-users">—</div>
+                        <div class="stat-label">active users</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-hits">—</div>
+                        <div class="stat-label">limit hits/24h</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Containers -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Active Containers</span>
+                    <span id="container-count" style="color: var(--text-muted); font-size: 0.8rem;">0 running</span>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Container ID</th>
+                                <th>Status</th>
+                                <th>Uptime</th>
+                                <th>Memory</th>
+                                <th>CPU</th>
+                                <th>Last Activity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="containers-body">
+                            <tr><td colspan="7" class="empty-state">No containers running</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        </div><!-- /tab-overview -->
+
+        <div class="tab-panel" id="tab-whatsapp" role="tabpanel" aria-labelledby="tab-btn-whatsapp">
+        <div class="grid">
+            <!-- WhatsApp QR Code / Status -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">WhatsApp Connection</span>
+                    <div class="btn-group">
+                        <button class="btn btn-outline" id="wa-btn-reconnect" onclick="reconnectWhatsApp()" disabled title="Connect WhatsApp first">Reconnect</button>
+                        <button class="btn btn-danger" id="wa-btn-disconnect" onclick="disconnectWhatsApp()" disabled title="Connect WhatsApp first">Disconnect</button>
+                    </div>
+                </div>
+                <div class="qr-container" id="whatsapp-section">
+                    <div class="qr-image" id="qr-box">
+                        <span style="color: var(--text-muted); font-size: 0.8rem;">Loading...</span>
+                    </div>
+                    <div class="qr-info">
+                        <div class="qr-status" id="wa-status">—</div>
+                        <div class="qr-detail" id="wa-phone"></div>
+                        <div class="qr-detail" id="wa-uptime"></div>
+                        <div class="qr-detail" id="wa-activity"></div>
+                        <div class="qr-countdown" id="wa-countdown"></div>
+                    </div>
+                </div>
+                <!-- Phone number + pairing code -->
+                <div class="card-section" style="padding:16px;border-top:1px solid var(--border);">
+                    <label for="wa-phone-input" style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px;">Or use phone number instead of QR scan</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="tel" id="wa-phone-input" placeholder="e.g. 6581234567" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:var(--bg-input,#fff);" />
+                        <button class="btn btn-primary" onclick="requestPairingCode()" style="white-space:nowrap;">Request Pairing Code</button>
+                    </div>
+                    <div id="wa-pairing-code" style="display:none;margin-top:12px;padding:12px;background:var(--bg-card);border-radius:8px;text-align:center;">
+                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;">Pairing Code (enter in WhatsApp &rarr; Linked Devices)</div>
+                        <div id="wa-pairing-code-value" style="font-size:1.75rem;font-weight:700;letter-spacing:0.15em;color:var(--accent);font-family:monospace;"></div>
+                        <div id="wa-pairing-expiry" style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WhatsApp Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">WhatsApp Actions</span>
+                </div>
+                <div class="actions-grid" style="grid-template-columns: 1fr 1fr;">
+                    <button class="action-btn" onclick="doAction('reconnect')">
+                        <div class="action-icon">&#x1f504;</div>
+                        <div class="action-label">Reconnect WhatsApp</div>
+                        <div class="action-desc">Generate new QR code</div>
+                    </button>
+                    <button class="action-btn" onclick="doAction('disconnect')">
+                        <div class="action-icon">&#x26d4;</div>
+                        <div class="action-label">Force Disconnect</div>
+                        <div class="action-desc">Kill WhatsApp session</div>
+                    </button>
+                    <button class="action-btn" onclick="doAction('clear-limits')">
+                        <div class="action-icon">&#x1f9f9;</div>
+                        <div class="action-label">Clear Rate Limits</div>
+                        <div class="action-desc">Reset all user counters</div>
+                    </button>
+                    <button class="action-btn" onclick="doAction('refresh')">
+                        <div class="action-icon">&#x1f4ca;</div>
+                        <div class="action-label">Force Refresh</div>
+                        <div class="action-desc">Reload all data now</div>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Telegram Bot + Auto-approve -->
+        <div class="grid" style="margin-top:16px;">
+            <div class="card">
+                <div class="card-header"><span class="card-title">Telegram Bot</span><span id="tg-status-badge" class="status-badge" style="font-size:0.75rem;padding:3px 8px;">Not configured</span></div>
+                <div style="padding:16px;">
+                    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 12px;">Used to notify you when a new user messages Clawd (when auto-approve is off). Get from <strong>@BotFather</strong> on Telegram.</p>
+                    <div style="display:flex;gap:8px;">
+                        <input type="password" id="tg-token-input" aria-label="Telegram bot token" placeholder="Paste bot token here" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;" />
+                        <button class="btn btn-primary" onclick="saveTelegramToken()">Save</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><span class="card-title">Access Control</span></div>
+                <div style="padding:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;">
+                        <div>
+                            <div style="font-weight:600;font-size:0.9rem;">Auto-approve new users</div>
+                            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;" id="auto-approve-desc">Anyone can message Clawd immediately. No approval needed.</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="auto-approve-toggle" checked onchange="setAutoApprove(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <p id="auto-approve-note" style="display:none;margin-top:12px;font-size:0.8rem;color:var(--accent);">&#x26a0; Requires Telegram bot token to notify you of approval requests.</p>
+                </div>
+            </div>
+        </div>
+        </div><!-- /tab-whatsapp -->
+
+        <div class="tab-panel" id="tab-data" role="tabpanel" aria-labelledby="tab-btn-data">
+        <div class="grid">
+            <!-- ─────────── Database Stats ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Database Stats</span>
+                    <button class="btn btn-outline" onclick="loadDataStats()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                </div>
+                <div class="data-stats-grid" id="data-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:16px;">
+                    <div class="stats-tile" id="stats-dynamodb">
+                        <div class="stats-label">DynamoDB</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-dynamodb-detail">Loading…</div>
+                    </div>
+                    <div class="stats-tile" id="stats-opensearch">
+                        <div class="stats-label">OpenSearch</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-opensearch-detail">Loading…</div>
+                    </div>
+                    <div class="stats-tile" id="stats-s3">
+                        <div class="stats-label">S3 Bucket</div>
+                        <div class="stats-value">—</div>
+                        <div class="stats-detail" id="stats-s3-detail">Loading…</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─────────── Ingestion Sources ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Ingestion Sources</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">Users connect via <code>/connect google</code> · <code>/connect microsoft</code> · <code>/connect apple</code> in chat</span>
+                </div>
+                <div id="ingestion-sources" style="padding:8px 16px 16px;">
+                    <div style="color:var(--text-muted);font-size:0.85rem;">Loading sources…</div>
+                </div>
+            </div>
+
+            <!-- ─────────── Document Upload (existing) ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Document Upload</span>
+                    <span id="upload-count" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+                </div>
+                <div class="upload-zone" id="upload-zone">
+                    <input type="file" id="file-input" multiple
+                        accept=".pdf,.docx,.csv,.txt,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,text/plain,image/png,image/jpeg">
+                    <div class="upload-icon">&#x1f4c1;</div>
+                    <div class="upload-text">Drag &amp; drop files here, or click to select</div>
+                    <div class="upload-hint">PDF, DOCX, CSV, TXT, PNG, JPG — Max 50MB per file</div>
+                </div>
+                <div class="upload-options" id="upload-options" style="margin:12px 0;padding:10px;background:rgba(61,43,31,0.05);border-radius:6px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9rem;">
+                        <input type="checkbox" id="corporate-toggle" name="corporate" value="true" data-testid="corporate-toggle" onchange="toggleTargetUser()">
+                        <span>Corporate doc (visible to all users)</span>
+                    </label>
+                    <div id="target-user-row" style="margin-top:10px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
+                        <label for="target-user-id" style="white-space:nowrap;">Index for user:</label>
+                        <select id="target-user-id" style="flex:1;padding:5px 8px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;">
+                            <option value="">All users (corporate)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="upload-list" style="margin-top:12px;"></div>
+            </div>
+
+            <!-- ─────────── Documents (with delete) ─────────── -->
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Documents</span>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <label id="select-all-label" style="display:none;align-items:center;gap:6px;cursor:pointer;font-size:0.85rem;font-weight:500;">
+                            <input type="checkbox" id="doc-select-all" onchange="toggleSelectAll(this)" style="cursor:pointer;">
+                            <span id="select-count" style="color:var(--primary);">0 selected</span>
+                        </label>
+                        <button id="btn-delete-selected" class="btn-danger" onclick="deleteSelected()" style="display:none;padding:5px 12px;font-size:0.8rem;">&#x1f5d1; Delete selected</button>
+                        <select id="doc-filter" onchange="loadDocuments()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:0.85rem;">
+                            <option value="all">All sources</option>
+                            <option value="admin">Admin uploads</option>
+                            <option value="user">User uploads</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="loadDocuments()" style="padding:6px 12px;font-size:0.8rem;">↻</button>
+                    </div>
+                </div>
+                <div id="documents-table" style="padding:8px 16px 16px;overflow-x:auto;">
+                    <div style="color:var(--text-muted);font-size:0.85rem;">Loading documents…</div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /tab-overview -->
+        </div>
+        </div><!-- /tab-documents -->
+
+<div class="tab-panel" id="tab-users" role="tabpanel" aria-labelledby="tab-btn-users">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">Users</span>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-outline" onclick="loadUsers()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                        <button class="btn-danger" onclick="resetAllUsers()" style="padding:6px 14px;font-size:0.8rem;" title="Wipe ALL user data (messages, prefs, docs, OS index). Preserves WA sessions and corporate docs.">⚠ Reset ALL</button>
+                    </div>
+                </div>
+                <div id="users-list" style="margin-top:1rem;">Loading…</div>
+                <div id="user-detail" style="margin-top:1.5rem;"></div>
+            </div>
+        </div>
+        </div><!-- /tab-users -->
+
+<div class="tab-panel" id="tab-system" role="tabpanel" aria-labelledby="tab-btn-system">
+        <div class="grid">
+            <div class="card card-full">
+                <div class="card-header">
+                    <span class="card-title">System Errors</span>
+                    <button class="btn btn-outline" onclick="loadSystemErrors()" style="padding:6px 12px;font-size:0.8rem;">↻ Refresh</button>
+                </div>
+                <div id="system-errors-list" style="margin-top:1rem;">Loading…</div>
+            </div>
+        </div>
+        </div><!-- /tab-system -->
+
+<div class="tab-panel" id="tab-consent" role="tabpanel" aria-labelledby="tab-btn-consent">
+    <div style="margin-bottom:16px;">
+        <h2 style="margin:0 0 8px;font-family:'Playfair Display',serif;">PDPA Consent Log</h2>
+        <p style="color:#888;font-size:0.9rem;margin:0;">User × consent timestamp × policy version. Required for compliance audits.</p>
+    </div>
+    <div style="margin-bottom:12px;">
+        <button onclick="loadConsent()" class="btn btn-secondary">Refresh</button>
+        <span id="consent-count" style="margin-left:12px;color:#888;font-size:0.9rem;"></span>
+    </div>
+    <div id="consent-list" style="background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;">Click Refresh to load.</div>
+</div>
+
+<!-- Architecture Tab -->
+<div class="tab-panel" id="tab-architecture" role="tabpanel" aria-labelledby="tab-btn-architecture">
+<div class="arch-wrap">
+
+    <!-- Hero card with SVG diagram -->
+    <div class="arch-hero">
+        <div class="arch-header-row">
+            <div>
+                <h2 class="arch-title">System Architecture</h2>
+                <p class="arch-subtitle">Live infrastructure topology &amp; message flow &mdash; refreshes every 5 seconds</p>
+            </div>
+            <div class="arch-controls">
+                <span class="arch-timestamp">Updated: <span id="arch-generated-at">&mdash;</span></span>
+                <label>
+                    <input type="checkbox" id="arch-autorefresh" checked>
+                    Auto
+                </label>
+                <button id="arch-refresh" class="btn-secondary" type="button" style="padding:6px 14px;font-size:0.78rem;">Refresh</button>
+            </div>
+        </div>
+
+        <div class="arch-svg-container">
+            <svg id="arch-svg" viewBox="0 0 1080 420" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;min-height:360px;"></svg>
+        </div>
+
+        <div class="arch-legend">
+            <span class="arch-legend-item"><span class="arch-legend-dot healthy"></span>Healthy</span>
+            <span class="arch-legend-item"><span class="arch-legend-dot pending"></span>Degraded</span>
+            <span class="arch-legend-item"><span class="arch-legend-dot down"></span>Down</span>
+            <span class="arch-legend-item" style="margin-left:auto;">
+                <span style="color:oklch(0.45 0.01 250);">&#9670;</span>&nbsp;Edge
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.48 0.08 270);">&#9670;</span>&nbsp;Core
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.48 0.10 300);">&#9670;</span>&nbsp;AI
+            </span>
+            <span class="arch-legend-item">
+                <span style="color:oklch(0.45 0.08 180);">&#9670;</span>&nbsp;Data
+            </span>
+        </div>
+    </div>
+
+    <!-- Message flow feed -->
+    <div class="arch-flow-section">
+        <div class="arch-flow-header">
+            <span class="arch-flow-title">Message Flow</span>
+            <span class="arch-flow-live">
+                <span class="arch-live-dot"></span>Live
+            </span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead>
+                <tr style="border-bottom:1px solid oklch(0.22 0.015 250);">
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;white-space:nowrap;">Time</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">User</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">Role</th>
+                    <th style="padding:9px 16px;text-align:left;font-size:0.75rem;font-weight:600;color:oklch(0.52 0.01 250);letter-spacing:0.05em;text-transform:uppercase;">Preview</th>
+                </tr>
+            </thead>
+            <tbody id="arch-flow-body">
+                <tr><td colspan="4" style="padding:24px 16px;color:oklch(0.45 0.01 250);font-size:0.82rem;text-align:center;">No traffic yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+</div>
+
+<!-- Test Chat Tab -->
+<div class="tab-panel" id="tab-testchat" role="tabpanel" aria-labelledby="tab-btn-testchat">
+    <div style="margin-bottom:16px;display:flex;align-items:baseline;gap:12px;">
+        <h2 class="card-title" style="font-size:1.4rem;margin:0;">Test Users</h2>
+        <span style="color:var(--text-muted);font-size:0.82rem;">Messages route through the live sub-agent stack. Replies surface here. Files and images supported.</span>
+    </div>
+    <div class="testchat-grid" id="testchat-grid">
+        <!-- Panels injected by initTestChat() -->
+    </div>
+</div>
+<!-- Help Tab -->
+<div class="tab-panel" id="tab-help" role="tabpanel" aria-labelledby="tab-btn-help">
+    <div style="margin-bottom:20px;">
+        <h2 class="card-title" style="font-size:1.4rem;">Help &amp; Reference</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:6px;">URL paths exposed by the orchestrator and slash commands available to WhatsApp + Telegram users.</p>
+    </div>
+    <div class="grid-cards-3">
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">Public URLs</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>/</code></td><td>Landing page</td></tr>
+                    <tr><td><code>/admin</code></td><td>Admin dashboard (this UI)</td></tr>
+                    <tr><td><code>/health</code></td><td>Health check — redis, dynamo, opensearch, uptime</td></tr>
+                    <tr><td><code>/whatsapp/qr</code></td><td>WhatsApp pairing QR (when needed)</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">Admin API</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>GET /admin/api/stats</code></td><td>Live KPI block</td></tr>
+                    <tr><td><code>GET /admin/api/data/users</code></td><td>List users</td></tr>
+                    <tr><td><code>GET /admin/api/data/users/:id</code></td><td>User detail</td></tr>
+                    <tr><td><code>POST /admin/api/data/users/reset-all</code></td><td>Wipe all user data</td></tr>
+                    <tr><td><code>GET /admin/api/architecture/state</code></td><td>System topology</td></tr>
+                    <tr><td><code>GET /admin/api/test/users</code></td><td>List 4 test users</td></tr>
+                    <tr><td><code>POST /admin/api/test/send</code></td><td>Inject message as test user</td></tr>
+                    <tr><td><code>POST /admin/api/logout</code></td><td>Sign out</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card" style="padding:20px;">
+            <h3 style="margin:0 0 12px 0;font-family:var(--font-display);font-weight:600;">WhatsApp slash commands</h3>
+            <table class="table small">
+                <tbody>
+                    <tr><td><code>/help</code></td><td>List commands</td></tr>
+                    <tr><td><code>/about</code></td><td>What Clawd is &amp; what it can do</td></tr>
+                    <tr><td><code>/privacy</code></td><td>Privacy policy &amp; data rights</td></tr>
+                    <tr><td><code>/profile</code></td><td>Show or edit preferences</td></tr>
+                    <tr><td><code>/list</code></td><td>List uploaded documents</td></tr>
+                    <tr><td><code>/delete &lt;file&gt;</code></td><td>Delete a document</td></tr>
+                    <tr><td><code>/ingested</code></td><td>Last 20 ingested URLs</td></tr>
+                    <tr><td><code>/forget-url &lt;url&gt;</code></td><td>Remove one URL from KB</td></tr>
+                    <tr><td><code>/draft &lt;type&gt; &lt;topic&gt;</code></td><td>Draft minutes/research/slides/email</td></tr>
+                    <tr><td><code>/forget</code></td><td>Erase ALL your data (PDPA)</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:0.75rem;color:var(--text-muted);margin-top:10px;">Slash commands are detected in container/sub-agent. Commands not implemented are echoed back.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Tab (existing) -->
+<div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tab-btn-settings">
+            <div class="settings-tab-inner"><div id="settings-panel-content"><p style="padding:24px;color:var(--text-muted)">Loading settings...</p></div></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ── CSRF (A2) ──
+        // Read the nanoclaw_admin_csrf cookie set by the server on /admin GET,
+        // and inject it as the X-CSRF-Token header on every state-mutating fetch.
+        // The cookie is intentionally NOT HttpOnly so this script can read it.
+        // SameSite=Strict already blocks classic CSRF; this is defense-in-depth.
+        (function installCsrfFetch() {
+            const CSRF_COOKIE_NAME = 'nanoclaw_admin_csrf';
+            const MUTATING = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+            function readCookie(name) {
+                const parts = (document.cookie || '').split(';');
+                for (const p of parts) {
+                    const [k, v] = p.trim().split('=');
+                    if (k === name) return v;
+                }
+                return '';
+            }
+            const origFetch = window.fetch.bind(window);
+            window.fetch = function (input, init) {
+                init = init || {};
+                const method = ((init.method || (typeof input === 'string' ? 'GET' : (input && input.method) || 'GET'))).toUpperCase();
+                if (MUTATING.has(method)) {
+                    const token = readCookie(CSRF_COOKIE_NAME);
+                    if (token) {
+                        const h = new Headers(init.headers || {});
+                        h.set('X-CSRF-Token', token);
+                        init.headers = h;
+                    }
+                }
+                return origFetch(input, init);
+            };
+        })();
+
+        // ── State ──
+        let eventSource = null;
+        let qrState = null;
+        let qrCountdownInterval = null;
+
+        // Expose eventSource on window for cross-panel SSE listeners (e.g. settings panel)
+        Object.defineProperty(window, 'eventSource', {
+            get() { return eventSource; },
+            set(v) { eventSource = v; },
+            configurable: true,
+        });
+
+        // ── Tab Navigation ──
+        
+        // Lazy-load settings panel on first switch to settings tab
+        let _settingsLoaded = false;
+        function loadSettingsIfNeeded() {
+            if (_settingsLoaded) return;
+            _settingsLoaded = true;
+            fetch('/admin/api/settings/html', { credentials: 'include' })
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    var el = document.getElementById('settings-panel-content');
+                    if (el) el.innerHTML = html;
+                    // Re-init settings JS if present
+                    if (typeof window.__initSettingsPanel === 'function') window.__initSettingsPanel();
+                })
+                .catch(function(e) {
+                    var el = document.getElementById('settings-panel-content');
+                    if (el) el.innerHTML = '<p style="padding:24px;color:var(--danger)">Failed to load settings: ' + e.message + '</p>';
+                });
+        }
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                const isActive = btn.dataset.tab === tabId;
+                btn.classList.toggle('active', isActive);
+                btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            });
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+            });
+            if (tabId === 'settings') {
+                loadSettingsIfNeeded();
+            }
+            if (tabId === 'architecture') {
+                renderArchSkeleton();
+                refreshArch();
+                if (archInterval) clearInterval(archInterval);
+                const cb = document.getElementById('arch-autorefresh');
+                if (cb && cb.checked) archInterval = setInterval(refreshArch, 5000);
+                if (cb && !cb.dataset.bound) {
+                    cb.dataset.bound = '1';
+                    cb.addEventListener('change', () => {
+                        if (archInterval) clearInterval(archInterval);
+                        if (cb.checked) archInterval = setInterval(refreshArch, 5000);
+                    });
+                }
+                const refreshBtn = document.getElementById('arch-refresh');
+                if (refreshBtn && !refreshBtn.dataset.bound) {
+                    refreshBtn.dataset.bound = '1';
+                    refreshBtn.addEventListener('click', refreshArch);
+                }
+            }
+            if (tabId === 'testchat') initTestChat();
+        
+            if (tabId === 'users') loadUsers();
+            if (tabId === 'system') loadSystemErrors();
+            if (tabId === 'consent') loadConsent();
+        }
+        async function loadConsent() {
+            const list = document.getElementById('consent-list');
+            const count = document.getElementById('consent-count');
+            list.innerHTML = 'Loading…';
+            count.textContent = '';
+            try {
+                const r = await fetch('/admin/api/data/consent');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.rows || d.rows.length === 0) {
+                    list.innerHTML = '<p style="color:#888;margin:0">No consent records yet.</p>';
+                    return;
+                }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
+                html += '<thead><tr style="border-bottom:1px solid var(--border)">';
+                html += '<th style="text-align:left;padding:8px">User</th>';
+                html += '<th style="text-align:left;padding:8px">Status</th>';
+                html += '<th style="text-align:left;padding:8px">Version</th>';
+                html += '<th style="text-align:left;padding:8px">Timestamp</th>';
+                html += '<th style="text-align:left;padding:8px">Discovery</th>';
+                html += '</tr></thead><tbody>';
+                for (const row of d.rows) {
+                    let status = '—';
+                    let color = '#888';
+                    if (row.consentGiven) { status = '✓ Given'; color = 'var(--success, #4caf50)'; }
+                    else if (row.consentDeclined) { status = '✗ Declined'; color = 'var(--danger, #d62728)'; }
+                    const ts = row.consentTimestamp ? new Date(row.consentTimestamp).toLocaleString() : '—';
+                    const ver = row.consentVersion || '—';
+                    const disc = row.discoveryCompleted ? '✓' : '—';
+                    html += '<tr style="border-bottom:1px solid var(--border)">';
+                    html += '<td style="padding:8px;font-family:monospace">' + (row.userId || '') + '</td>';
+                    html += '<td style="padding:8px;color:' + color + '">' + status + '</td>';
+                    html += '<td style="padding:8px">' + ver + '</td>';
+                    html += '<td style="padding:8px">' + ts + '</td>';
+                    html += '<td style="padding:8px">' + disc + '</td>';
+                    html += '</tr>';
+                }
+                html += '</tbody></table>';
+                list.innerHTML = html;
+                count.textContent = d.total + ' record' + (d.total === 1 ? '' : 's');
+            } catch (e) {
+                list.innerHTML = '<p style="color:var(--danger,#d62728)">Failed to load: ' + e.message + '</p>';
+            }
+        }
+        async function loadUsers() {
+            const list = document.getElementById('users-list');
+            const detail = document.getElementById('user-detail');
+            list.innerHTML = 'Loading…';
+            detail.innerHTML = '';
+            try {
+                const r = await fetch('/admin/api/data/users');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.users || d.users.length === 0) { list.innerHTML = '<p style="color:#aaa">No users yet.</p>'; return; }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
+                html += '<thead><tr style="border-bottom:1px solid #444"><th style="text-align:left;padding:6px">User</th><th style="text-align:right;padding:6px">Messages</th><th style="text-align:right;padding:6px">Docs</th><th style="text-align:right;padding:6px">Actions</th></tr></thead><tbody>';
+                for (const u of d.users) {
+                    const uid = u.userId.replace(/'/g, "\\'");
+                    html += `<tr style="border-bottom:1px solid #333"><td style="padding:6px"><a href="javascript:void(0)" onclick="loadUserDetail('${uid}')">${u.userId}</a></td><td style="text-align:right;padding:6px">${u.messageCount}</td><td style="text-align:right;padding:6px">${u.docCount}</td><td style="text-align:right;padding:6px"><button class="btn btn-outline" style="padding:4px 8px;font-size:0.75rem" onclick="forgetUser('${uid}')">Forget (PDPA)</button></td></tr>`;
+                }
+                html += '</tbody></table>';
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+            }
+        }
+
+        async function loadUserDetail(uid) {
+            const detail = document.getElementById('user-detail');
+            detail.innerHTML = '<div class="card" style="padding:16px;color:var(--text-muted);">Loading detail for ' + uid + '…</div>';
+            try {
+                const r = await fetch('/admin/api/data/users/' + encodeURIComponent(uid));
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                const escape = (s) => String(s ?? '—').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const fmtBytes = (b) => b == null ? '—' : b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(2) + ' MB';
+                const fmtTime = (t) => { try { return new Date(t).toLocaleString(); } catch { return t || '—'; } };
+                const prefs = d.preferences || {};
+                const prefRows = Object.keys(prefs).filter(k => prefs[k] != null && k !== 'updatedAt').map(k => `<tr><td style="padding:6px 12px;color:var(--text-muted);">${escape(k)}</td><td style="padding:6px 12px;">${escape(typeof prefs[k] === 'object' ? JSON.stringify(prefs[k]) : prefs[k])}</td></tr>`).join('');
+
+                let html = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:8px;">
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">User</span></div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:0.95rem;margin-top:8px;word-break:break-all;">${escape(d.userId)}</div>
+                        <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;">
+                            <button class="btn btn-outline" onclick="loadUsers()">↻ Back to list</button>
+                            <button class="btn btn-danger" onclick="forgetUser('${uid.replace(/'/g, "\\'")}')">Forget (PDPA)</button>
+                        </div>
+                    </div>
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">Counts</span></div>
+                        <div class="stats-grid" style="margin-top:8px;">
+                            <div class="stat-item"><div class="stat-value">${d.recentMessages?.length ?? 0}</div><div class="stat-label">recent msgs</div></div>
+                            <div class="stat-item"><div class="stat-value">${d.documents?.length ?? 0}</div><div class="stat-label">documents</div></div>
+                            <div class="stat-item"><div class="stat-value">${Object.keys(prefs).length}</div><div class="stat-label">prefs</div></div>
+                        </div>
+                    </div>
+                    <div class="card" style="padding:18px;">
+                        <div class="card-header"><span class="card-title">Preferences</span></div>
+                        ${prefRows ? `<table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-top:8px;">${prefRows}</table>` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No preferences set.</div>'}
+                    </div>
+                </div>
+
+                <div class="card card-full" style="margin-top:16px;padding:18px;">
+                    <div class="card-header"><span class="card-title">Documents (${d.documents?.length ?? 0})</span></div>
+                    ${(d.documents && d.documents.length) ? `
+                        <div class="table-wrapper" style="margin-top:8px;">
+                            <table>
+                                <thead><tr><th>Filename</th><th style="text-align:right;">Size</th><th>Uploaded</th></tr></thead>
+                                <tbody>
+                                    ${d.documents.map(doc => `<tr><td style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;">${escape(doc.key)}</td><td style="text-align:right;">${fmtBytes(doc.size)}</td><td>${fmtTime(doc.uploadedAt)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No documents uploaded.</div>'}
+                </div>
+
+                <div class="card card-full" style="margin-top:16px;padding:18px;">
+                    <div class="card-header"><span class="card-title">Recent Messages (${d.recentMessages?.length ?? 0})</span></div>
+                    ${(d.recentMessages && d.recentMessages.length) ? `
+                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;">
+                            ${d.recentMessages.map(m => `
+                                <div style="border:1px solid var(--border);border-radius:6px;padding:10px;background:var(--bg-elev);">
+                                    <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:var(--text-muted);margin-bottom:6px;">
+                                        <span style="font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">${escape(m.role || 'msg')}</span>
+                                        <span>${fmtTime(m.timestamp)}</span>
+                                    </div>
+                                    <div style="white-space:pre-wrap;font-size:0.9rem;line-height:1.45;">${escape(m.content)}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div style="color:var(--text-muted);font-size:0.85rem;margin-top:8px;">No recent messages.</div>'}
+                </div>`;
+                detail.innerHTML = html;
+            } catch (e) {
+                detail.innerHTML = '<div class="card" style="padding:16px;color:#f55;">Error: ' + e.message + '</div>';
+            }
+        }
+
+        // A3 (Wave 5): typed-confirm modal for /forget — requires user to type
+        // the exact user id (phone number for WA) before the DELETE fires.
+        // PDPA right-of-erasure is irreversible; click-to-confirm is too easy
+        // to misfire on a small admin screen.
+        function _showForgetModal(uid) {
+            return new Promise((resolve) => {
+                const overlay = document.createElement('div');
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:Inter,sans-serif';
+                const box = document.createElement('div');
+                box.style.cssText = 'background:#1a1a1a;color:#eee;padding:28px 32px;border-radius:8px;max-width:480px;width:90%;box-shadow:0 12px 48px rgba(0,0,0,0.6)';
+                box.innerHTML = `
+                    <h3 style="margin:0 0 12px 0;font-size:18px;color:#f55">⚠️ Permanently delete user data</h3>
+                    <p style="margin:0 0 16px 0;font-size:14px;line-height:1.5">
+                        This will queue a PDPA right-of-erasure for
+                        <strong style="font-family:Menlo,monospace;color:#fc8">${uid.replace(/[<>"&]/g, c => ({'<':'&lt;','>':'&gt;','"':'&quot;','&':'&amp;'}[c]))}</strong>.
+                        It removes ALL chat history, preferences, and indexed documents. This is IRREVERSIBLE.
+                    </p>
+                    <p style="margin:0 0 8px 0;font-size:13px;color:#aaa">Type the user id exactly to confirm:</p>
+                    <input id="forget-confirm-input" type="text"
+                        style="width:100%;padding:8px 10px;background:#0a0a0a;border:1px solid #444;color:#eee;font-family:Menlo,monospace;border-radius:4px;font-size:13px"
+                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                    <div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">
+                        <button id="forget-cancel" style="padding:8px 16px;background:#333;color:#eee;border:none;border-radius:4px;cursor:pointer">Cancel</button>
+                        <button id="forget-confirm" style="padding:8px 16px;background:#a02020;color:#fff;border:none;border-radius:4px;cursor:not-allowed;opacity:0.4" disabled>Delete forever</button>
+                    </div>
+                `;
+                overlay.appendChild(box);
+                document.body.appendChild(overlay);
+                const input = box.querySelector('#forget-confirm-input');
+                const btn = box.querySelector('#forget-confirm');
+                const cancel = box.querySelector('#forget-cancel');
+                input.focus();
+                input.addEventListener('input', () => {
+                    const ok = input.value === uid;
+                    btn.disabled = !ok;
+                    btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+                    btn.style.opacity = ok ? '1' : '0.4';
+                });
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !btn.disabled) btn.click();
+                    if (e.key === 'Escape') cancel.click();
+                });
+                btn.addEventListener('click', () => { document.body.removeChild(overlay); resolve(true); });
+                cancel.addEventListener('click', () => { document.body.removeChild(overlay); resolve(false); });
+            });
+        }
+
+        async function forgetUser(uid) {
+            const confirmed = await _showForgetModal(uid);
+            if (!confirmed) return;
+            try {
+                const r = await fetch('/admin/api/data/users/' + encodeURIComponent(uid), { method: 'DELETE' });
+                const d = await r.json();
+                alert(r.ok ? ('Forget request queued: ' + (d.requestId || '')) : ('Error: ' + (d.error || r.status)));
+                if (r.ok) loadUsers();
+            } catch (e) { alert('Error: ' + e.message); }
+        }
+
+        async function loadSystemErrors() {
+            const el = document.getElementById('system-errors-list');
+            el.innerHTML = 'Loading…';
+            try {
+                const r = await fetch('/admin/api/data/system-errors?limit=50');
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                if (!d.errors || d.errors.length === 0) { el.innerHTML = '<p style="color:#aaa">No errors. ' + (d.note || 'Healthy.') + '</p>'; return; }
+                let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+                html += '<thead><tr style="border-bottom:1px solid #444"><th style="text-align:left;padding:6px">When</th><th style="text-align:left;padding:6px">Message</th></tr></thead><tbody>';
+                for (const err of d.errors) {
+                    const msg = (err.message || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+                    const ts = err.timestamp || '';
+                    const stack = (err.stackTrace || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+                    html += '<tr style="border-bottom:1px solid #333"><td style="padding:6px;white-space:nowrap;font-family:monospace;color:#888">' + ts + '</td><td style="padding:6px">' + msg + (stack ? '<details style="margin-top:4px"><summary style="cursor:pointer;color:#888">stack</summary><pre style="background:#222;padding:8px;font-size:0.75rem;overflow:auto">' + stack + '</pre></details>' : '') + '</td></tr>';
+                }
+                html += '</tbody></table>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = '<p style="color:#f55">Error: ' + e.message + '</p>';
+            }
+        }
+
+
+
+        // ── SSE Connection ──
+        function connectSSE() {
+            eventSource = new EventSource('/admin/sse');
+
+            eventSource.addEventListener('connected', () => {
+                setSseBadge('connected', 'Live');
+            });
+
+            eventSource.addEventListener('health', (e) => {
+                const d = JSON.parse(e.data);
+                updateHealth(d);
+                updatePulseHealth(d);
+            });
+
+            eventSource.addEventListener('whatsapp', (e) => {
+                updateWhatsApp(JSON.parse(e.data));
+            });
+
+            eventSource.addEventListener('containers', (e) => {
+                const d = JSON.parse(e.data);
+                updateContainers(d);
+                updatePulseTasks(d);
+            });
+
+            eventSource.addEventListener('stats', (e) => {
+                updateStats(JSON.parse(e.data));
+            });
+
+            eventSource.onerror = () => {
+                setSseBadge('disconnected', 'Disconnected');
+                eventSource.close();
+                setTimeout(connectSSE, 3000);
+            };
+        }
+
+        function setSseBadge(status, label) {
+            document.getElementById('sse-dot').className = 'status-dot ' + status;
+            document.getElementById('sse-label').textContent = label;
+        }
+
+        // ── Update Functions ──
+        function updateHealth(data) {
+            const el = document.getElementById('overall-status');
+            el.textContent = data.overallStatus || 'unknown';
+            el.className = 'badge badge-' + (data.overallStatus || 'unknown');
+
+            const list = document.getElementById('services-list');
+            if (!data.services || data.services.length === 0) {
+                list.innerHTML = '<div class="empty-state">No services reporting</div>';
+                return;
+            }
+            list.innerHTML = data.services.map(s => `
+                <div class="service-item">
+                    <span class="service-name">${esc(s.name)}</span>
+                    <div class="service-status">
+                        ${s.latencyMs != null ? '<span>' + s.latencyMs + 'ms</span>' : ''}
+                        <span class="badge badge-${s.status}">${s.status}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateWhatsApp(data) {
+        updateWaActionButtons(data.connected);
+        if (data.pairingCode) showPairingCode(data.pairingCode);
+
+            const qrBox = document.getElementById('qr-box');
+            const statusEl = document.getElementById('wa-status');
+            const phoneEl = document.getElementById('wa-phone');
+            const uptimeEl = document.getElementById('wa-uptime');
+            const countdownEl = document.getElementById('wa-countdown');
+
+            if (data.connected || data.state === 'connected') {
+                qrBox.innerHTML = '<div class="connected-check">&#x2705;</div>';
+                statusEl.textContent = 'Connected';
+                statusEl.style.color = 'var(--success)';
+                phoneEl.textContent = data.phoneNumber ? 'Phone: ' + data.phoneNumber : '';
+                uptimeEl.textContent = data.uptime ? 'Uptime: ' + formatUptime(data.uptime) : '';
+                countdownEl.textContent = '';
+            } else if (data.qr && data.qr.available && data.qr.qrDataUrl) {
+                qrBox.innerHTML = '<img src="' + data.qr.qrDataUrl + '" alt="WhatsApp QR Code">';
+                statusEl.textContent = 'Scan QR Code';
+                statusEl.style.color = 'var(--warning)';
+                phoneEl.textContent = '';
+                uptimeEl.textContent = '';
+                // QR countdown (refreshes every ~20s)
+                if (data.qr.qrGeneratedAt) {
+                    startQrCountdown(data.qr.qrGeneratedAt);
+                }
+            } else {
+                qrBox.innerHTML = '<span style="color: var(--text-muted); font-size: 0.8rem;">Disconnected</span>';
+                statusEl.textContent = data.state || 'Disconnected';
+                statusEl.style.color = 'var(--danger)';
+                phoneEl.textContent = '';
+                uptimeEl.textContent = '';
+                countdownEl.textContent = '';
+            }
+        }
+
+        function startQrCountdown(generatedAt) {
+            if (qrCountdownInterval) clearInterval(qrCountdownInterval);
+            const countdownEl = document.getElementById('wa-countdown');
+            qrCountdownInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - generatedAt) / 1000);
+                const remaining = Math.max(0, 20 - elapsed);
+                if (remaining > 0) {
+                    countdownEl.textContent = 'QR refreshes in ' + remaining + 's';
+                } else {
+                    countdownEl.textContent = 'Waiting for new QR...';
+                }
+            }, 1000);
+        }
+
+        function updateContainers(data) {
+            const body = document.getElementById('containers-body');
+            const count = document.getElementById('container-count');
+            count.textContent = (data.total || 0) + ' running';
+
+            if (!data.containers || data.containers.length === 0) {
+                body.innerHTML = '<tr><td colspan="7" class="empty-state">No containers running</td></tr>';
+                return;
+            }
+            body.innerHTML = data.containers.map(c => `
+                <tr>
+                    <td>${esc(c.userHash || c.userId || '—')}</td>
+                    <td><code>${esc((c.containerId || '').slice(0, 12))}</code></td>
+                    <td><span class="badge badge-${c.status === 'running' ? 'healthy' : 'unhealthy'}">${c.status}</span></td>
+                    <td>${formatUptime(c.uptime)}</td>
+                    <td>${c.memoryUsageMb ? c.memoryUsageMb.toFixed(1) + ' MB' : '—'}</td>
+                    <td>${c.cpuPercent != null ? c.cpuPercent.toFixed(1) + '%' : '—'}</td>
+                    <td>${c.lastActivity ? timeAgo(c.lastActivity) : '—'}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats(data) {
+            document.getElementById('stat-rph').textContent = data.globalMessagesPerHour || 0;
+            document.getElementById('stat-users').textContent = data.activeUsers || 0;
+            document.getElementById('stat-hits').textContent = data.rateLimitHits24h || 0;
+        }
+
+        // ── Wave 10: Live Pulse Strip handlers ──
+        const pulseHistory = { msgs: [] };
+
+        function flashTile(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('flash');
+            void el.offsetWidth;
+            el.classList.add('flash');
+        }
+
+        function renderSparkline(svgId, points, color) {
+            const svg = document.getElementById(svgId);
+            if (!svg || !points || points.length < 2) return;
+            const w = 100, h = 30, pad = 2;
+            const max = Math.max(...points, 0.01);
+            const min = Math.min(...points, 0);
+            const range = (max - min) || 1;
+            const stepX = (w - 2*pad) / (points.length - 1);
+            const coords = points.map((v, i) => {
+                const x = pad + i * stepX;
+                const y = h - pad - ((v - min) / range) * (h - 2*pad);
+                return [x, y];
+            });
+            const linePath = coords.map((c, i) => (i === 0 ? 'M' : 'L') + c[0].toFixed(1) + ' ' + c[1].toFixed(1)).join(' ');
+            const areaPath = linePath + ' L ' + (w-pad) + ' ' + (h-pad) + ' L ' + pad + ' ' + (h-pad) + ' Z';
+            const c = color || 'var(--accent)';
+            svg.innerHTML =
+                '<defs><linearGradient id="grad-' + svgId + '" x1="0" y1="0" x2="0" y2="1">' +
+                '<stop offset="0%" stop-color="' + c + '" stop-opacity="0.35"/>' +
+                '<stop offset="100%" stop-color="' + c + '" stop-opacity="0"/>' +
+                '</linearGradient></defs>' +
+                '<path d="' + areaPath + '" fill="url(#grad-' + svgId + ')"/>' +
+                '<path d="' + linePath + '" fill="none" stroke="' + c + '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        }
+
+        function updatePulseSpend(data) {
+            if (!data) return;
+            const v = data.last24hUsd || 0;
+            const v7 = data.last7dUsd || 0;
+            const valueEl = document.getElementById('pulse-spend-value');
+            if (valueEl) valueEl.textContent = '$' + v.toFixed(2);
+            const sub = document.getElementById('pulse-spend-sub');
+            if (sub) sub.textContent = '7-day total: $' + v7.toFixed(2);
+            renderSparkline('pulse-spend-spark', data.perDayUsd || [], 'var(--accent)');
+            flashTile('pulse-spend');
+        }
+
+        function updatePulseQueues(data) {
+            if (!data) return;
+            const total = (data.pendingUploads || 0) + (data.dataGatewayQueue || 0) + (data.subAgentQueues || 0);
+            const valueEl = document.getElementById('pulse-queue-value');
+            if (valueEl) valueEl.textContent = total;
+            const sub = document.getElementById('pulse-queue-sub');
+            if (sub) sub.textContent = (data.pendingUploads || 0) + ' uploads · ' + (data.dataGatewayQueue || 0) + ' gateway · ' + (data.subAgentQueues || 0) + ' agents';
+            flashTile('pulse-queue');
+        }
+
+        function updatePulseHealth(data) {
+            if (!data) return;
+            const v = (data.overallStatus || 'unknown').toUpperCase();
+            const valueEl = document.getElementById('pulse-health-value');
+            if (valueEl) {
+                valueEl.textContent = v;
+                valueEl.style.color = data.overallStatus === 'healthy' ? 'var(--success)' : (data.overallStatus === 'degraded' ? 'var(--warning)' : 'var(--text-primary)');
+            }
+            const asof = document.getElementById('pulse-asof');
+            if (asof) asof.textContent = 'live · ' + new Date().toLocaleTimeString();
+            flashTile('pulse-health');
+        }
+
+        function updatePulseTasks(data) {
+            if (!data) return;
+            const valueEl = document.getElementById('pulse-tasks-value');
+            if (valueEl) valueEl.textContent = data.total || 0;
+            flashTile('pulse-tasks');
+        }
+
+        function updatePulseFromStats(data) {
+            if (!data) return;
+            const rph = data.globalMessagesPerHour || 0;
+
+            pulseHistory.msgs.push(rph);
+            if (pulseHistory.msgs.length > 30) pulseHistory.msgs.shift();
+            renderSparkline('pulse-msgs-spark', pulseHistory.msgs, 'var(--accent-mustard)');
+
+            const sub = document.getElementById('pulse-msgs-sub');
+            if (sub && pulseHistory.msgs.length >= 2) {
+                const prev = pulseHistory.msgs[pulseHistory.msgs.length - 2] || 0;
+                const delta = rph - prev;
+                const cls = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+                const sign = delta > 0 ? '+' : '';
+                sub.innerHTML = 'msgs/hour ' + (data.globalMessagesPerMinute || 0) + '/min · <span class="pulse-delta ' + cls + '">' + sign + delta + '</span>';
+            }
+            flashTile('pulse-msgs');
+        }
+
+        async function bootstrapPulse() {
+            try {
+                const [s, q] = await Promise.all([
+                    fetch('/admin/api/spend').then(r => r.ok ? r.json() : null).catch(() => null),
+                    fetch('/admin/api/queues').then(r => r.ok ? r.json() : null).catch(() => null),
+                ]);
+                if (s) updatePulseSpend(s);
+                if (q) updatePulseQueues(q);
+            } catch (_e) { /* swallow */ }
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapPulse);
+        } else {
+            bootstrapPulse();
+        }
+
+
+        // ── WhatsApp Actions ──
+        async function reconnectWhatsApp() {
+            try {
+                const res = await fetch('/admin/api/whatsapp/reconnect', { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                showToast(data.message || 'Reconnecting...', data.success ? 'success' : 'error');
+            } catch (e) {
+                showToast('Failed to reconnect', 'error');
+            }
+        }
+
+        async function disconnectWhatsApp() {
+            try {
+                const res = await fetch('/admin/api/whatsapp/disconnect', { method: 'POST', credentials: 'include' });
+                const data = await res.json();
+                showToast(data.message || 'Disconnected', data.success ? 'success' : 'error');
+            } catch (e) {
+                showToast('Failed to disconnect', 'error');
+            }
+        }
+
+        // ── Quick Actions ──
+        async function doAction(action) {
+            if (action === 'reconnect') return reconnectWhatsApp();
+            if (action === 'disconnect') return disconnectWhatsApp();
+            if (action === 'refresh') {
+                showToast('Refreshing...', 'success');
+                return;
+            }
+            if (action === 'clear-limits') {
+                try {
+                    const res = await fetch('/admin/api/actions/clear-rate-limits', { method: 'POST', credentials: 'include' });
+                    const data = await res.json();
+                    showToast(data.message || 'Done', 'success');
+                } catch (e) {
+                    showToast('Failed', 'error');
+                }
+            }
+        }
+
+        // ── File Upload ──
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadList = document.getElementById('upload-list');
+
+        // Corporate toggle - show/hide target-user-row (req 6.4)
+        const corpToggleEl = document.getElementById('corporate-toggle');
+        const targetUserRow = document.getElementById('target-user-row');
+        function updateCorporateToggle() {
+            if (corpToggleEl && targetUserRow) {
+                targetUserRow.style.display = corpToggleEl.checked ? 'none' : 'block';
+            }
+        }
+        if (corpToggleEl) corpToggleEl.addEventListener('change', updateCorporateToggle);
+        updateCorporateToggle(); // init state: toggle unchecked -> show user row
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFiles(e.dataTransfer.files);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                handleFiles(fileInput.files);
+            }
+        });
+
+        function handleFiles(files) {
+            for (const file of files) {
+                uploadFile(file);
+            }
+            fileInput.value = '';
+        }
+
+        async function uploadFile(file) {
+            const id = Math.random().toString(36).slice(2, 10);
+            const item = document.createElement('div');
+            item.className = 'upload-item';
+            item.id = 'upload-' + id;
+            item.innerHTML = `
+                <span class="upload-item-name">${esc(file.name)}</span>
+                <span class="upload-item-status uploading">Uploading...</span>
+                <div class="progress-bar"><div class="progress-bar-fill" style="width: 0%"></div></div>
+            `;
+            uploadList.prepend(item);
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                // Corporate toggle fields
+                const corpToggle = document.getElementById('corporate-toggle');
+                const isCorporate = corpToggle && corpToggle.checked;
+                formData.append('corporate', isCorporate ? 'true' : 'false');
+                if (!isCorporate) {
+                    const targetUser = document.getElementById('target-user-id');
+                    const targetUserId = targetUser ? targetUser.value.trim() : '';
+                    if (targetUserId) formData.append('targetUserId', targetUserId);
+                }
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/admin/api/upload');
+                xhr.withCredentials = true;
+                const _csrfTok = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                if (_csrfTok) xhr.setRequestHeader('X-CSRF-Token', _csrfTok);
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        const fill = item.querySelector('.progress-bar-fill');
+                        if (fill) fill.style.width = pct + '%';
+                    }
+                };
+
+                xhr.onload = () => {
+                    const statusEl = item.querySelector('.upload-item-status');
+                    const progressBar = item.querySelector('.progress-bar');
+                    if (xhr.status === 200) {
+                        statusEl.textContent = 'Processing';
+                        statusEl.className = 'upload-item-status processing';
+                        if (progressBar) progressBar.remove();
+                        // Poll for completion
+                        pollUploadStatus(id, item);
+                    } else {
+                        statusEl.textContent = 'Failed';
+                        statusEl.className = 'upload-item-status failed';
+                        if (progressBar) progressBar.remove();
+                    }
+                };
+
+                xhr.onerror = () => {
+                    const statusEl = item.querySelector('.upload-item-status');
+                    statusEl.textContent = 'Failed';
+                    statusEl.className = 'upload-item-status failed';
+                    const progressBar = item.querySelector('.progress-bar');
+                    if (progressBar) progressBar.remove();
+                };
+
+                xhr.send(formData);
+            } catch (e) {
+                const statusEl = item.querySelector('.upload-item-status');
+                statusEl.textContent = 'Failed';
+                statusEl.className = 'upload-item-status failed';
+            }
+
+            updateUploadCount();
+        }
+
+        function pollUploadStatus(id, item) {
+            let attempts = 0;
+            const interval = setInterval(async () => {
+                attempts++;
+                if (attempts > 30) {
+                    clearInterval(interval);
+                    return;
+                }
+                try {
+                    const res = await fetch('/admin/api/uploads', { credentials: 'include' });
+                    const data = await res.json();
+                    const upload = data.uploads && data.uploads.find(u => u.status === 'completed' || u.status === 'failed');
+                    if (upload) {
+                        const statusEl = item.querySelector('.upload-item-status');
+                        if (upload.status === 'completed') {
+                            statusEl.textContent = 'Indexed';
+                            statusEl.className = 'upload-item-status completed';
+                        } else if (upload.status === 'failed') {
+                            statusEl.textContent = 'Failed';
+                            statusEl.className = 'upload-item-status failed';
+                        }
+                        clearInterval(interval);
+                    }
+                } catch { /* ignore */ }
+            }, 2000);
+        }
+
+        function updateUploadCount() {
+            const items = uploadList.querySelectorAll('.upload-item');
+            document.getElementById('upload-count').textContent = items.length > 0 ? items.length + ' file(s)' : '';
+        }
+
+        // ── Utilities ──
+        function formatUptime(seconds) {
+            if (!seconds || seconds < 0) return '—';
+            if (seconds < 60) return seconds + 's';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+            return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
+        }
+
+        function timeAgo(isoStr) {
+            const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+            if (diff < 60) return diff + 's ago';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show ' + (type || '');
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+
+        // ── Init ──
+        connectSSE();
+
+        // Load recent uploads on page load
+        fetch('/admin/api/uploads', { credentials: 'include' }).then(r => r.json()).then(data => {
+            if (data.uploads && data.uploads.length > 0) {
+                for (const u of data.uploads.slice(0, 10)) {
+                    const item = document.createElement('div');
+                    item.className = 'upload-item';
+                    item.innerHTML = `
+                        <span class="upload-item-name">${esc(u.filename)}</span>
+                        <span class="upload-item-status ${u.status}">${u.status === 'completed' ? 'Indexed' : u.status}</span>
+                    `;
+                    uploadList.appendChild(item);
+                }
+                updateUploadCount();
+            }
+        }).catch(() => {});
+    
+    // ── Set Up Tab JS ──
+
+    function requestPairingCode() {
+        const phone = document.getElementById('wa-phone-input')?.value?.trim();
+        if (!phone) { alert('Enter a phone number first'); return; }
+        fetch('/admin/api/whatsapp/phone', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone })
+        })
+        .then(r => r.json())
+        .then(d => {
+            if (d.pairingCode) showPairingCode(d.pairingCode);
+            else if (d.error) alert('Error: ' + d.error);
+        })
+        .catch(e => alert('Failed: ' + e.message));
+    }
+
+    function showPairingCode(code) {
+        const box = document.getElementById('wa-pairing-code');
+        const val = document.getElementById('wa-pairing-code-value');
+        const exp = document.getElementById('wa-pairing-expiry');
+        if (!box || !val) return;
+        val.textContent = code;
+        exp.textContent = 'Expires in 60 seconds';
+        box.style.display = 'block';
+        // Auto-hide after 60s
+        setTimeout(() => { box.style.display = 'none'; }, 60000);
+        // Countdown
+        let secs = 60;
+        const timer = setInterval(() => {
+            secs--;
+            if (exp) exp.textContent = 'Expires in ' + secs + ' second' + (secs !== 1 ? 's' : '');
+            if (secs <= 0) { clearInterval(timer); box.style.display = 'none'; }
+        }, 1000);
+    }
+
+    function saveTelegramToken() {
+        const token = document.getElementById('tg-token-input')?.value?.trim();
+        if (!token) { alert('Paste a bot token first'); return; }
+        fetch('/admin/api/setup/telegram-token', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        })
+        .then(r => r.json())
+        .then(d => {
+            const badge = document.getElementById('tg-status-badge');
+            if (d.success) {
+                if (badge) { badge.textContent = 'Connected'; badge.style.background = 'var(--success)'; }
+                document.getElementById('tg-token-input').value = '';
+            } else {
+                alert('Failed: ' + (d.error ?? 'unknown'));
+            }
+        })
+        .catch(e => alert('Failed: ' + e.message));
+    }
+
+    function setAutoApprove(enabled) {
+        const desc = document.getElementById('auto-approve-desc');
+        const note = document.getElementById('auto-approve-note');
+        if (desc) desc.textContent = enabled
+            ? 'Anyone can message Clawd immediately. No approval needed.'
+            : 'You will receive a Telegram notification to approve each new sender.';
+        if (note) note.style.display = enabled ? 'none' : 'block';
+        fetch('/admin/api/setup/auto-approve', {
+            method: 'PUT', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        }).catch(e => console.error('auto-approve update failed', e));
+    }
+
+    // Gate WA action buttons on connection state
+    function updateWaActionButtons(connected) {
+        const ids = ['wa-btn-reconnect', 'wa-btn-disconnect'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = !connected;
+            el.title = connected ? '' : 'Connect WhatsApp first';
+        });
+    }
+
+
+
+        // ─── Data tab: stats / documents / ingestion ───────────────────────
+        function fmtBytes(n) {
+            if (n == null || n < 0) return '—';
+            const u = ['B','KB','MB','GB','TB'];
+            let i = 0;
+            while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+            return n.toFixed(n < 10 && i > 0 ? 1 : 0) + ' ' + u[i];
+        }
+        function fmtNum(n) {
+            if (n == null || n < 0) return '—';
+            return n.toLocaleString();
+        }
+        function fmtRelTime(iso) {
+            try {
+                const d = new Date(iso); const s = (Date.now() - d.getTime())/1000;
+                if (s < 60) return Math.floor(s) + 's ago';
+                if (s < 3600) return Math.floor(s/60) + 'm ago';
+                if (s < 86400) return Math.floor(s/3600) + 'h ago';
+                return Math.floor(s/86400) + 'd ago';
+            } catch (_e) { return iso || '—'; }
+        }
+
+        async function loadDataStats() {
+            try {
+                const r = await fetch('/admin/api/data/stats', { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                const ddb = document.getElementById('stats-dynamodb');
+                const ddbDet = document.getElementById('stats-dynamodb-detail');
+                let totalItems = 0, totalSize = 0;
+                for (const t of (data.dynamodb?.tables || [])) {
+                    if (t.itemCount > 0) totalItems += t.itemCount;
+                    if (t.sizeBytes > 0) totalSize += t.sizeBytes;
+                }
+                ddb.querySelector('.stats-value').textContent = fmtNum(totalItems) + ' items';
+                ddbDet.innerHTML = (data.dynamodb?.tables || []).map(t =>
+                    '<div class="stats-row"><span>' + t.name.replace('nanoclaw-','') + '</span><span>' + fmtNum(t.itemCount) + ' / ' + fmtBytes(t.sizeBytes) + '</span></div>'
+                ).join('') + '<div class="stats-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:6px;"><span><strong>Total size</strong></span><span>' + fmtBytes(totalSize) + '</span></div>';
+
+                const os = document.getElementById('stats-opensearch');
+                const osDet = document.getElementById('stats-opensearch-detail');
+                os.querySelector('.stats-value').textContent = fmtNum(data.opensearch?.documentCount ?? 0) + ' docs';
+                osDet.innerHTML =
+                    '<div class="stats-row"><span>Index</span><span>' + (data.opensearch?.indexName ?? '—') + '</span></div>' +
+                    '<div class="stats-row"><span>Size</span><span>' + fmtBytes(data.opensearch?.sizeBytes ?? 0) + '</span></div>';
+
+                const s3 = document.getElementById('stats-s3');
+                const s3Det = document.getElementById('stats-s3-detail');
+                s3.querySelector('.stats-value').textContent = fmtNum(data.s3?.objectCount ?? 0) + ' files';
+                s3Det.innerHTML =
+                    '<div class="stats-row"><span>Bucket</span><span style="font-size:0.7rem;">' + (data.s3?.bucketName ?? '—') + '</span></div>' +
+                    '<div class="stats-row"><span>Total size</span><span>' + fmtBytes(data.s3?.sizeBytes ?? 0) + '</span></div>';
+            } catch (e) {
+                console.error('loadDataStats failed', e);
+                ['stats-dynamodb-detail','stats-opensearch-detail','stats-s3-detail'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.innerHTML = '<span style="color:var(--danger);">Failed: ' + (e.message || e) + '</span>';
+                });
+            }
+        }
+
+        async function loadDocuments() {
+            // Clear selections on reload
+            if (typeof _selectedDocs !== 'undefined') {
+                _selectedDocs.clear();
+                const lbl = document.getElementById('select-all-label');
+                const btn = document.getElementById('btn-delete-selected');
+                if (lbl) lbl.style.display = 'none';
+                if (btn) btn.style.display = 'none';
+                const master = document.getElementById('doc-select-all');
+                if (master) { master.checked = false; master.indeterminate = false; }
+            }
+            const filterSel = document.getElementById('doc-filter');
+            const filter = filterSel ? filterSel.value : 'all';
+            const tbl = document.getElementById('documents-table');
+            tbl.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">Loading…</div>';
+            try {
+                const r = await fetch('/admin/api/data/documents?filter=' + encodeURIComponent(filter), { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                // W2 defense-in-depth: filter out WhatsApp session JSONs even if backend lets some through.
+                const isWaSession = (d) => {
+                    const k = (d.s3Key || d.key || d.filename || '').toLowerCase();
+                    return k.startsWith('sessions/') || k.includes('/whatsapp-session') || /(^|\/)session-\d+_\d+\.\d+\.json$/.test(k) || k.endsWith('.creds.json');
+                };
+                data.documents = (data.documents || []).filter(d => !isWaSession(d));
+                if (!data.documents || data.documents.length === 0) {
+                    tbl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);">No documents.</div>';
+                    return;
+                }
+                let html = '<table class="doc-table"><thead><tr><th style="width:32px;text-align:center;"></th><th>Name</th><th>Source</th><th>Uploaded</th><th>Size</th><th></th></tr></thead><tbody>';
+                for (const d of data.documents) {
+                    const badge = d.uploaderType === 'admin'
+                        ? '<span class="doc-badge doc-badge-admin">Admin</span>'
+                        : '<span class="doc-badge doc-badge-user">' + d.uploaderId.replace(/^wa-/, '') + '</span>';
+                    const safeId = encodeURIComponent(d.id);
+                    html += '<tr data-doc-id="\'' + safeId + '\'">' +
+                        '<td style="width:32px;text-align:center;padding:6px 4px;"><input type="checkbox" class="doc-checkbox" data-id="\'' + safeId + '\'" data-name="\'' + escapeHtml(d.filename).replace(/\'/g,"\\\'") + '\'" onchange="onDocCheckbox(this)"></td>' +
+                        '<td style="font-weight:500;">' + escapeHtml(d.filename) + '</td>' +
+                        '<td>' + badge + '</td>' +
+                        '<td title="' + escapeHtml(d.uploadedAt) + '">' + fmtRelTime(d.uploadedAt) + '</td>' +
+                        '<td>' + fmtBytes(d.sizeBytes) + '</td>' +
+                        '<td><button class="doc-delete-btn" onclick="deleteDocument(\''+safeId+'\',\''+escapeHtml(d.filename).replace(/\'/g,"\\\'")+'\')">Delete</button></td>' +
+                        '</tr>';
+                }
+                html += '</tbody></table>';
+                tbl.innerHTML = html;
+                if (typeof _updateSelectUI !== 'undefined') _updateSelectUI();
+            } catch (e) {
+                console.error('loadDocuments failed', e);
+                tbl.innerHTML = '<div style="color:var(--danger);padding:16px;">Failed to load: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+        }
+
+        // Multi-select delete
+        const _selectedDocs = new Set();
+
+        function onDocCheckbox(cb) {
+            const id = cb.dataset.id;
+            if (cb.checked) _selectedDocs.add(id); else _selectedDocs.delete(id);
+            _updateSelectUI();
+        }
+
+        function toggleSelectAll(masterCb) {
+            document.querySelectorAll('.doc-checkbox').forEach(cb => {
+                cb.checked = masterCb.checked;
+                if (masterCb.checked) _selectedDocs.add(cb.dataset.id);
+                else _selectedDocs.delete(cb.dataset.id);
+            });
+            _updateSelectUI();
+        }
+
+        function _updateSelectUI() {
+            const n = _selectedDocs.size;
+            const label = document.getElementById('select-all-label');
+            const btn = document.getElementById('btn-delete-selected');
+            const countEl = document.getElementById('select-count');
+            const total = document.querySelectorAll('.doc-checkbox').length;
+            if (total > 0 && label) label.style.display = 'flex';
+            if (btn) btn.style.display = n > 0 ? 'inline-block' : 'none';
+            if (countEl) countEl.textContent = n + ' selected';
+            const master = document.getElementById('doc-select-all');
+            if (master) { master.checked = n > 0 && n === total; master.indeterminate = n > 0 && n < total; }
+        }
+
+        async function deleteSelected() {
+            const ids = [..._selectedDocs];
+            if (!ids.length) return;
+            const n = ids.length;
+            if (!confirm('Delete ' + n + ' document' + (n > 1 ? 's' : '') + '? This cannot be undone.')) return;
+            const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+            const btn = document.getElementById('btn-delete-selected');
+            if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+            let ok = 0, fail = 0;
+            for (const id of ids) {
+                try {
+                    const r = await fetch('/admin/api/data/documents/' + encodeURIComponent(id), {
+                        method: 'DELETE', credentials: 'include',
+                        headers: { 'X-CSRF-Token': csrf }
+                    });
+                    if (r.ok) ok++; else fail++;
+                } catch { fail++; }
+            }
+            _selectedDocs.clear();
+            if (btn) { btn.disabled = false; btn.style.display = 'none'; btn.textContent = 'Delete selected'; }
+            const master = document.getElementById('doc-select-all');
+            if (master) { master.checked = false; master.indeterminate = false; }
+            const lbl = document.getElementById('select-all-label');
+            if (lbl) lbl.style.display = 'none';
+            if (fail > 0) alert('Deleted ' + ok + ', failed ' + fail + '. Refresh to see state.');
+            await loadDocuments();
+            await loadDataStats();
+        }
+
+        async function deleteDocument(documentId, filename) {
+            if (!confirm('Delete "' + decodeURIComponent(filename) + '"?\n\nThis will remove it from S3 and OpenSearch. Cannot be undone.')) return;
+            try {
+                const r = await fetch('/admin/api/data/documents/' + documentId, { method: 'DELETE', credentials: 'include' });
+                const data = await r.json();
+                if (!r.ok || !data.success) throw new Error(data.message || data.error || 'Delete failed');
+                await loadDocuments();
+                await loadDataStats();
+            } catch (e) {
+                console.error('deleteDocument failed', e);
+                alert('Delete failed: ' + (e.message || e));
+            }
+        }
+
+        async function loadIngestionSources() {
+            const el = document.getElementById('ingestion-sources');
+            try {
+                const r = await fetch('/admin/api/data/ingestion-sources', { credentials: 'include' });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const data = await r.json();
+                if (!data.sources || data.sources.length === 0) {
+                    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;">No ingestion sources configured.</div>';
+                    return;
+                }
+                el.innerHTML = data.sources.map(s => {
+                    const status = s.connected ? 'Connected' : (s.enabled ? 'Enabled (not connected)' : 'Disabled');
+                    const statusColor = s.connected ? 'var(--success)' : (s.enabled ? 'var(--accent)' : 'var(--text-muted)');
+                    return '<div class="ingestion-row">' +
+                        '<div><span class="ingestion-name">' + escapeHtml(s.name) + '</span>' +
+                        '<span class="ingestion-status" style="color:' + statusColor + ';">' + status + '</span></div>' +
+                        '<div style="font-size:0.75rem;color:var(--text-muted);">' +
+                        (s.lastSync ? 'Last sync: ' + fmtRelTime(s.lastSync) : 'Never synced') +
+                        (s.docsImported != null ? ' • ' + fmtNum(s.docsImported) + ' imported' : '') +
+                        '</div></div>';
+                }).join('');
+            } catch (e) {
+                console.error('loadIngestionSources failed', e);
+                el.innerHTML = '<div style="color:var(--danger);font-size:0.85rem;">Failed to load: ' + (e.message || e) + '</div>';
+            }
+        }
+
+        // Auto-load when Data tab is opened
+        (function attachDataTabHook() {
+            const tabBtn = document.querySelector('[data-tab="data"]');
+            if (tabBtn) {
+                tabBtn.addEventListener('click', () => {
+                    loadDataStats();
+                    loadDocuments();
+                    loadIngestionSources();
+                });
+            }
+        })();
+
+
+        // ---------------- Upload: target-user selector ----------------
+        function toggleTargetUser() {
+            const corp = document.getElementById('corporate-toggle');
+            const row = document.getElementById('target-user-row');
+            if (row) row.style.display = corp && corp.checked ? 'none' : 'flex';
+        }
+        async function populateTargetUsers() {
+            const sel = document.getElementById('target-user-id');
+            if (!sel) return;
+            try {
+                const r = await fetch('/admin/api/data/users', { credentials: 'include', headers: { 'X-CSRF-Token': csrf } });
+                if (!r.ok) return;
+                const data = await r.json();
+                const users = data.users || [];
+                sel.innerHTML = '<option value="">All users (corporate)</option>';
+                users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.userId;
+                    opt.textContent = u.userId;
+                    sel.appendChild(opt);
+                });
+            } catch(e) {}
+        }
+        // Populate on data tab open
+        document.querySelectorAll('.tab-btn[data-tab="data"]').forEach(btn => {
+            btn.addEventListener('click', populateTargetUsers);
+        });
+        toggleTargetUser(); // initial state
+
+        // ---------------- Logout ----------------
+
+        (function attachLogout() {
+            const btn = document.getElementById('btn-logout');
+            if (!btn) return;
+            btn.addEventListener('click', async () => {
+                if (!confirm('Sign out of admin dashboard?')) return;
+                try {
+                    const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                    await fetch('/admin/api/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrf } });
+                } catch (e) {}
+                document.cookie = 'nanoclaw_admin_session=; Path=/admin; Max-Age=0';
+                document.cookie = 'nanoclaw_admin_csrf=; Path=/admin; Max-Age=0';
+                // Basic Auth: overwrite cached credentials with bogus ones so
+                // the browser forgets them, then navigate to /admin/logged-out
+                // which the server serves as 401 to force a fresh credential prompt.
+                try {
+                    await fetch('/admin', {
+                        headers: { 'Authorization': 'Basic ' + btoa('logged-out:logged-out') },
+                        cache: 'no-store'
+                    });
+                } catch (e) {}
+                window.location.replace('/admin/logged-out');
+            });
+        })();
+
+        // ---------------- Architecture tab ----------------
+        // ================== Architecture tab ==================
+        // Node layout: 3 rows, visually grouped by color
+        // Row 0 (y=40):  WhatsApp -> Orchestrator -> Redis
+        // Row 1 (y=200): Bedrock <- Sub-Agent ->  DynamoDB
+        // Row 2 (y=340): S3               OpenSearch
+        const NW = 158, NH = 74, RX = 10;
+        const ARCH_NODES = [
+            // Edge layer
+            { id: 'whatsapp',     label: 'WhatsApp',      sub: 'Baileys adapter',   x:  40, y:  40, group: 'edge' },
+            // Core layer
+            { id: 'orchestrator', label: 'Orchestrator',  sub: 'EC2 Node.js host',  x: 260, y:  40, group: 'core' },
+            { id: 'redis',        label: 'Redis',         sub: 'Queue & cache',     x: 480, y:  40, group: 'core' },
+            { id: 'subAgent',     label: 'Sub-Agent',     sub: 'ECS Fargate Python',x: 700, y:  40, group: 'core' },
+            // AI layer
+            { id: 'bedrock',      label: 'Bedrock',       sub: 'Claude Sonnet 4',   x: 700, y: 210, group: 'ai'   },
+            // Data layer
+            { id: 'opensearch',   label: 'OpenSearch',    sub: 'Vector RAG store',  x: 480, y: 210, group: 'data' },
+            { id: 'dynamodb',     label: 'DynamoDB',      sub: 'Chat + prefs',      x: 260, y: 210, group: 'data' },
+            { id: 's3',           label: 'S3',            sub: 'Files & uploads',   x:  40, y: 210, group: 'data' },
+        ];
+        const ARCH_EDGES = [
+            { from: 'whatsapp',     to: 'orchestrator', label: 'inbound',  style: 'primary' },
+            { from: 'orchestrator', to: 'redis',        label: 'enqueue',  style: 'primary' },
+            { from: 'redis',        to: 'subAgent',     label: 'dispatch', style: 'primary' },
+            { from: 'subAgent',     to: 'redis',        label: 'response', style: 'return'  },
+            { from: 'orchestrator', to: 'whatsapp',     label: 'deliver',  style: 'return'  },
+            { from: 'subAgent',     to: 'bedrock',      label: 'invoke',   style: 'ai'      },
+            { from: 'subAgent',     to: 'opensearch',   label: 'RAG',      style: 'data'    },
+            { from: 'subAgent',     to: 'dynamodb',     label: 'persist',  style: 'data'    },
+            { from: 'subAgent',     to: 's3',           label: 'docs',     style: 'data'    },
+        ];
+        // Group fill/stroke colors (dark-mode friendly, no CSS vars inside SVG)
+        const GROUP_COLORS = {
+            edge: { fill: '#1a2830', stroke: '#2d6070', text: '#9dd8e8', sub: '#5a9aaa' },
+            core: { fill: '#1e1a2e', stroke: '#4a3a7a', text: '#c8b8f0', sub: '#7a60b8' },
+            ai:   { fill: '#2a1a30', stroke: '#7a3a9a', text: '#e0b8f8', sub: '#9a60b8' },
+            data: { fill: '#182820', stroke: '#2a6a40', text: '#9ae8b8', sub: '#4a9a68' },
+        };
+        const EDGE_COLORS = {
+            primary: { stroke: '#4a7ab8', dash: 'none' },
+            return:  { stroke: '#6ab870', dash: '5,3' },
+            ai:      { stroke: '#b878d8', dash: '7,3' },
+            data:    { stroke: '#48a878', dash: '4,4' },
+        };
+        let archInterval = null;
+
+        function renderArchSkeleton() {
+            const svg = document.getElementById('arch-svg');
+            if (!svg) return;
+            let out = '';
+
+            // Defs: arrowheads per color + radial glow
+            out += `<defs>`;
+            out += `<filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>`;
+            for (const [style, cfg] of Object.entries(EDGE_COLORS)) {
+                out += `<marker id="arrow-${style}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                    <path d="M0,1 L9,5 L0,9 Z" fill="${cfg.stroke}" opacity="0.85"/>
+                </marker>`;
+            }
+            // Animated dash gradient for active edges
+            out += `<style>
+                @keyframes dashAnim { to { stroke-dashoffset: -22; } }
+                .ae-primary { animation: dashAnim 1.4s linear infinite; }
+                .ae-return  { animation: dashAnim 2.2s linear infinite; }
+                .ae-ai      { animation: dashAnim 1.8s linear infinite; }
+                .ae-data    { animation: dashAnim 2.8s linear infinite; }
+                .anode-rect { transition: filter 0.3s; }
+                .anode-rect:hover { filter: url(#glow); cursor:pointer; }
+                @keyframes glow-pulse { 0%,100%{opacity:0.4;r:5} 50%{opacity:1;r:7} }
+                .status-dot-healthy { animation: glow-pulse 2s ease-in-out infinite; }
+            </style>`;
+            out += `</defs>`;
+
+            // Background grid lines (subtle)
+            out += `<g opacity="0.06">`;
+            for (let x = 0; x <= 1080; x += 60) out += `<line x1="${x}" y1="0" x2="${x}" y2="420" stroke="#8899bb" stroke-width="0.5"/>`;
+            for (let y = 0; y <= 420; y += 60) out += `<line x1="0" y1="${y}" x2="1080" y2="${y}" stroke="#8899bb" stroke-width="0.5"/>`;
+            out += `</g>`;
+
+            // Draw edges first (below nodes)
+            for (const edge of ARCH_EDGES) {
+                const a = ARCH_NODES.find(n => n.id === edge.from);
+                const b = ARCH_NODES.find(n => n.id === edge.to);
+                if (!a || !b) continue;
+                const cfg = EDGE_COLORS[edge.style] || EDGE_COLORS.primary;
+
+                // Source and target attachment points (right/left or bottom/top)
+                const ax = a.x + NW/2, ay = a.y + NH/2;
+                const bx = b.x + NW/2, by = b.y + NH/2;
+
+                // Determine best connection sides
+                let x1, y1, x2, y2, cx1, cy1, cx2, cy2;
+                const dx = bx - ax, dy = by - ay;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal dominant
+                    x1 = dx > 0 ? a.x + NW : a.x;
+                    y1 = a.y + NH/2;
+                    x2 = dx > 0 ? b.x : b.x + NW;
+                    y2 = b.y + NH/2;
+                    cx1 = x1 + (dx > 0 ? 60 : -60); cy1 = y1;
+                    cx2 = x2 - (dx > 0 ? 60 : -60); cy2 = y2;
+                } else {
+                    // Vertical dominant
+                    x1 = a.x + NW/2; y1 = dy > 0 ? a.y + NH : a.y;
+                    x2 = b.x + NW/2; y2 = dy > 0 ? b.y      : b.y + NH;
+                    cx1 = x1; cy1 = y1 + (dy > 0 ? 50 : -50);
+                    cx2 = x2; cy2 = y2 - (dy > 0 ? 50 : -50);
+                }
+
+                const dash = cfg.dash === 'none' ? '' : `stroke-dasharray="${cfg.dash}"`;
+                out += `<path class="ae-${edge.style}" id="edge-${edge.from}-${edge.to}"
+                    d="M${x1},${y1} C${cx1},${cy1} ${cx2},${cy2} ${x2},${y2}"
+                    stroke="${cfg.stroke}" stroke-width="1.8" fill="none" opacity="0.75"
+                    ${dash} marker-end="url(#arrow-${edge.style})"/>`;
+
+                // Edge label at midpoint
+                const mx = (x1+cx1+cx2+x2)/4, my = (y1+cy1+cy2+y2)/4 - 8;
+                out += `<text x="${mx}" y="${my}" text-anchor="middle"
+                    fill="${cfg.stroke}" font-size="9.5" font-family="ui-monospace,monospace"
+                    opacity="0.85" font-weight="500">${edge.label}</text>`;
+            }
+
+            // Draw nodes
+            for (const n of ARCH_NODES) {
+                const c = GROUP_COLORS[n.group] || GROUP_COLORS.core;
+                out += `<g class="arch-node-group" id="node-${n.id}" transform="translate(${n.x},${n.y})">`;
+                // Shadow
+                out += `<rect x="3" y="3" width="${NW}" height="${NH}" rx="${RX}" fill="#000" opacity="0.4"/>`;
+                // Body
+                out += `<rect class="anode-rect" width="${NW}" height="${NH}" rx="${RX}"
+                    fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5"/>`;
+                // Top accent bar
+                out += `<rect width="${NW}" height="3" rx="${RX}" ry="${RX/2}" fill="${c.stroke}" opacity="0.8"/>`;
+                // Status dot (top-right)
+                out += `<circle class="arch-status-dot" id="dot-${n.id}" cx="${NW-14}" cy="14" r="5" fill="#555" opacity="0.6"/>`;
+                // Label
+                out += `<text x="14" y="28" fill="${c.text}" font-size="12.5" font-weight="700"
+                    font-family="ui-sans-serif,system-ui,sans-serif">${n.label}</text>`;
+                // Sub-label
+                out += `<text x="14" y="44" fill="${c.sub}" font-size="9.5" font-family="ui-sans-serif,system-ui,sans-serif">${n.sub}</text>`;
+                // Detail line (updated by refreshArch)
+                out += `<text class="node-detail" id="detail-${n.id}" x="14" y="60" fill="${c.sub}"
+                    font-size="9" font-family="ui-monospace,monospace" opacity="0.8"></text>`;
+                out += `</g>`;
+            }
+
+            svg.innerHTML = out;
+        }
+
+        async function refreshArch() {
+            try {
+                const r = await fetch('/admin/api/architecture/state', { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                const comps = data.components || {};
+                const STATUS_COLORS = {
+                    healthy: '#3ddc84',
+                    pending: '#ffbb33',
+                    down:    '#ff4444',
+                };
+                for (const n of ARCH_NODES) {
+                    const c = comps[n.id] || { status: 'down' };
+                    const dot = document.getElementById('dot-' + n.id);
+                    if (dot) {
+                        const col = STATUS_COLORS[c.status] || STATUS_COLORS.down;
+                        dot.setAttribute('fill', col);
+                        dot.setAttribute('opacity', '1');
+                        dot.style.filter = c.status === 'healthy' ? `drop-shadow(0 0 4px ${col})` : '';
+                        dot.className.baseVal = 'arch-status-dot' + (c.status === 'healthy' ? ' status-dot-healthy' : '');
+                    }
+                    const grp = document.getElementById('node-' + n.id);
+                    if (grp) {
+                        // Highlight node border on healthy
+                        const rect = grp.querySelector('.anode-rect');
+                        const gc = GROUP_COLORS[n.group] || GROUP_COLORS.core;
+                        if (rect) {
+                            if (c.status === 'healthy') rect.setAttribute('stroke-width', '2');
+                            else if (c.status === 'down') { rect.setAttribute('stroke', '#a13434'); rect.setAttribute('stroke-width', '1.5'); }
+                            else rect.setAttribute('stroke-width', '1.5');
+                        }
+                    }
+                    const det = document.getElementById('detail-' + n.id);
+                    if (det && c.detail) det.textContent = c.detail.slice(0, 26);
+                }
+                const ts = document.getElementById('arch-generated-at');
+                if (ts) ts.textContent = new Date(data.generatedAt || Date.now()).toLocaleTimeString();
+
+                // Recent flow table
+                const tbody = document.getElementById('arch-flow-body');
+                if (tbody) {
+                    if (!data.recentFlow || !data.recentFlow.length) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="padding:24px 16px;color:oklch(0.45 0.01 250);font-size:0.82rem;text-align:center;">No traffic yet.</td></tr>';
+                    } else {
+                        const esc = s => (s||'').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]);
+                        tbody.innerHTML = data.recentFlow.slice(0, 30).map(f => {
+                            const t  = f.timestamp ? new Date(f.timestamp).toLocaleTimeString() : '&mdash;';
+                            const u  = esc((f.userId||'').slice(0,16));
+                            const ro = (f.role||'').toLowerCase();
+                            const pill = ro ? `<span class="arch-role-pill ${ro}">${esc(ro)}</span>` : '&mdash;';
+                            const prev = esc((f.preview||'').slice(0,60));
+                            return `<tr><td>${t}</td><td style="font-variant-numeric:tabular-nums;">${u}</td><td>${pill}</td><td style="color:oklch(0.60 0.01 250);">${prev}</td></tr>`;
+                        }).join('');
+                    }
+                }
+            } catch (e) { /* swallow */ }
+        }
+
+        // ---------------- Test Chat tab ----------------
+        
+        // ── TEST USERS CONFIG ──────────────────────────────────────────────
+        const TEST_USERS = [
+            { id: 'test_alpha',   label: 'Alpha',   color: '#4f8ef7' },
+            { id: 'test_beta',    label: 'Beta',    color: '#34c77b' },
+            { id: 'test_charlie', label: 'Charlie', color: '#a855f7' },
+            { id: 'test_delta',   label: 'Delta',   color: '#f97316' },
+        ];
+
+        function initTestChat() {
+            const grid = document.getElementById('testchat-grid');
+            if (!grid || grid.dataset.built) return;
+            grid.dataset.built = '1';
+            TEST_USERS.forEach(u => {
+                grid.appendChild(buildPanel(u));
+                loadPanelHistory(u.id);
+            });
+        }
+
+        function buildPanel(u) {
+            // wrapper
+            const panel = document.createElement('div');
+            panel.className = 'testchat-panel';
+            panel.id = 'panel-' + u.id;
+
+            // header
+            const hdr = document.createElement('div');
+            hdr.className = 'testchat-panel-header';
+            hdr.innerHTML = `<span class="dot" style="background:${u.color}"></span>
+                <span style="color:${u.color}">${u.label}</span>
+                <span class="uid-label">${u.id}</span>
+                <span style="flex:1"></span>
+                <button onclick="clearPanel('${u.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:0.75rem;padding:2px 6px;" title="Clear log">✕ clear</button>`;
+            panel.appendChild(hdr);
+
+            // log
+            const log = document.createElement('div');
+            log.className = 'testchat-log';
+            log.id = 'log-' + u.id;
+            panel.appendChild(log);
+
+            // input row
+            const row = document.createElement('div');
+            row.className = 'testchat-input-row';
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*,.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx';
+            fileInput.style.display = 'none';
+            fileInput.id = 'file-' + u.id;
+            row.appendChild(fileInput);
+
+            const attachBtn = document.createElement('button');
+            attachBtn.className = 'testchat-attach-btn';
+            attachBtn.title = 'Attach file or image';
+            attachBtn.textContent = '📎';
+            attachBtn.onclick = () => fileInput.click();
+            row.appendChild(attachBtn);
+
+            fileInput.addEventListener('change', () => {
+                attachBtn.classList.toggle('has-file', fileInput.files.length > 0);
+                attachBtn.title = fileInput.files.length > 0
+                    ? fileInput.files[0].name
+                    : 'Attach file or image';
+            });
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = 'Message ' + u.label + '…';
+            input.id = 'input-' + u.id;
+            input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendMsg(u.id); });
+            row.appendChild(input);
+
+            const btn = document.createElement('button');
+            btn.className = 'testchat-send-btn';
+            btn.id = 'send-' + u.id;
+            btn.textContent = '▶';
+            btn.onclick = () => sendMsg(u.id);
+            row.appendChild(btn);
+
+            panel.appendChild(row);
+            return panel;
+        }
+
+        function clearPanel(uid) {
+            const log = document.getElementById('log-' + uid);
+            if (log) log.innerHTML = '';
+        }
+
+        function appendMsg(uid, kind, content, meta) {
+            const log = document.getElementById('log-' + uid);
+            if (!log) return;
+            const div = document.createElement('div');
+            div.className = 'testchat-msg ' + kind;
+
+            // Image preview for user-sent images (data URL from file picker)
+            if (kind === 'user' && meta && meta.imageDataUrl) {
+                const img = document.createElement('img');
+                img.className = 'thumb';
+                img.src = meta.imageDataUrl;
+                div.appendChild(img);
+            }
+
+            // Detect generated image markers and markdown images in bot replies
+            // Handles: IMAGE_URL:<url>:IMAGE_URL  and  ![alt](url)
+            const imgUrlMatch = typeof content === 'string' && content.match(/^IMAGE_URL:(.+):IMAGE_URL$/);
+            const mdImgMatch  = typeof content === 'string' && content.match(/!\[[^\]]*\]\((https?:\/\/[^\)]+)\)/);
+            const imgSrc = imgUrlMatch ? imgUrlMatch[1] : (mdImgMatch ? mdImgMatch[1] : null);
+
+            if (imgSrc) {
+                const img = document.createElement('img');
+                img.className = 'thumb generated';
+                img.src = imgSrc;
+                img.style.maxWidth = '100%';
+                img.style.borderRadius = '6px';
+                img.style.marginTop = '4px';
+                img.style.cursor = 'pointer';
+                img.title = 'Click to open full size';
+                img.onclick = () => window.open(imgSrc, '_blank');
+                img.onerror = () => {
+                    img.style.display = 'none';
+                    const link = document.createElement('a');
+                    link.href = imgSrc;
+                    link.target = '_blank';
+                    link.textContent = '🖼 View image';
+                    link.style.color = 'var(--accent)';
+                    div.insertBefore(link, img.nextSibling);
+                };
+                div.appendChild(img);
+                // Also show the text caption (strip the raw marker / md image from it)
+                const caption = content
+                    .replace(/^IMAGE_URL:.+:IMAGE_URL$/, '')
+                    .replace(/!\[[^\]]*\]\(https?:\/\/[^\)]+\)/g, '')
+                    .trim();
+                if (caption) {
+                    const txt = document.createElement('div');
+                    txt.textContent = caption;
+                    div.appendChild(txt);
+                }
+            } else {
+                const txt = document.createElement('div');
+                txt.textContent = content;
+                div.appendChild(txt);
+            }
+
+            if (meta && meta.ts) {
+                const m = document.createElement('div');
+                m.className = 'msg-meta';
+                m.textContent = meta.ts;
+                div.appendChild(m);
+            }
+
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        async function loadPanelHistory(uid) {
+            const log = document.getElementById('log-' + uid);
+            if (!log) return;
+            try {
+                const r = await fetch('/admin/api/chat/history?userId=' + encodeURIComponent(uid) + '&limit=60',
+                    { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                const msgs = data.messages || [];
+                if (msgs.length === 0) return;
+
+                // Divider so it's clear this is persisted history, not live session
+                const divider = document.createElement('div');
+                divider.className = 'history-divider';
+                divider.textContent = '── history ──';
+                log.appendChild(divider);
+
+                msgs.forEach(m => {
+                    const ts = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const kind = m.role === 'user' ? 'user' : 'bot';
+                    // Use the text field (DynamoDB schema) or content field
+                    const body = m.text || m.content || '';
+                    appendMsg(uid, kind, body, { ts, fromHistory: true });
+                });
+
+                // Second divider to mark where live session begins
+                const divider2 = document.createElement('div');
+                divider2.className = 'history-divider';
+                divider2.textContent = '── live ──';
+                log.appendChild(divider2);
+                log.scrollTop = log.scrollHeight;
+            } catch (e) {
+                // silently ignore — history is best-effort
+            }
+        }
+
+        async function sendMsg(uid) {
+            const input   = document.getElementById('input-' + uid);
+            const sendBtn = document.getElementById('send-' + uid);
+            const fileEl  = document.getElementById('file-' + uid);
+            const attachBtn = fileEl ? fileEl.previousElementSibling : null;
+
+            const text = (input ? input.value : '').trim();
+            const file = fileEl && fileEl.files.length > 0 ? fileEl.files[0] : null;
+
+            if (!text && !file) return;
+
+            const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Show user bubble
+            if (file) {
+                const isImage = file.type.startsWith('image/');
+                const label = text ? `${text}\n📎 ${file.name}` : `📎 ${file.name}`;
+                const meta = {};
+                if (isImage) {
+                    meta.imageDataUrl = await readAsDataUrl(file);
+                }
+                meta.ts = ts;
+                appendMsg(uid, 'user', label, meta);
+            } else {
+                appendMsg(uid, 'user', text, { ts });
+            }
+
+            if (input) input.value = '';
+            if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '…'; }
+
+            try {
+                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                let payload;
+                let fetchOpts;
+
+                if (file) {
+                    // Multipart form — send text + file together
+                    const fd = new FormData();
+                    fd.append('userId', uid);
+                    if (text) fd.append('text', text);
+                    fd.append('file', file);
+                    fetchOpts = {
+                        method: 'POST',
+                        headers: { 'X-CSRF-Token': csrf },
+                        credentials: 'same-origin',
+                        body: fd,
+                    };
+                } else {
+                    payload = JSON.stringify({ userId: uid, text });
+                    fetchOpts = {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+                        credentials: 'same-origin',
+                        body: payload,
+                    };
+                }
+
+                const r = await fetch('/admin/api/test/send', fetchOpts);
+                const data = await r.json();
+
+                if (!r.ok) {
+                    appendMsg(uid, 'error', `[${r.status}] ${data.error || data.note || 'unknown error'}`, { ts });
+                } else if (data.status === 'timeout') {
+                    appendMsg(uid, 'error', 'No response within 45s — check ECS logs.', { ts });
+                } else {
+                    let body = data.response;
+                    if (body && typeof body === 'object') {
+                        body = body.text || body.content || JSON.stringify(body, null, 2);
+                    }
+                    appendMsg(uid, 'bot', String(body || '(empty response)'), { ts });
+                }
+            } catch (e) {
+                appendMsg(uid, 'error', 'Request failed: ' + (e.message || String(e)), { ts });
+            } finally {
+                if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '▶'; }
+                // Clear file after send
+                if (fileEl) { fileEl.value = ''; }
+                if (attachBtn) {
+                    attachBtn.classList.remove('has-file');
+                    attachBtn.title = 'Attach file or image';
+                }
+            }
+        }
+
+        function readAsDataUrl(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsDataURL(file);
+            });
+        }
+
+        function readAsArrayBuffer(file) {
+            return new Promise((res, rej) => {
+                const r = new FileReader();
+                r.onload = () => res(r.result);
+                r.onerror = rej;
+                r.readAsArrayBuffer(file);
+            });
+        }
+
+        // ---------------- Reset all (Users tab) ----------------
+        async function resetAllUsers() {
+            if (!confirm('DANGER: This will delete ALL user messages, preferences, S3 docs, and OpenSearch entries.\n\nWA pairing sessions and corporate docs are preserved.\n\nAre you absolutely sure?')) return;
+            if (!confirm('Last chance. This is irreversible. Proceed?')) return;
+            try {
+                const csrf = (document.cookie.match(/nanoclaw_admin_csrf=([^;]+)/) || [])[1] || '';
+                const r = await fetch('/admin/api/data/users/reset-all', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-Token': csrf },
+                    credentials: 'same-origin',
+                });
+                const d = await r.json();
+                if (!r.ok) {
+                    alert('Reset failed: ' + (d.error || r.status));
+                } else {
+                    alert(`Reset complete. Removed: messages=${d.deleted?.messages ?? 0}, preferences=${d.deleted?.preferences ?? 0}, s3=${d.deleted?.s3Objects ?? 0}`);
+                    if (typeof loadUsers === 'function') loadUsers();
+                    if (typeof loadDataStats === 'function') loadDataStats();
+                }
+            } catch (e) { alert('Reset error: ' + e.message); }
+        }
+        window.resetAllUsers = resetAllUsers;
+</script>
+</body>
+</html>

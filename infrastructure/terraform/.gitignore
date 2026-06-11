@@ -1,0 +1,30 @@
+# Terraform state files (managed by S3 backend)
+*.tfstate
+*.tfstate.*
+tfplan
+tfplan.*
+
+# Terraform working directory
+.terraform/
+
+# Sensitive variable files (terraform.tfvars may contain secrets)
+# The .example file is tracked; actual tfvars are environment-specific.
+# NOTE: terraform.tfvars is tracked for this project since it contains
+# no secrets (credentials are in AWS Secrets Manager). If you add
+# sensitive values, move them to a *.auto.tfvars file listed below.
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration
+.terraformrc
+terraform.rc
+
+# Crash logs
+crash.log
+crash.*.log
